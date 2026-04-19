@@ -1,4 +1,6 @@
-import { readCurrentWeek, readAthleteProfile, writeCurrentWeek } from '@/lib/data'
+import fs from 'fs'
+import path from 'path'
+import { readCurrentWeek, readAthleteProfile, writeCurrentWeek, archiveWeek } from '@/lib/data'
 import { incrementDeloadCounter } from '@/lib/state'
 import { startOfISOWeek, addDays, format, addWeeks } from 'date-fns'
 import type { WeekDoc, Session, NextWeekPlan } from '@/lib/schema'
@@ -48,6 +50,11 @@ export async function POST() {
     sunday: 'Sunday',
   }
 
+  // Archive previous week before creating new one
+  if (prevWeek) {
+    archiveWeek(prevWeek)
+  }
+
   const nextWeekPlan: NextWeekPlan = prevWeek?.next_week_plan ?? {}
 
   const sessions: Session[] = days.map((dayKey) => {
@@ -81,7 +88,18 @@ export async function POST() {
       recovery_days: 0,
       total_calories: 0,
     },
-    lift_progression: prevWeek?.lift_progression ?? {},
+    lift_progression: (() => {
+      let liftProgression = prevWeek?.lift_progression ?? {}
+      if (Object.keys(liftProgression).length === 0) {
+        const baselinePath = path.join(process.cwd(), 'data', 'lift-progression.json')
+        if (fs.existsSync(baselinePath)) {
+          try {
+            liftProgression = JSON.parse(fs.readFileSync(baselinePath, 'utf-8'))
+          } catch { /* ignore */ }
+        }
+      }
+      return liftProgression
+    })(),
     health_flags: healthFlags,
     next_week_plan: {},
   }

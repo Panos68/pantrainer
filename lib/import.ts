@@ -1,7 +1,7 @@
 import { WeekDocSchema } from './schema'
 import type { WeekDoc } from './schema'
-import { readCurrentWeek, writeCurrentWeek, archiveWeek, readAppState } from './data'
-import { advanceGymWeek, incrementDeloadCounter, resetDeloadCounter, unflagDeloadWeek } from './state'
+import { readCurrentWeek, writeCurrentWeek, archiveWeek } from './data'
+import { advanceGymWeek, updateAppState } from './state'
 
 export interface ImportResult {
   ok: true
@@ -58,17 +58,17 @@ export function applyImport(importedDoc: WeekDoc): WeekDoc {
     archiveWeek(currentWeek)
   }
 
-  // Handle deload state
-  const state = readAppState()
-  if (state.isDeloadWeek) {
-    resetDeloadCounter()
-    unflagDeloadWeek()
+  // Use inferred gym week if Wednesday plan text gives a signal
+  const wednesdayPlan = importedDoc.next_week_plan?.wednesday?.toLowerCase() ?? ''
+  if (wednesdayPlan.includes('pull') || wednesdayPlan.includes('week a')) {
+    updateAppState({ gymWeek: 'week_a' })
+  } else if (wednesdayPlan.includes('push') || wednesdayPlan.includes('week b')) {
+    updateAppState({ gymWeek: 'week_b' })
+  } else if (wednesdayPlan.includes('leg')) {
+    updateAppState({ gymWeek: 'legs_week' })
   } else {
-    incrementDeloadCounter()
+    advanceGymWeek() // fall back to simple toggle
   }
-
-  // Advance gym alternation
-  advanceGymWeek()
 
   // The imported doc IS the new current week
   // But we need to ensure sessions are reset to 'planned' if they came from Claude

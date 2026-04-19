@@ -1,5 +1,5 @@
 import type { WeekDoc } from './schema'
-import { readArchivedWeeks } from './data'
+import { readArchivedWeeks, readAppState } from './data'
 
 // Build the full export payload
 // Returns: the current week doc augmented with a `history` block
@@ -15,6 +15,7 @@ export interface ExportPayload {
   next_week_plan: WeekDoc['next_week_plan']
 
   // Extra context for Claude
+  is_deload_week: boolean     // whether the current week is flagged as a deload week
   photos_to_attach: string[]  // flat list of all photo paths from all sessions
   history: WeekHistory[]      // last 4 archived weeks (compact)
 }
@@ -29,6 +30,8 @@ export interface WeekHistory {
 }
 
 export function buildExport(currentWeek: WeekDoc): ExportPayload {
+  const state = readAppState()
+
   // 1. Collect all photo paths from sessions
   const photos_to_attach = currentWeek.sessions
     .flatMap(s => s.photos ?? [])
@@ -52,6 +55,7 @@ export function buildExport(currentWeek: WeekDoc): ExportPayload {
 
   return {
     ...currentWeek,
+    is_deload_week: state.isDeloadWeek,
     photos_to_attach,
     history,
   }
