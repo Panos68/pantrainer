@@ -95,12 +95,20 @@ export default function Home() {
         {/* ── Footer actions ── */}
         <footer className="flex flex-col gap-3 pt-4 border-t border-zinc-800">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <a
-              href="/exports"
-              className="text-xs font-mono font-bold tracking-widest uppercase text-zinc-500 hover:text-zinc-300 transition-colors"
-            >
-              Export Week
-            </a>
+            <div className="flex items-center gap-4">
+              <a
+                href="/exports"
+                className="text-xs font-mono font-bold tracking-widest uppercase text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                Export Week
+              </a>
+              <a
+                href="/progress"
+                className="text-xs font-mono font-bold tracking-widest uppercase text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                Progress
+              </a>
+            </div>
             <form action="/api/week/new" method="POST">
               <button
                 type="submit"
