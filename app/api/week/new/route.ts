@@ -1,4 +1,5 @@
 import { readCurrentWeek, readAthleteProfile, writeCurrentWeek } from '@/lib/data'
+import { incrementDeloadCounter } from '@/lib/state'
 import { startOfISOWeek, addDays, format, addWeeks } from 'date-fns'
 import type { WeekDoc, Session, NextWeekPlan } from '@/lib/schema'
 
@@ -86,6 +87,9 @@ export async function POST() {
   }
 
   writeCurrentWeek(newWeek)
+
+  // Increment deload counter each time a new week is started
+  incrementDeloadCounter()
 
   return Response.json(newWeek)
 }
