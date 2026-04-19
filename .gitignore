@@ -1,0 +1,6 @@
+.worktrees/
+data/
+exports/
+.env.local
+node_modules/
+.next/
