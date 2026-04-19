@@ -59,7 +59,7 @@ export function writeAppState(state: AppState): void {
 function getWeekFilename(week: WeekDoc): string {
   // Try first session date
   if (week.sessions && week.sessions.length > 0) {
-    const firstDate = week.sessions.sort((a, b) => a.date.localeCompare(b.date))[0].date
+    const firstDate = [...week.sessions].sort((a, b) => a.date.localeCompare(b.date))[0].date
     return `week-${format(parseISO(firstDate), 'yyyy-ww')}.json`
   }
   // Fall back to current date
