@@ -5,6 +5,7 @@ import GymWeekBadge from '@/components/GymWeekBadge'
 import DeloadBanner from '@/components/DeloadBanner'
 import HealthFlagsBanner from '@/components/HealthFlagsBanner'
 import WeekGrid from '@/components/WeekGrid'
+import NotionSync from '@/components/NotionSync'
 
 export default function Home() {
   const profile = readAthleteProfile()
@@ -92,21 +93,27 @@ export default function Home() {
         </section>
 
         {/* ── Footer actions ── */}
-        <footer className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-zinc-800">
-          <a
-            href="/exports"
-            className="text-xs font-mono font-bold tracking-widest uppercase text-zinc-500 hover:text-zinc-300 transition-colors"
-          >
-            Export Week
-          </a>
-          <form action="/api/week/new" method="POST">
-            <button
-              type="submit"
-              className="px-6 h-9 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 hover:text-zinc-50 font-bold text-xs tracking-[0.15em] uppercase rounded-lg border border-zinc-700 hover:border-zinc-500 transition-all"
+        <footer className="flex flex-col gap-3 pt-4 border-t border-zinc-800">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <a
+              href="/exports"
+              className="text-xs font-mono font-bold tracking-widest uppercase text-zinc-500 hover:text-zinc-300 transition-colors"
             >
-              Start New Week
-            </button>
-          </form>
+              Export Week
+            </a>
+            <form action="/api/week/new" method="POST">
+              <button
+                type="submit"
+                className="px-6 h-9 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 hover:text-zinc-50 font-bold text-xs tracking-[0.15em] uppercase rounded-lg border border-zinc-700 hover:border-zinc-500 transition-all"
+              >
+                Start New Week
+              </button>
+            </form>
+          </div>
+          <NotionSync
+            lastSync={appState.notionLastSync ?? null}
+            notionConfigured={!!process.env.NOTION_TOKEN}
+          />
         </footer>
 
       </div>
