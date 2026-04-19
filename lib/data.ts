@@ -1,0 +1,95 @@
+import fs from 'fs'
+import path from 'path'
+import { WeekDocSchema, AthleteProfileSchema, AppStateSchema } from './schema'
+import type { WeekDoc, AthleteProfile, AppState } from './schema'
+import { format } from 'date-fns'
+
+const DATA_DIR = path.join(process.cwd(), 'data')
+const WEEKS_DIR = path.join(DATA_DIR, 'weeks')
+const CURRENT_WEEK_PATH = path.join(DATA_DIR, 'current-week.json')
+const ATHLETE_PATH = path.join(DATA_DIR, 'athlete.json')
+const STATE_PATH = path.join(DATA_DIR, 'state.json')
+
+// Ensure directories exist
+function ensureDirs() {
+  fs.mkdirSync(DATA_DIR, { recursive: true })
+  fs.mkdirSync(WEEKS_DIR, { recursive: true })
+}
+
+export function readCurrentWeek(): WeekDoc | null {
+  ensureDirs()
+  if (!fs.existsSync(CURRENT_WEEK_PATH)) return null
+  const raw = fs.readFileSync(CURRENT_WEEK_PATH, 'utf-8')
+  return WeekDocSchema.parse(JSON.parse(raw))
+}
+
+export function writeCurrentWeek(week: WeekDoc): void {
+  ensureDirs()
+  fs.writeFileSync(CURRENT_WEEK_PATH, JSON.stringify(week, null, 2))
+}
+
+export function readAthleteProfile(): AthleteProfile | null {
+  ensureDirs()
+  if (!fs.existsSync(ATHLETE_PATH)) return null
+  const raw = fs.readFileSync(ATHLETE_PATH, 'utf-8')
+  return AthleteProfileSchema.parse(JSON.parse(raw))
+}
+
+export function writeAthleteProfile(profile: AthleteProfile): void {
+  ensureDirs()
+  fs.writeFileSync(ATHLETE_PATH, JSON.stringify(profile, null, 2))
+}
+
+export function readAppState(): AppState {
+  ensureDirs()
+  if (!fs.existsSync(STATE_PATH)) {
+    const defaults = AppStateSchema.parse({})
+    fs.writeFileSync(STATE_PATH, JSON.stringify(defaults, null, 2))
+    return defaults
+  }
+  const raw = fs.readFileSync(STATE_PATH, 'utf-8')
+  return AppStateSchema.parse(JSON.parse(raw))
+}
+
+export function writeAppState(state: AppState): void {
+  ensureDirs()
+  fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2))
+}
+
+export function archiveWeek(week: WeekDoc): void {
+  ensureDirs()
+  // Generate filename from week string or current date
+  const filename = `week-${format(new Date(), 'yyyy-WW')}.json`
+  const archivePath = path.join(WEEKS_DIR, filename)
+  fs.writeFileSync(archivePath, JSON.stringify(week, null, 2))
+  // Remove current week file
+  if (fs.existsSync(CURRENT_WEEK_PATH)) {
+    fs.unlinkSync(CURRENT_WEEK_PATH)
+  }
+}
+
+export function readArchivedWeeks(n: number): WeekDoc[] {
+  ensureDirs()
+  if (!fs.existsSync(WEEKS_DIR)) return []
+  const files = fs.readdirSync(WEEKS_DIR)
+    .filter(f => f.endsWith('.json'))
+    .sort()
+    .reverse()
+    .slice(0, n)
+  return files.map(f => {
+    const raw = fs.readFileSync(path.join(WEEKS_DIR, f), 'utf-8')
+    return WeekDocSchema.parse(JSON.parse(raw))
+  })
+}
+
+export function readAllArchivedWeeks(): WeekDoc[] {
+  ensureDirs()
+  if (!fs.existsSync(WEEKS_DIR)) return []
+  const files = fs.readdirSync(WEEKS_DIR)
+    .filter(f => f.endsWith('.json'))
+    .sort()
+  return files.map(f => {
+    const raw = fs.readFileSync(path.join(WEEKS_DIR, f), 'utf-8')
+    return WeekDocSchema.parse(JSON.parse(raw))
+  })
+}
