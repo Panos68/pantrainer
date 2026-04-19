@@ -2,7 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { WeekDocSchema, AthleteProfileSchema, AppStateSchema } from './schema'
 import type { WeekDoc, AthleteProfile, AppState } from './schema'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 
 const DATA_DIR = path.join(process.cwd(), 'data')
 const WEEKS_DIR = path.join(DATA_DIR, 'weeks')
@@ -56,10 +56,20 @@ export function writeAppState(state: AppState): void {
   fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2))
 }
 
+function getWeekFilename(week: WeekDoc): string {
+  // Try first session date
+  if (week.sessions && week.sessions.length > 0) {
+    const firstDate = week.sessions.sort((a, b) => a.date.localeCompare(b.date))[0].date
+    return `week-${format(parseISO(firstDate), 'yyyy-ww')}.json`
+  }
+  // Fall back to current date
+  return `week-${format(new Date(), 'yyyy-ww')}.json`
+}
+
 export function archiveWeek(week: WeekDoc): void {
   ensureDirs()
-  // Generate filename from week string or current date
-  const filename = `week-${format(new Date(), 'yyyy-WW')}.json`
+  // Generate filename from week's session dates
+  const filename = getWeekFilename(week)
   const archivePath = path.join(WEEKS_DIR, filename)
   fs.writeFileSync(archivePath, JSON.stringify(week, null, 2))
   // Remove current week file
