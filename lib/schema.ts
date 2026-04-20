@@ -38,6 +38,7 @@ export const SessionSchema = z.object({
     secs_in_zone: z.number(),
     zone_high_boundary: z.number(),
   })).nullable().optional(),
+  muscle_groups: z.array(z.string()).default([]),
 })
 
 // Week summary
