@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import type { GarminRecoveryDay } from '@/lib/schema'
 
@@ -19,6 +19,8 @@ export default function GarminRecoveryCard({
 }: GarminRecoveryCardProps) {
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<GarminRecoveryDay | null | undefined>(recovery)
+
+  useEffect(() => { setData(recovery) }, [recovery])
 
   async function fetchRecovery(force = false) {
     setLoading(true)
