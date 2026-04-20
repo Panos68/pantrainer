@@ -3,12 +3,22 @@ import { z } from 'zod'
 // Session status
 export const SessionStatusSchema = z.enum(['planned', 'in_progress', 'completed', 'skipped'])
 
+// Planned exercise within a session
+export const ExerciseSchema = z.object({
+  name: z.string(),
+  sets: z.number().nullable().optional(),
+  reps: z.union([z.number(), z.string()]).nullable().optional(), // "8-12" or 8
+  weight_kg: z.number().nullable().optional(),
+  notes: z.string().nullable().optional(),
+})
+
 // Individual session
 export const SessionSchema = z.object({
   date: z.string(), // ISO date string YYYY-MM-DD
   day: z.string(),  // "Monday", "Tuesday", etc.
   type: z.string(), // "Strength", "Conditioning", "Recovery", "Rest"
   subtype: z.string().nullable().optional(),
+  exercises: z.array(ExerciseSchema).default([]),
   duration_min: z.number().nullable().optional(),
   avg_hr_bpm: z.number().nullable().optional(),
   total_calories: z.number().nullable().optional(),
@@ -100,6 +110,7 @@ export const AppStateSchema = z.object({
 })
 
 // Export types
+export type Exercise = z.infer<typeof ExerciseSchema>
 export type Session = z.infer<typeof SessionSchema>
 export type SessionStatus = z.infer<typeof SessionStatusSchema>
 export type WeekSummary = z.infer<typeof WeekSummarySchema>

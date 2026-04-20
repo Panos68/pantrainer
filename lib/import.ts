@@ -1,7 +1,6 @@
 import { WeekDocSchema } from './schema'
 import type { WeekDoc } from './schema'
-import { readCurrentWeek, writeCurrentWeek, archiveWeek } from './data'
-import { advanceGymWeek, updateAppState } from './state'
+import { readCurrentWeek, writeCurrentWeek } from './data'
 
 export interface ImportResult {
   ok: true
@@ -49,33 +48,73 @@ export function validateImport(raw: string): ImportResult | ImportError {
   }
 }
 
-// Apply the imported plan: archive current week, create new week from imported data
+const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+// Apply the imported plan: update current week in place, preserving completed sessions.
+// Always ensures all 7 days exist with correct dates — guards against Claude omitting days.
 export function applyImport(importedDoc: WeekDoc): WeekDoc {
   const currentWeek = readCurrentWeek()
 
-  // Archive current week
+  // Build lookup of completed/skipped sessions to preserve
+  const preservedByDay: Record<string, WeekDoc['sessions'][number]> = {}
   if (currentWeek) {
-    archiveWeek(currentWeek)
+    for (const s of currentWeek.sessions) {
+      if (s.status === 'completed' || s.status === 'skipped') {
+        preservedByDay[s.day] = s
+      }
+    }
   }
 
-  // Use inferred gym week if Wednesday plan text gives a signal
-  const wednesdayPlan = importedDoc.next_week_plan?.wednesday?.toLowerCase() ?? ''
-  if (wednesdayPlan.includes('pull') || wednesdayPlan.includes('week a')) {
-    updateAppState({ gymWeek: 'week_a' })
-  } else if (wednesdayPlan.includes('push') || wednesdayPlan.includes('week b')) {
-    updateAppState({ gymWeek: 'week_b' })
-  } else if (wednesdayPlan.includes('leg')) {
-    updateAppState({ gymWeek: 'legs_week' })
-  } else {
-    advanceGymWeek() // fall back to simple toggle
+  // Build lookup of imported sessions by day
+  const importedByDay: Record<string, WeekDoc['sessions'][number]> = {}
+  for (const s of importedDoc.sessions) {
+    importedByDay[s.day] = s
   }
 
-  // The imported doc IS the new current week
-  // But we need to ensure sessions are reset to 'planned' if they came from Claude
-  // (Claude returns next_week_plan, not sessions — so we generate fresh sessions)
-  // If Claude included sessions, keep them. If not, they'll be generated on new week creation.
-  // For now: write the imported doc as-is (sessions will be seeded by /api/week/new)
-  writeCurrentWeek(importedDoc)
+  // Derive the week's Monday date from the first available session date
+  // so we can fill in missing days with correct dates
+  const firstSession = importedDoc.sessions.find((s) => s.date)
+  let mondayDate: Date | null = null
+  if (firstSession) {
+    const d = new Date(firstSession.date + 'T12:00:00')
+    const dayIndex = ALL_DAYS.indexOf(firstSession.day)
+    if (dayIndex >= 0) {
+      mondayDate = new Date(d)
+      mondayDate.setDate(d.getDate() - dayIndex)
+    }
+  }
 
-  return importedDoc
+  const mergedSessions = ALL_DAYS.map((dayName, i) => {
+    // Preserved session takes priority
+    if (preservedByDay[dayName]) return preservedByDay[dayName]
+
+    // Use imported session if present
+    if (importedByDay[dayName]) return importedByDay[dayName]
+
+    // Fill missing day with a rest session using the correct date
+    const date = mondayDate
+      ? new Date(mondayDate.getTime() + i * 86400000).toISOString().slice(0, 10)
+      : ''
+    return {
+      date,
+      day: dayName,
+      type: 'Rest',
+      subtype: null,
+      exercises: [],
+      status: 'planned' as const,
+      duration_min: null,
+      avg_hr_bpm: null,
+      total_calories: null,
+      notes: '',
+      photos: [],
+    }
+  })
+
+  const merged: WeekDoc = {
+    ...importedDoc,
+    sessions: mergedSessions,
+  }
+
+  writeCurrentWeek(merged)
+  return merged
 }
