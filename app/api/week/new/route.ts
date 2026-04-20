@@ -1,5 +1,3 @@
-import fs from 'fs'
-import path from 'path'
 import { readCurrentWeek, readAthleteProfile, writeCurrentWeek, archiveWeek } from '@/lib/data'
 import { incrementDeloadCounter } from '@/lib/state'
 import { startOfISOWeek, addDays, format, addWeeks } from 'date-fns'
@@ -30,8 +28,10 @@ function inferSessionType(planText: string): string {
 // POST /api/week/new
 // Creates a new week document from the previous week's next_week_plan and lift_progression
 export async function POST() {
-  const prevWeek = readCurrentWeek()
-  const athlete = readAthleteProfile()
+  const [prevWeek, athlete] = await Promise.all([
+    readCurrentWeek(),
+    readAthleteProfile(),
+  ])
 
   if (!athlete) {
     return Response.json({ error: 'Athlete profile not found' }, { status: 400 })
@@ -51,9 +51,8 @@ export async function POST() {
     sunday: 'Sunday',
   }
 
-  // Archive previous week before creating new one
   if (prevWeek) {
-    archiveWeek(prevWeek)
+    await archiveWeek(prevWeek)
   }
 
   const nextWeekPlan: NextWeekPlan = prevWeek?.next_week_plan ?? {}
@@ -76,7 +75,6 @@ export async function POST() {
     }
   })
 
-  // Carry uncleared health flags from previous week
   const healthFlags = (prevWeek?.health_flags ?? []).filter((f) => !f.cleared)
 
   const newWeek: WeekDoc = {
@@ -90,26 +88,13 @@ export async function POST() {
       recovery_days: 0,
       total_calories: 0,
     },
-    lift_progression: (() => {
-      let liftProgression = prevWeek?.lift_progression ?? {}
-      if (Object.keys(liftProgression).length === 0) {
-        const baselinePath = path.join(process.cwd(), 'data', 'lift-progression.json')
-        if (fs.existsSync(baselinePath)) {
-          try {
-            liftProgression = JSON.parse(fs.readFileSync(baselinePath, 'utf-8'))
-          } catch { /* ignore */ }
-        }
-      }
-      return liftProgression
-    })(),
+    lift_progression: prevWeek?.lift_progression ?? {},
     health_flags: healthFlags,
     next_week_plan: {},
   }
 
-  writeCurrentWeek(newWeek)
-
-  // Increment deload counter each time a new week is started
-  incrementDeloadCounter()
+  await writeCurrentWeek(newWeek)
+  await incrementDeloadCounter()
 
   return Response.json(newWeek)
 }

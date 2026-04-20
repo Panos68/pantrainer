@@ -1,105 +1,114 @@
-import fs from 'fs'
-import path from 'path'
+import { put, head, del, list } from '@vercel/blob'
 import { WeekDocSchema, AthleteProfileSchema, AppStateSchema } from './schema'
 import type { WeekDoc, AthleteProfile, AppState } from './schema'
 import { format, parseISO } from 'date-fns'
 
-const DATA_DIR = path.join(process.cwd(), 'data')
-const WEEKS_DIR = path.join(DATA_DIR, 'weeks')
-const CURRENT_WEEK_PATH = path.join(DATA_DIR, 'current-week.json')
-const ATHLETE_PATH = path.join(DATA_DIR, 'athlete.json')
-const STATE_PATH = path.join(DATA_DIR, 'state.json')
+const CURRENT_WEEK_KEY = 'data/current-week.json'
+const ATHLETE_KEY = 'data/athlete.json'
+const STATE_KEY = 'data/state.json'
+const WEEKS_PREFIX = 'data/weeks/'
 
-// Ensure directories exist
-function ensureDirs() {
-  fs.mkdirSync(DATA_DIR, { recursive: true })
-  fs.mkdirSync(WEEKS_DIR, { recursive: true })
+async function readBlobAsJson<T>(pathname: string): Promise<T | null> {
+  try {
+    const blob = await head(pathname)
+    const token = process.env.BLOB_READ_WRITE_TOKEN
+    const res = await fetch(blob.url, {
+      cache: 'no-store',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!res.ok) return null
+    return res.json() as Promise<T>
+  } catch {
+    return null
+  }
 }
 
-export function readCurrentWeek(): WeekDoc | null {
-  ensureDirs()
-  if (!fs.existsSync(CURRENT_WEEK_PATH)) return null
-  const raw = fs.readFileSync(CURRENT_WEEK_PATH, 'utf-8')
-  return WeekDocSchema.parse(JSON.parse(raw))
+async function writeBlobAsJson(pathname: string, data: unknown): Promise<void> {
+  await put(pathname, JSON.stringify(data, null, 2), {
+    access: 'private',
+    addRandomSuffix: false,
+    contentType: 'application/json',
+  })
 }
 
-export function writeCurrentWeek(week: WeekDoc): void {
-  ensureDirs()
-  fs.writeFileSync(CURRENT_WEEK_PATH, JSON.stringify(week, null, 2))
+async function deleteBlobIfExists(pathname: string): Promise<void> {
+  try {
+    const blob = await head(pathname)
+    await del(blob.url)
+  } catch {
+    // blob not found, ignore
+  }
 }
 
-export function readAthleteProfile(): AthleteProfile | null {
-  ensureDirs()
-  if (!fs.existsSync(ATHLETE_PATH)) return null
-  const raw = fs.readFileSync(ATHLETE_PATH, 'utf-8')
-  return AthleteProfileSchema.parse(JSON.parse(raw))
+export async function readCurrentWeek(): Promise<WeekDoc | null> {
+  const raw = await readBlobAsJson<unknown>(CURRENT_WEEK_KEY)
+  if (!raw) return null
+  return WeekDocSchema.parse(raw)
 }
 
-export function writeAthleteProfile(profile: AthleteProfile): void {
-  ensureDirs()
-  fs.writeFileSync(ATHLETE_PATH, JSON.stringify(profile, null, 2))
+export async function writeCurrentWeek(week: WeekDoc): Promise<void> {
+  await writeBlobAsJson(CURRENT_WEEK_KEY, week)
 }
 
-export function readAppState(): AppState {
-  ensureDirs()
-  if (!fs.existsSync(STATE_PATH)) {
+export async function readAthleteProfile(): Promise<AthleteProfile | null> {
+  const raw = await readBlobAsJson<unknown>(ATHLETE_KEY)
+  if (!raw) return null
+  return AthleteProfileSchema.parse(raw)
+}
+
+export async function writeAthleteProfile(profile: AthleteProfile): Promise<void> {
+  await writeBlobAsJson(ATHLETE_KEY, profile)
+}
+
+export async function readAppState(): Promise<AppState> {
+  const raw = await readBlobAsJson<unknown>(STATE_KEY)
+  if (!raw) {
     const defaults = AppStateSchema.parse({})
-    fs.writeFileSync(STATE_PATH, JSON.stringify(defaults, null, 2))
+    await writeBlobAsJson(STATE_KEY, defaults)
     return defaults
   }
-  const raw = fs.readFileSync(STATE_PATH, 'utf-8')
-  return AppStateSchema.parse(JSON.parse(raw))
+  return AppStateSchema.parse(raw)
 }
 
-export function writeAppState(state: AppState): void {
-  ensureDirs()
-  fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2))
+export async function writeAppState(state: AppState): Promise<void> {
+  await writeBlobAsJson(STATE_KEY, state)
 }
 
 function getWeekFilename(week: WeekDoc): string {
-  // Try first session date
   if (week.sessions && week.sessions.length > 0) {
     const firstDate = [...week.sessions].sort((a, b) => a.date.localeCompare(b.date))[0].date
     return `week-${format(parseISO(firstDate), 'yyyy-ww')}.json`
   }
-  // Fall back to current date
   return `week-${format(new Date(), 'yyyy-ww')}.json`
 }
 
-export function archiveWeek(week: WeekDoc): void {
-  ensureDirs()
-  // Generate filename from week's session dates
+export async function archiveWeek(week: WeekDoc): Promise<void> {
   const filename = getWeekFilename(week)
-  const archivePath = path.join(WEEKS_DIR, filename)
-  fs.writeFileSync(archivePath, JSON.stringify(week, null, 2))
-  // Remove current week file
-  if (fs.existsSync(CURRENT_WEEK_PATH)) {
-    fs.unlinkSync(CURRENT_WEEK_PATH)
-  }
+  await writeBlobAsJson(`${WEEKS_PREFIX}${filename}`, week)
+  await deleteBlobIfExists(CURRENT_WEEK_KEY)
 }
 
-export function readArchivedWeeks(n: number): WeekDoc[] {
-  ensureDirs()
-  if (!fs.existsSync(WEEKS_DIR)) return []
-  const files = fs.readdirSync(WEEKS_DIR)
-    .filter(f => f.endsWith('.json'))
-    .sort()
-    .reverse()
+export async function readArchivedWeeks(n: number): Promise<WeekDoc[]> {
+  const result = await list({ prefix: WEEKS_PREFIX })
+  const sorted = result.blobs
+    .sort((a, b) => b.pathname.localeCompare(a.pathname))
     .slice(0, n)
-  return files.map(f => {
-    const raw = fs.readFileSync(path.join(WEEKS_DIR, f), 'utf-8')
-    return WeekDocSchema.parse(JSON.parse(raw))
-  })
+  const weeks = await Promise.all(
+    sorted.map(async (blob) => {
+      const res = await fetch(blob.url, { cache: 'no-store' })
+      return WeekDocSchema.parse(await res.json())
+    })
+  )
+  return weeks.reverse()
 }
 
-export function readAllArchivedWeeks(): WeekDoc[] {
-  ensureDirs()
-  if (!fs.existsSync(WEEKS_DIR)) return []
-  const files = fs.readdirSync(WEEKS_DIR)
-    .filter(f => f.endsWith('.json'))
-    .sort()
-  return files.map(f => {
-    const raw = fs.readFileSync(path.join(WEEKS_DIR, f), 'utf-8')
-    return WeekDocSchema.parse(JSON.parse(raw))
-  })
+export async function readAllArchivedWeeks(): Promise<WeekDoc[]> {
+  const result = await list({ prefix: WEEKS_PREFIX })
+  const sorted = result.blobs.sort((a, b) => a.pathname.localeCompare(b.pathname))
+  return Promise.all(
+    sorted.map(async (blob) => {
+      const res = await fetch(blob.url, { cache: 'no-store' })
+      return WeekDocSchema.parse(await res.json())
+    })
+  )
 }

@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     return Response.json(result, { status: 422 })
   }
 
-  const applied = applyImport(result.data)
+  const applied = await applyImport(result.data)
 
   return Response.json({
     ...result,
