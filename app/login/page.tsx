@@ -21,6 +21,7 @@ export default function LoginPage() {
     })
 
     if (res.ok) {
+      localStorage.setItem('auth_token', password)
       router.push('/')
       router.refresh()
     } else {
