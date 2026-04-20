@@ -88,6 +88,14 @@ export async function archiveWeek(week: WeekDoc): Promise<void> {
   await deleteBlobIfExists(CURRENT_WEEK_KEY)
 }
 
+async function fetchBlobUrl(url: string): Promise<Response> {
+  const token = process.env.BLOB_READ_WRITE_TOKEN
+  return fetch(url, {
+    cache: 'no-store',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+}
+
 export async function readArchivedWeeks(n: number): Promise<WeekDoc[]> {
   const result = await list({ prefix: WEEKS_PREFIX })
   const sorted = result.blobs
@@ -95,7 +103,7 @@ export async function readArchivedWeeks(n: number): Promise<WeekDoc[]> {
     .slice(0, n)
   const weeks = await Promise.all(
     sorted.map(async (blob) => {
-      const res = await fetch(blob.url, { cache: 'no-store' })
+      const res = await fetchBlobUrl(blob.url)
       return WeekDocSchema.parse(await res.json())
     })
   )
@@ -107,7 +115,7 @@ export async function readAllArchivedWeeks(): Promise<WeekDoc[]> {
   const sorted = result.blobs.sort((a, b) => a.pathname.localeCompare(b.pathname))
   return Promise.all(
     sorted.map(async (blob) => {
-      const res = await fetch(blob.url, { cache: 'no-store' })
+      const res = await fetchBlobUrl(blob.url)
       return WeekDocSchema.parse(await res.json())
     })
   )
