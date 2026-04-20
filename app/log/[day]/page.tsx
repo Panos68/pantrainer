@@ -184,6 +184,8 @@ export default function LogDayPage() {
   // Exercise actuals state (indexed to match session.exercises)
   type ExerciseActual = { sets: string; reps: string; weight_kg: string }
   const [exerciseActuals, setExerciseActuals] = useState<ExerciseActual[]>([])
+  const [swappedExercises, setSwappedExercises] = useState<Record<number, number>>({}) // index → alt index
+  const [openSwapMenu, setOpenSwapMenu] = useState<number | null>(null)
 
   // Skip flow state
   const [showSkip, setShowSkip] = useState(false)
@@ -320,8 +322,14 @@ export default function LogDayPage() {
       type === 'Strength'
         ? (session?.exercises ?? []).map((ex, i) => {
             const actual = exerciseActuals[i]
+            const altIndex = swappedExercises[i]
+            const alt = altIndex != null ? ex.alternatives[altIndex] : null
             return {
               ...ex,
+              name: alt?.name ?? ex.name,
+              sets: alt?.sets ?? ex.sets,
+              reps: alt?.reps ?? ex.reps,
+              weight_kg: alt?.weight_kg ?? ex.weight_kg,
               actual_sets: actual?.sets !== '' ? Number(actual?.sets) : undefined,
               actual_reps:
                 actual?.reps !== ''
@@ -544,10 +552,65 @@ export default function LogDayPage() {
                   key={i}
                   className="grid grid-cols-[1fr_repeat(6,minmax(0,3rem))] border-b border-zinc-800/60 last:border-0"
                 >
-                  <div className="bg-zinc-950 px-3 py-2.5 text-zinc-300 text-xs font-mono font-bold truncate">
-                    {ex.name}
+                  <div className="bg-zinc-950 px-3 py-2.5 text-zinc-300 text-xs font-mono font-bold relative">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className={`truncate ${swappedExercises[i] != null ? 'text-amber-400' : ''}`}>
+                        {swappedExercises[i] != null
+                          ? ex.alternatives[swappedExercises[i]]?.name ?? ex.name
+                          : ex.name}
+                      </span>
+                      {ex.alternatives && ex.alternatives.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setOpenSwapMenu(openSwapMenu === i ? null : i)}
+                          className="shrink-0 text-zinc-600 hover:text-amber-400 transition-colors text-[10px]"
+                          title="Swap exercise"
+                        >
+                          ⇄
+                        </button>
+                      )}
+                    </div>
                     {ex.notes && (
                       <span className="block text-zinc-600 text-[10px] font-normal mt-0.5 truncate">{ex.notes}</span>
+                    )}
+                    {openSwapMenu === i && (
+                      <div className="absolute left-0 top-full z-10 w-56 rounded-xl border border-zinc-700 bg-zinc-900 shadow-xl mt-1">
+                        <div className="px-3 py-2 text-zinc-500 text-[9px] font-mono tracking-widest uppercase border-b border-zinc-800">
+                          Swap with
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSwappedExercises((prev) => { const n = { ...prev }; delete n[i]; return n })
+                            setOpenSwapMenu(null)
+                          }}
+                          className={`w-full text-left px-3 py-2 text-xs font-mono hover:bg-zinc-800 transition-colors ${swappedExercises[i] == null ? 'text-lime-400' : 'text-zinc-400'}`}
+                        >
+                          {ex.name} {swappedExercises[i] == null ? '✓' : ''}
+                        </button>
+                        {ex.alternatives.map((alt, ai) => (
+                          <button
+                            key={ai}
+                            type="button"
+                            onClick={() => {
+                              setSwappedExercises((prev) => ({ ...prev, [i]: ai }))
+                              setExerciseActuals((prev) => prev.map((a, j) =>
+                                j === i ? {
+                                  sets: alt.sets?.toString() ?? a.sets,
+                                  reps: alt.reps?.toString() ?? a.reps,
+                                  weight_kg: alt.weight_kg?.toString() ?? '',
+                                } : a
+                              ))
+                              setOpenSwapMenu(null)
+                            }}
+                            className={`w-full text-left px-3 py-2 text-xs font-mono hover:bg-zinc-800 transition-colors border-t border-zinc-800/60 ${swappedExercises[i] === ai ? 'text-amber-400' : 'text-zinc-400'}`}
+                          >
+                            {alt.name}
+                            {alt.notes && <span className="block text-zinc-600 text-[10px]">{alt.notes}</span>}
+                            {swappedExercises[i] === ai && ' ✓'}
+                          </button>
+                        ))}
+                      </div>
                     )}
                   </div>
                   <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">{ex.sets ?? '—'}</div>
