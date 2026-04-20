@@ -216,6 +216,9 @@ export default function LogDayPage() {
         setSubtype(sessionData.subtype ?? '')
         setNotes(sessionData.notes ?? '')
         setPhotos(sessionData.photos ?? [])
+        if (sessionData.duration_min != null) setDuration(String(sessionData.duration_min))
+        if (sessionData.avg_hr_bpm != null) setAvgHr(String(sessionData.avg_hr_bpm))
+        if (sessionData.total_calories != null) setCalories(String(sessionData.total_calories))
 
         // Initialize exercise actuals from planned values (or existing actuals if in_progress)
         setExerciseActuals(
@@ -451,10 +454,6 @@ export default function LogDayPage() {
   }
 
   // Read-only view for finalized sessions
-  if (session.status === 'completed' || session.status === 'skipped') {
-    return <ReadOnlyView session={session} />
-  }
-
   const typeColor = TYPE_COLORS[type] ?? 'text-zinc-400'
   const isConditioning = type === 'Conditioning'
 
@@ -850,27 +849,39 @@ export default function LogDayPage() {
         {/* Action buttons */}
         {!showSkip && (
           <div className="grid grid-cols-1 gap-3 pt-2">
-            <button
-              onClick={handleMarkComplete}
-              disabled={saving}
-              className="w-full h-14 rounded-xl bg-lime-400 hover:bg-lime-300 active:bg-lime-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Mark Complete'}
-            </button>
-            <button
-              onClick={handleSaveProgress}
-              disabled={saving}
-              className="w-full h-12 rounded-xl border border-zinc-600 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-bold text-xs tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Save Progress'}
-            </button>
-            <button
-              onClick={() => setShowSkip(true)}
-              disabled={saving}
-              className="w-full h-11 rounded-xl border border-zinc-800 bg-transparent hover:bg-zinc-900 text-zinc-600 hover:text-zinc-400 font-bold text-xs tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
-            >
-              Skip Session
-            </button>
+            {session.status === 'completed' || session.status === 'skipped' ? (
+              <button
+                onClick={handleMarkComplete}
+                disabled={saving}
+                className="w-full h-14 rounded-xl bg-lime-400 hover:bg-lime-300 active:bg-lime-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={handleMarkComplete}
+                  disabled={saving}
+                  className="w-full h-14 rounded-xl bg-lime-400 hover:bg-lime-300 active:bg-lime-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
+                >
+                  {saving ? 'Saving...' : 'Mark Complete'}
+                </button>
+                <button
+                  onClick={handleSaveProgress}
+                  disabled={saving}
+                  className="w-full h-12 rounded-xl border border-zinc-600 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-bold text-xs tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
+                >
+                  {saving ? 'Saving...' : 'Save Progress'}
+                </button>
+                <button
+                  onClick={() => setShowSkip(true)}
+                  disabled={saving}
+                  className="w-full h-11 rounded-xl border border-zinc-800 bg-transparent hover:bg-zinc-900 text-zinc-600 hover:text-zinc-400 font-bold text-xs tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
+                >
+                  Skip Session
+                </button>
+              </>
+            )}
             <button
               onClick={() => setShowImport(!showImport)}
               className="w-full h-10 rounded-xl border border-zinc-800 bg-transparent hover:bg-zinc-900 text-zinc-600 hover:text-zinc-400 font-bold text-xs tracking-[0.15em] uppercase transition-colors"
