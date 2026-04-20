@@ -61,6 +61,19 @@ export async function GET(req: Request) {
       anaerobic_training_effect: best.anaerobicTrainingEffect ?? null,
       training_stress_score: best.trainingStressScore ?? null,
       hr_zones: detail.hrZones,
+      all_activities: activities.length > 1
+        ? activities.map((a) => ({
+            garmin_activity_id: a.activityId,
+            activity_name: a.activityName,
+            activity_type: a.activityType?.typeKey,
+            duration_min: a.duration ? Math.round(a.duration / 60) : null,
+            avg_hr_bpm: a.averageHR ? Math.round(a.averageHR) : null,
+            total_calories: a.calories ? Math.round(a.calories) : null,
+            aerobic_training_effect: a.aerobicTrainingEffect ?? null,
+            anaerobic_training_effect: a.anaerobicTrainingEffect ?? null,
+            training_stress_score: a.trainingStressScore ?? null,
+          }))
+        : undefined,
     })
   } catch (err) {
     console.error('Garmin sync error:', err)
