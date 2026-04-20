@@ -1,11 +1,12 @@
+export const dynamic = 'force-dynamic'
+
 import { readAllArchivedWeeks, readCurrentWeek } from '@/lib/data'
 import LiftProgressChart from '@/components/LiftProgressChart'
 import ConditioningChart from '@/components/ConditioningChart'
 import type { WeekDoc } from '@/lib/schema'
 
-export default function ProgressPage() {
-  const archived = readAllArchivedWeeks()
-  const current = readCurrentWeek()
+export default async function ProgressPage() {
+  const [archived, current] = await Promise.all([readAllArchivedWeeks(), readCurrentWeek()])
   const weeks: WeekDoc[] = current ? [...archived, current] : archived
 
   const totalSessions = weeks.reduce((sum, w) => sum + w.sessions.filter((s) => s.status === 'completed').length, 0)

@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   }
 
   const imported = result.data
-  const week = readCurrentWeek()
+  const week = await readCurrentWeek()
   if (!week) return Response.json({ ok: false, errors: ['No active week'] }, { status: 400 })
 
   const idx = week.sessions.findIndex((s) => s.day === imported.day)
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
   }
 
   week.sessions[idx] = imported
-  writeCurrentWeek(week)
+  await writeCurrentWeek(week)
 
   return Response.json({ ok: true, session: imported })
 }

@@ -6,7 +6,7 @@ import { WeekDocSchema } from '@/lib/schema'
 // Used for: clearing individual health flags
 // Returns: updated WeekDoc
 export async function PATCH(request: Request) {
-  const current = readCurrentWeek()
+  const current = await readCurrentWeek()
   if (!current) {
     return Response.json({ error: 'No current week found' }, { status: 404 })
   }
@@ -27,6 +27,6 @@ export async function PATCH(request: Request) {
     )
   }
 
-  writeCurrentWeek(result.data)
+  await writeCurrentWeek(result.data)
   return Response.json(result.data)
 }

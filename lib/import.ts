@@ -2,6 +2,7 @@ import { WeekDocSchema } from './schema'
 import type { WeekDoc } from './schema'
 import { readCurrentWeek, writeCurrentWeek } from './data'
 
+
 export interface ImportResult {
   ok: true
   data: WeekDoc
@@ -52,8 +53,8 @@ const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satur
 
 // Apply the imported plan: update current week in place, preserving completed sessions.
 // Always ensures all 7 days exist with correct dates — guards against Claude omitting days.
-export function applyImport(importedDoc: WeekDoc): WeekDoc {
-  const currentWeek = readCurrentWeek()
+export async function applyImport(importedDoc: WeekDoc): Promise<WeekDoc> {
+  const currentWeek = await readCurrentWeek()
 
   // Build lookup of completed/skipped sessions to preserve
   const preservedByDay: Record<string, WeekDoc['sessions'][number]> = {}
@@ -115,6 +116,6 @@ export function applyImport(importedDoc: WeekDoc): WeekDoc {
     sessions: mergedSessions,
   }
 
-  writeCurrentWeek(merged)
+  await writeCurrentWeek(merged)
   return merged
 }

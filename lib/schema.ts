@@ -7,9 +7,12 @@ export const SessionStatusSchema = z.enum(['planned', 'in_progress', 'completed'
 export const ExerciseSchema = z.object({
   name: z.string(),
   sets: z.number().nullable().optional(),
-  reps: z.union([z.number(), z.string()]).nullable().optional(), // "8-12" or 8
+  reps: z.union([z.number(), z.string()]).nullable().optional(),
   weight_kg: z.number().nullable().optional(),
   notes: z.string().nullable().optional(),
+  actual_sets: z.number().nullable().optional(),
+  actual_reps: z.union([z.number(), z.string()]).nullable().optional(),
+  actual_weight_kg: z.number().nullable().optional(),
 })
 
 // Individual session
@@ -103,9 +106,8 @@ export const AthleteProfileSchema = z.object({
 // App state (stored in data/state.json)
 export const AppStateSchema = z.object({
   gymWeek: z.enum(['week_a', 'week_b', 'legs_week']).default('week_a'),
-  deloadCounter: z.number().default(1),  // weeks since last deload
-  lastDeloadWeek: z.string().nullable().default(null), // week string
-  notionLastSync: z.string().nullable().default(null), // ISO timestamp
+  deloadCounter: z.number().default(1),
+  lastDeloadWeek: z.string().nullable().default(null),
   isDeloadWeek: z.boolean().default(false),
 })
 
