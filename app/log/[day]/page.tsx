@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import type { Session } from '@/lib/schema'
+import type { Session, GarminRecoveryDay } from '@/lib/schema'
+import GarminRecoveryCard from '@/components/GarminRecoveryCard'
 
 // ─── Type colors ─────────────────────────────────────────────────────────
 
@@ -11,6 +12,14 @@ const TYPE_COLORS: Record<string, string> = {
   Conditioning: 'text-sky-400',
   Recovery: 'text-emerald-400',
   Rest: 'text-zinc-500',
+}
+
+function GarminBadge() {
+  return (
+    <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-mono font-bold tracking-widest uppercase bg-lime-400/10 text-lime-400 border border-lime-400/20">
+      Garmin
+    </span>
+  )
 }
 
 // ─── Read-only view ──────────────────────────────────────────────────────
@@ -183,6 +192,15 @@ export default function LogDayPage() {
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
 
+  // Garmin auto-fill state
+  const [garminSynced, setGarminSynced] = useState<{
+    duration?: boolean
+    avg_hr?: boolean
+    calories?: boolean
+    activity_id?: number
+  }>({})
+  const [garminRecovery, setGarminRecovery] = useState<GarminRecoveryDay | null>(null)
+
   // Load session and week data
   useEffect(() => {
     async function load() {
@@ -223,6 +241,52 @@ export default function LogDayPage() {
     load()
   }, [day])
 
+  // Auto-fill from Garmin when session loads
+  useEffect(() => {
+    if (!session || session.status === 'completed' || session.status === 'skipped') return
+    const dateStr = session.date
+    const syncUrl = `/api/garmin/sync?date=${dateStr}&type=${encodeURIComponent(session.type)}`
+    Promise.allSettled([
+      fetch(syncUrl).then((r) => r.json()),
+      fetch('/api/garmin/recovery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: dateStr }),
+      }).then((r) => r.json()),
+    ]).then(([syncResult, recoveryResult]) => {
+      if (syncResult.status === 'fulfilled') {
+        const sync = syncResult.value as {
+          matched: boolean
+          duration_min?: number
+          avg_hr_bpm?: number
+          total_calories?: number
+          garmin_activity_id?: number
+        }
+        if (sync.matched) {
+          const synced: typeof garminSynced = { activity_id: sync.garmin_activity_id }
+          if (sync.duration_min != null && !duration) {
+            setDuration(String(sync.duration_min))
+            synced.duration = true
+          }
+          if (sync.avg_hr_bpm != null && !avgHr) {
+            setAvgHr(String(sync.avg_hr_bpm))
+            synced.avg_hr = true
+          }
+          if (sync.total_calories != null && !calories) {
+            setCalories(String(sync.total_calories))
+            synced.calories = true
+          }
+          setGarminSynced(synced)
+        }
+      }
+      if (recoveryResult.status === 'fulfilled') {
+        const rec = recoveryResult.value as { recovery?: GarminRecoveryDay }
+        if (rec.recovery) setGarminRecovery(rec.recovery)
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.date])
+
   const buildPayload = useCallback(() => {
     const exercises =
       type === 'Strength'
@@ -252,8 +316,10 @@ export default function LogDayPage() {
       notes,
       photos,
       exercises,
+      garmin_activity_id: garminSynced.activity_id ?? null,
+      source: (garminSynced.duration || garminSynced.avg_hr || garminSynced.calories) ? 'garmin' as const : 'manual' as const,
     }
-  }, [type, subtype, duration, avgHr, calories, notes, photos, exerciseActuals, session])
+  }, [type, subtype, duration, avgHr, calories, notes, photos, exerciseActuals, session, garminSynced])
 
   async function handleSaveProgress() {
     setSaving(true)
@@ -535,6 +601,13 @@ export default function LogDayPage() {
           </div>
         )}
 
+        {/* Recovery card */}
+        <GarminRecoveryCard
+          date={session.date}
+          recovery={garminRecovery}
+          onFetched={(data) => setGarminRecovery(data)}
+        />
+
         {/* Form */}
         <form
           onSubmit={(e) => e.preventDefault()}
@@ -576,13 +649,13 @@ export default function LogDayPage() {
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">
               <label className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
-                Duration
+                Duration{garminSynced.duration && <GarminBadge />}
               </label>
               <div className="relative">
                 <input
                   type="number"
                   value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
+                  onChange={(e) => { setDuration(e.target.value); setGarminSynced((s) => ({ ...s, duration: false })) }}
                   placeholder="0"
                   min={0}
                   className="w-full h-11 rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-zinc-100 text-sm placeholder:text-zinc-600 focus:outline-none focus:border-lime-400/50 focus:ring-1 focus:ring-lime-400/20 transition-colors"
@@ -595,13 +668,13 @@ export default function LogDayPage() {
 
             <div className="space-y-1.5">
               <label className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
-                Avg HR
+                Avg HR{garminSynced.avg_hr && <GarminBadge />}
               </label>
               <div className="relative">
                 <input
                   type="number"
                   value={avgHr}
-                  onChange={(e) => setAvgHr(e.target.value)}
+                  onChange={(e) => { setAvgHr(e.target.value); setGarminSynced((s) => ({ ...s, avg_hr: false })) }}
                   placeholder="0"
                   min={0}
                   className="w-full h-11 rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-zinc-100 text-sm placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/50 focus:ring-1 focus:ring-sky-400/20 transition-colors"
@@ -614,13 +687,13 @@ export default function LogDayPage() {
 
             <div className="space-y-1.5">
               <label className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
-                Calories
+                Calories{garminSynced.calories && <GarminBadge />}
               </label>
               <div className="relative">
                 <input
                   type="number"
                   value={calories}
-                  onChange={(e) => setCalories(e.target.value)}
+                  onChange={(e) => { setCalories(e.target.value); setGarminSynced((s) => ({ ...s, calories: false })) }}
                   placeholder="0"
                   min={0}
                   className="w-full h-11 rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-zinc-100 text-sm placeholder:text-zinc-600 focus:outline-none focus:border-violet-400/50 focus:ring-1 focus:ring-violet-400/20 transition-colors"
