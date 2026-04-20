@@ -294,7 +294,6 @@ function ImportSection() {
   const router = useRouter()
   const [rawText, setRawText] = useState('')
   const [importState, setImportState] = useState<ImportState>({ status: 'idle' })
-  const [confirming, setConfirming] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   async function handleImport() {
@@ -325,15 +324,8 @@ function ImportSection() {
     }
   }
 
-  async function handleConfirm() {
-    if (importState.status !== 'success') return
-    setConfirming(true)
-    try {
-      await fetch('/api/week/new', { method: 'POST' })
-      router.push('/')
-    } catch {
-      setConfirming(false)
-    }
+  function handleConfirm() {
+    router.push('/')
   }
 
   function handleTryAgain() {
@@ -457,17 +449,9 @@ function ImportSection() {
           {/* Confirm button */}
           <button
             onClick={handleConfirm}
-            disabled={confirming}
-            className="w-full h-14 bg-lime-400 hover:bg-lime-300 active:bg-lime-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase rounded-xl transition-colors flex items-center justify-center gap-3"
+            className="w-full h-14 bg-lime-400 hover:bg-lime-300 active:bg-lime-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase rounded-xl transition-colors"
           >
-            {confirming ? (
-              <>
-                <div className="w-4 h-4 border-2 border-zinc-700 border-t-zinc-950 rounded-full animate-spin" />
-                Starting Week…
-              </>
-            ) : (
-              'Confirm & Start Next Week'
-            )}
+            Go to Week
           </button>
 
           <button

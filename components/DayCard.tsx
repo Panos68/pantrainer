@@ -1,10 +1,15 @@
+'use client'
+
 import Link from 'next/link'
+import { useState } from 'react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { Session } from '@/lib/schema'
 
 interface DayCardProps {
   session: Session
   isToday: boolean
+  notionConfigured?: boolean
 }
 
 const STATUS_CONFIG = {
@@ -33,7 +38,8 @@ const TYPE_COLORS: Record<string, string> = {
   Rest: 'text-zinc-500',
 }
 
-export default function DayCard({ session, isToday }: DayCardProps) {
+export default function DayCard({ session, isToday, notionConfigured }: DayCardProps) {
+  const [pushing, setPushing] = useState(false)
   const slug = session.day.toLowerCase()
   const status = session.status ?? 'planned'
   const statusCfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.planned
@@ -44,6 +50,26 @@ export default function DayCard({ session, isToday }: DayCardProps) {
   const shortDay = session.day.slice(0, 3).toUpperCase()
   const dateObj = new Date(session.date + 'T12:00:00')
   const dateLabel = dateObj.toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })
+
+  async function pushToNotion(e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    setPushing(true)
+    try {
+      const res = await fetch('/api/notion/push-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ day: session.day }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      toast.success(`${session.day} pushed to Notion`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Push failed')
+    } finally {
+      setPushing(false)
+    }
+  }
 
   return (
     <Link
@@ -77,15 +103,34 @@ export default function DayCard({ session, isToday }: DayCardProps) {
             </div>
           </div>
 
-          {/* Status badge */}
-          <span
-            className={cn(
-              'inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-mono font-bold tracking-widest uppercase shrink-0',
-              statusCfg.classes,
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Notion push button */}
+            {notionConfigured && (
+              <button
+                onClick={pushToNotion}
+                disabled={pushing}
+                title={`Push ${session.day} to Notion`}
+                className={cn(
+                  'text-[10px] font-mono tracking-widest px-1.5 py-0.5 rounded border transition-colors',
+                  pushing
+                    ? 'border-zinc-700 text-zinc-600 cursor-wait'
+                    : 'border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300',
+                )}
+              >
+                {pushing ? '…' : 'N↑'}
+              </button>
             )}
-          >
-            {statusCfg.label}
-          </span>
+
+            {/* Status badge */}
+            <span
+              className={cn(
+                'inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-mono font-bold tracking-widest uppercase',
+                statusCfg.classes,
+              )}
+            >
+              {statusCfg.label}
+            </span>
+          </div>
         </div>
 
         {/* Metrics if completed */}

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { format } from 'date-fns'
 import { readAthleteProfile, readCurrentWeek, readAppState } from '@/lib/data'
 import GymWeekBadge from '@/components/GymWeekBadge'
+import NewWeekButton from '@/components/NewWeekButton'
 import DeloadBanner from '@/components/DeloadBanner'
 import HealthFlagsBanner from '@/components/HealthFlagsBanner'
 import WeekGrid from '@/components/WeekGrid'
@@ -29,17 +30,12 @@ export default function Home() {
           <p className="text-zinc-500 text-sm">
             No training week is loaded. Start a new week to begin tracking.
           </p>
-          <form
-            action="/api/week/new"
-            method="POST"
-          >
-            <button
-              type="submit"
-              className="w-full h-14 bg-lime-400 hover:bg-lime-300 active:bg-lime-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase rounded-xl transition-colors"
-            >
-              START YOUR WEEK
-            </button>
-          </form>
+          <div>
+            <NewWeekButton
+              label="START YOUR WEEK"
+              className="w-full h-14 bg-lime-400 hover:bg-lime-300 active:bg-lime-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase rounded-xl transition-colors disabled:opacity-50"
+            />
+          </div>
         </div>
       </main>
     )
@@ -89,7 +85,7 @@ export default function Home() {
               /{week.sessions.length} DONE
             </span>
           </div>
-          <WeekGrid sessions={week.sessions} todayISO={todayISO} />
+          <WeekGrid sessions={week.sessions} todayISO={todayISO} notionConfigured={!!process.env.NOTION_TOKEN} />
         </section>
 
         {/* ── Footer actions ── */}
@@ -109,14 +105,7 @@ export default function Home() {
                 Progress
               </a>
             </div>
-            <form action="/api/week/new" method="POST">
-              <button
-                type="submit"
-                className="px-6 h-9 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 hover:text-zinc-50 font-bold text-xs tracking-[0.15em] uppercase rounded-lg border border-zinc-700 hover:border-zinc-500 transition-all"
-              >
-                Start New Week
-              </button>
-            </form>
+            <NewWeekButton className="px-6 h-9 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 hover:text-zinc-50 font-bold text-xs tracking-[0.15em] uppercase rounded-lg border border-zinc-700 hover:border-zinc-500 transition-all disabled:opacity-50" />
           </div>
           <NotionSync
             lastSync={appState.notionLastSync ?? null}

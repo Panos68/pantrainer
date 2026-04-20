@@ -3,55 +3,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import type { Session } from '@/lib/schema'
-import type { WeekDoc } from '@/lib/schema'
-
-// ─── Lift progression parser ───────────────────────────────────────────────
-
-function buildLiftNotes(lifts: Record<string, string | number | null>): string {
-  const lines: string[] = []
-
-  // Extract lift names (keys ending in _kg)
-  const liftKeys = Object.keys(lifts).filter((k) => k.endsWith('_kg'))
-
-  for (const kgKey of liftKeys) {
-    const liftName = kgKey.replace(/_kg$/, '')
-    const weight = lifts[kgKey]
-    if (weight == null) continue
-
-    // Check for a status key (e.g. bench_status)
-    const statusKey = `${liftName}_status`
-    const status = lifts[statusKey]
-
-    // Check for a next key (e.g. deadlift_next)
-    const nextKey = `${liftName}_next`
-    const next = lifts[nextKey]
-
-    // Check for a note key (e.g. pullups_note)
-    const noteKey = `${liftName}_note`
-    const note = lifts[noteKey]
-
-    const displayName = liftName.replace(/_/g, ' ')
-      .replace(/\b\w/g, (c) => c.toUpperCase())
-
-    let line = `${displayName}: ${weight}kg`
-
-    if (status && next) {
-      line += ` → next: ${next}kg`
-    } else if (status === 'ceiling') {
-      line += ` (ceiling — hold)`
-    } else if (next) {
-      line += ` → next: ${next}kg`
-    }
-
-    if (note) {
-      line += ` (${note})`
-    }
-
-    lines.push(line)
-  }
-
-  return lines.join('\n')
-}
 
 // ─── Type colors ─────────────────────────────────────────────────────────
 
@@ -178,7 +129,6 @@ export default function LogDayPage() {
   const day = (params.day as string) ?? ''
 
   const [session, setSession] = useState<Session | null>(null)
-  const [week, setWeek] = useState<WeekDoc | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -192,6 +142,11 @@ export default function LogDayPage() {
   const [photos, setPhotos] = useState<string[]>([])
   const [photoInput, setPhotoInput] = useState('')
 
+  // Session import state
+  const [showImport, setShowImport] = useState(false)
+  const [importJson, setImportJson] = useState('')
+  const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
   // Skip flow state
   const [showSkip, setShowSkip] = useState(false)
   const [skipReason, setSkipReason] = useState('')
@@ -204,27 +159,29 @@ export default function LogDayPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [sessionRes, weekRes] = await Promise.all([
-          fetch(`/api/session/${day}`),
-          fetch('/api/week'),
-        ])
+        const sessionRes = await fetch(`/api/session/${day}`)
         if (!sessionRes.ok) throw new Error('Session not found')
         const sessionData: Session = await sessionRes.json()
-        const weekData: WeekDoc = await weekRes.json()
 
         setSession(sessionData)
-        setWeek(weekData)
 
         // Pre-fill form
         setType(sessionData.type)
         setSubtype(sessionData.subtype ?? '')
 
-        // Pre-fill notes for Strength sessions
-        if (sessionData.type === 'Strength' && weekData.lift_progression) {
-          const liftNotes = buildLiftNotes(weekData.lift_progression)
-          setNotes(liftNotes || (sessionData.notes ?? ''))
+        // Pre-fill notes with planned exercises if notes are empty
+        const existingNotes = sessionData.notes ?? ''
+        if (!existingNotes && sessionData.exercises && sessionData.exercises.length > 0) {
+          const lines = sessionData.exercises.map((ex) => {
+            let line = ex.name
+            if (ex.sets != null && ex.reps != null) line += ` ${ex.sets}×${ex.reps}`
+            if (ex.weight_kg != null) line += ` @ ${ex.weight_kg}kg`
+            line += ` → actual: `
+            return line
+          })
+          setNotes(lines.join('\n'))
         } else {
-          setNotes(sessionData.notes ?? '')
+          setNotes(existingNotes)
         }
 
         setPhotos(sessionData.photos ?? [])
@@ -350,6 +307,32 @@ export default function LogDayPage() {
     )
   }
 
+  async function handleSessionImport() {
+    if (!importJson.trim()) return
+    try {
+      const res = await fetch('/api/session/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ json: importJson }),
+      })
+      const data = await res.json()
+      if (!data.ok) {
+        setImportMsg({ ok: false, text: data.errors?.join(', ') ?? 'Import failed' })
+      } else {
+        setSession(data.session)
+        setType(data.session.type)
+        setSubtype(data.session.subtype ?? '')
+        setNotes(data.session.notes ?? '')
+        setImportJson('')
+        setShowImport(false)
+        setImportMsg({ ok: true, text: 'Session updated' })
+        setTimeout(() => setImportMsg(null), 2500)
+      }
+    } catch {
+      setImportMsg({ ok: false, text: 'Network error' })
+    }
+  }
+
   // Read-only view for finalized sessions
   if (session.status === 'completed' || session.status === 'skipped') {
     return <ReadOnlyView session={session} />
@@ -389,6 +372,31 @@ export default function LogDayPage() {
             <p className="text-zinc-300 text-sm font-mono leading-relaxed">
               {session.subtype}
             </p>
+          </div>
+        )}
+
+        {/* Planned exercises */}
+        {session.exercises && session.exercises.length > 0 && (
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-2">
+            <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase mb-2">
+              Planned Exercises
+            </p>
+            <ul className="space-y-1.5">
+              {session.exercises.map((ex, i) => (
+                <li key={i} className="flex items-baseline gap-2 text-sm font-mono">
+                  <span className="text-zinc-300 font-bold">{ex.name}</span>
+                  {ex.sets != null && ex.reps != null && (
+                    <span className="text-zinc-500">{ex.sets}×{ex.reps}</span>
+                  )}
+                  {ex.weight_kg != null && (
+                    <span className="text-violet-400">@ {ex.weight_kg}kg</span>
+                  )}
+                  {ex.notes && (
+                    <span className="text-zinc-600 text-xs">— {ex.notes}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
@@ -513,32 +521,34 @@ export default function LogDayPage() {
             />
           </div>
 
-          {/* Photos — Conditioning only */}
-          {isConditioning && (
+          {/* Photos */}
+          {(
             <div className="space-y-2">
               <label className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
                 Photos
               </label>
               <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={photoInput}
-                  onChange={(e) => setPhotoInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      addPhoto()
-                    }
-                  }}
-                  placeholder="File path or URL..."
-                  className="flex-1 h-11 rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-zinc-100 text-sm placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/50 focus:ring-1 focus:ring-sky-400/20 transition-colors"
-                />
+                <label className="flex-1 h-11 rounded-xl border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-sm flex items-center px-4 cursor-pointer transition-colors">
+                  <span className="text-zinc-600 mr-2">+</span> Pick file…
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files ?? [])
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      files.forEach((f) => setPhotos((prev) => [...prev, (f as any).path ?? f.name]))
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
                 <button
                   type="button"
                   onClick={addPhoto}
                   className="h-11 px-4 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs tracking-widest uppercase transition-colors"
                 >
-                  Add
+                  Add path
                 </button>
               </div>
               {photos.length > 0 && (
@@ -604,6 +614,41 @@ export default function LogDayPage() {
           </div>
         )}
 
+        {/* Session import */}
+        {showImport && (
+          <div className="rounded-xl border border-zinc-700 bg-zinc-900 p-4 space-y-3">
+            <p className="text-zinc-400 text-xs font-mono tracking-widest uppercase">
+              Paste updated session JSON
+            </p>
+            <textarea
+              value={importJson}
+              onChange={(e) => setImportJson(e.target.value)}
+              rows={6}
+              placeholder={'{\n  "day": "Wednesday",\n  "type": "Strength",\n  "exercises": [...]\n}'}
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-zinc-100 text-sm font-mono placeholder:text-zinc-600 focus:outline-none focus:border-lime-400/50 resize-none leading-relaxed"
+            />
+            {importMsg && (
+              <p className={`text-xs font-mono ${importMsg.ok ? 'text-lime-400' : 'text-red-400'}`}>
+                {importMsg.text}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={handleSessionImport}
+                className="flex-1 h-11 rounded-xl bg-lime-400 hover:bg-lime-300 text-zinc-950 font-black text-xs tracking-[0.15em] uppercase transition-colors"
+              >
+                Apply
+              </button>
+              <button
+                onClick={() => { setShowImport(false); setImportJson(''); setImportMsg(null) }}
+                className="px-5 h-11 rounded-xl border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 font-bold text-xs tracking-widest uppercase transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Action buttons */}
         {!showSkip && (
           <div className="grid grid-cols-1 gap-3 pt-2">
@@ -627,6 +672,12 @@ export default function LogDayPage() {
               className="w-full h-11 rounded-xl border border-zinc-800 bg-transparent hover:bg-zinc-900 text-zinc-600 hover:text-zinc-400 font-bold text-xs tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
             >
               Skip Session
+            </button>
+            <button
+              onClick={() => setShowImport(!showImport)}
+              className="w-full h-10 rounded-xl border border-zinc-800 bg-transparent hover:bg-zinc-900 text-zinc-600 hover:text-zinc-400 font-bold text-xs tracking-[0.15em] uppercase transition-colors"
+            >
+              Update from JSON
             </button>
           </div>
         )}

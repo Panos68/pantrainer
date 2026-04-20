@@ -6,7 +6,8 @@ import { startOfISOWeek, addDays, format, addWeeks } from 'date-fns'
 import type { WeekDoc, Session, NextWeekPlan } from '@/lib/schema'
 
 function getNextWeekRange(): { label: string; startDate: Date } {
-  const nextMonday = addWeeks(startOfISOWeek(new Date()), 1)
+  const thisMonday = startOfISOWeek(new Date())
+  const nextMonday = addWeeks(thisMonday, 1)
   const nextSunday = addDays(nextMonday, 6)
   const label = `${format(nextMonday, 'MMM d')}–${format(nextSunday, 'd, yyyy')}`
   return { label, startDate: nextMonday }
@@ -65,6 +66,7 @@ export async function POST() {
       day: dayNames[dayKey],
       type: inferSessionType(planText),
       subtype: planText || null,
+      exercises: [],
       status: 'planned' as const,
       duration_min: null,
       avg_hr_bpm: null,

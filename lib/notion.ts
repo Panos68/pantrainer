@@ -1,5 +1,5 @@
 import { Client } from '@notionhq/client'
-import type { WeekDoc, Session } from './schema'
+import type { WeekDoc, Session, Exercise } from './schema'
 
 function getNotionClient(): Client | null {
   if (!process.env.NOTION_TOKEN) return null
@@ -48,14 +48,49 @@ function sessionToNotionProperties(session: Session, weekLabel: string): Record<
   return props
 }
 
+function exercisesToBlocks(exercises: Exercise[]) {
+  if (!exercises.length) return []
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const blocks: any[] = [
+    {
+      object: 'block',
+      type: 'heading_3',
+      heading_3: {
+        rich_text: [{ type: 'text', text: { content: 'Planned Exercises' } }],
+      },
+    },
+  ]
+
+  for (const ex of exercises) {
+    const planned: string[] = [ex.name]
+    if (ex.sets != null && ex.reps != null) planned.push(`${ex.sets}×${ex.reps}`)
+    else if (ex.sets != null) planned.push(`${ex.sets} sets`)
+    if (ex.weight_kg != null) planned.push(`@ ${ex.weight_kg}kg`)
+    if (ex.notes) planned.push(`— ${ex.notes}`)
+
+    blocks.push({
+      object: 'block',
+      type: 'bulleted_list_item',
+      bulleted_list_item: {
+        rich_text: [
+          { type: 'text', text: { content: planned.join(' ') }, annotations: { color: 'default' } },
+          { type: 'text', text: { content: '  →  actual: ' }, annotations: { color: 'gray' } },
+        ],
+      },
+    })
+  }
+
+  return blocks
+}
+
 async function queryWeekPages(
   notion: Client,
   databaseId: string,
   weekLabel: string
 ) {
-  // The SDK v5 renamed databases.query → dataSources.query with data_source_id
-  return notion.dataSources.query({
-    data_source_id: databaseId,
+  return notion.databases.query({
+    database_id: databaseId,
     filter: {
       property: 'Week',
       rich_text: { equals: weekLabel },
@@ -93,21 +128,73 @@ export async function pushWeekToNotion(
       const properties = sessionToNotionProperties(session, week.week)
       const existingId = existingByDay[session.day]
 
+      const exerciseBlocks = exercisesToBlocks(session.exercises ?? [])
+
       if (existingId) {
-        await notion.pages.update({
-          page_id: existingId,
-          properties,
-        })
+        await notion.pages.update({ page_id: existingId, properties })
+        // Append exercise blocks only if the page body is still empty
+        if (exerciseBlocks.length) {
+          const existingBlocks = await notion.blocks.children.list({ block_id: existingId })
+          if (existingBlocks.results.length === 0) {
+            await notion.blocks.children.append({ block_id: existingId, children: exerciseBlocks })
+          }
+        }
       } else {
         await notion.pages.create({
-          parent: { database_id: databaseId, type: 'database_id' },
+          parent: { database_id: databaseId },
           properties,
+          children: exerciseBlocks,
         })
       }
       pushed++
     }
 
     return { pushed }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { pushed: 0, error: `Notion error: ${message}` }
+  }
+}
+
+// Push a single session — create page if missing, update properties if exists
+export async function pushSessionToNotion(
+  session: Session,
+  weekLabel: string
+): Promise<{ pushed: number; error?: string }> {
+  const notion = getNotionClient()
+  if (!notion) return { pushed: 0, error: 'Notion not configured' }
+
+  const databaseId = process.env.NOTION_DATABASE_ID
+  if (!databaseId) return { pushed: 0, error: 'NOTION_DATABASE_ID not configured' }
+
+  try {
+    const existing = await queryWeekPages(notion, databaseId, weekLabel)
+    const existingPage = existing.results.find((p) => {
+      if (p.object !== 'page') return false
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (p as any).properties?.['Day']?.title?.[0]?.plain_text === session.day
+    })
+
+    const properties = sessionToNotionProperties(session, weekLabel)
+    const exerciseBlocks = exercisesToBlocks(session.exercises ?? [])
+
+    if (existingPage) {
+      await notion.pages.update({ page_id: existingPage.id, properties })
+      if (exerciseBlocks.length) {
+        const existingBlocks = await notion.blocks.children.list({ block_id: existingPage.id })
+        if (existingBlocks.results.length === 0) {
+          await notion.blocks.children.append({ block_id: existingPage.id, children: exerciseBlocks })
+        }
+      }
+    } else {
+      await notion.pages.create({
+        parent: { database_id: databaseId },
+        properties,
+        children: exerciseBlocks,
+      })
+    }
+
+    return { pushed: 1 }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     return { pushed: 0, error: `Notion error: ${message}` }
