@@ -28,6 +28,8 @@ export const SessionSchema = z.object({
   notes: z.string().nullable().optional(),
   status: SessionStatusSchema.default('planned'),
   photos: z.array(z.string()).default([]),
+  garmin_activity_id: z.number().nullable().optional(),
+  source: z.enum(['garmin', 'manual']).optional(),
 })
 
 // Week summary
@@ -42,6 +44,16 @@ export const WeekSummarySchema = z.object({
 
 // Lift progression — flexible key-value with string or number values
 export const LiftProgressionSchema = z.record(z.string(), z.union([z.string(), z.number(), z.null()]))
+
+// Garmin recovery data for a single day
+export const GarminRecoveryDaySchema = z.object({
+  sleep_hours: z.number().nullable().optional(),
+  deep_sleep_hours: z.number().nullable().optional(),
+  rem_sleep_hours: z.number().nullable().optional(),
+  resting_hr_bpm: z.number().nullable().optional(),
+  max_hr_bpm: z.number().nullable().optional(),
+  fetched_at: z.string().optional(),
+})
 
 // Health flag
 export const HealthFlagSchema = z.object({
@@ -89,6 +101,7 @@ export const WeekDocSchema = z.object({
   lift_progression: LiftProgressionSchema.default({}),
   health_flags: z.array(HealthFlagSchema).default([]),
   next_week_plan: NextWeekPlanSchema.default({}),
+  garmin_recovery: z.record(z.string(), GarminRecoveryDaySchema).default({}),
 })
 
 // Athlete profile (stored separately in data/athlete.json)
@@ -117,6 +130,7 @@ export type Session = z.infer<typeof SessionSchema>
 export type SessionStatus = z.infer<typeof SessionStatusSchema>
 export type WeekSummary = z.infer<typeof WeekSummarySchema>
 export type LiftProgression = z.infer<typeof LiftProgressionSchema>
+export type GarminRecoveryDay = z.infer<typeof GarminRecoveryDaySchema>
 export type HealthFlag = z.infer<typeof HealthFlagSchema>
 export type NextWeekPlan = z.infer<typeof NextWeekPlanSchema>
 export type WeekDoc = z.infer<typeof WeekDocSchema>

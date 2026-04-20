@@ -91,6 +91,7 @@ export async function POST() {
     lift_progression: prevWeek?.lift_progression ?? {},
     health_flags: healthFlags,
     next_week_plan: {},
+    garmin_recovery: {},
   }
 
   await writeCurrentWeek(newWeek)
