@@ -108,6 +108,7 @@ export async function applyImport(importedDoc: WeekDoc): Promise<WeekDoc> {
       total_calories: null,
       notes: '',
       photos: [],
+      muscle_groups: [],
     }
   })
 

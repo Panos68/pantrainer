@@ -72,6 +72,7 @@ export async function POST() {
       total_calories: null,
       notes: '',
       photos: [],
+      muscle_groups: [],
     }
   })
 
