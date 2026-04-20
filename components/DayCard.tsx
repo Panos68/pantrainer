@@ -2,11 +2,13 @@
 
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import type { Session } from '@/lib/schema'
+import type { Session, GarminRecoveryDay } from '@/lib/schema'
+import GarminRecoveryCard from './GarminRecoveryCard'
 
 interface DayCardProps {
   session: Session
   isToday: boolean
+  recovery?: GarminRecoveryDay | null
 }
 
 const STATUS_CONFIG = {
@@ -35,7 +37,7 @@ const TYPE_COLORS: Record<string, string> = {
   Rest: 'text-zinc-500',
 }
 
-export default function DayCard({ session, isToday }: DayCardProps) {
+export default function DayCard({ session, isToday, recovery }: DayCardProps) {
   const slug = session.day.toLowerCase()
   const status = session.status ?? 'planned'
   const statusCfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.planned
@@ -144,6 +146,15 @@ export default function DayCard({ session, isToday }: DayCardProps) {
             </span>
           </div>
         )}
+
+        {/* Recovery strip */}
+        <div className="pt-1 border-t border-zinc-800/40">
+          <GarminRecoveryCard
+            date={session.date}
+            recovery={recovery}
+            compact
+          />
+        </div>
       </div>
     </Link>
   )
