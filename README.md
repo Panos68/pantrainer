@@ -2,58 +2,68 @@
 
 > **Built entirely with [Claude Code](https://claude.ai/code) (Anthropic) — AI-generated codebase.**
 
-A personal training management app that closes the loop between logging workouts and AI-powered weekly planning.
+A personal training management app that closes the loop between logging workouts and AI-powered weekly planning. Hosted on Vercel — accessible from phone or desktop.
 
 ## What it does
 
-- **Log sessions** — duration, HR, calories, exercises, notes
+- **Log sessions on your phone** — duration, HR, calories, exercises, notes
+- **Structured exercise logging** — planned sets/reps/weight pre-filled, edit actuals per exercise
 - **Export to Claude** — downloads a structured JSON snapshot of your week
 - **Import Claude's plan** — paste the AI response back to load next week's sessions and exercises
-- **Notion sync** — push/pull sessions to Notion for phone access at the gym
 - **Progress charts** — conditioning output and lift progression over time
 - **Deload tracking** — automatic reminders after 4 weeks of high output
+- **Password protected** — single-password auth, stays logged in for a year
 
 ## The loop
 
 ```
-Log sessions → Export JSON → Paste into Claude chat → Claude plans next week
-     ↑                                                          |
-     └──────────── Import JSON response ───────────────────────┘
+Log sessions on phone → Export JSON → Paste into Claude chat → Claude plans next week
+          ↑                                                              |
+          └──────────────── Import JSON response ───────────────────────┘
 ```
+
+For workout photos (whiteboard schedules): attach directly to Claude chat alongside the JSON export — no in-app storage needed.
 
 ## Tech stack
 
 - **Next.js 15** (App Router, server + client components)
 - **TypeScript** + **Zod** (runtime schema validation)
-- **Tailwind CSS v4** + **shadcn/ui** (zinc dark theme)
+- **Tailwind CSS v4** (zinc dark theme)
 - **Recharts** (progress charts)
-- **@notionhq/client** (Notion database sync)
-- Local JSON file storage — no database, no hosting required
+- **Vercel Blob** (cloud JSON storage — free tier)
+- **Vercel** (hosting — free hobby plan)
 
 ## Setup
 
 ```bash
 npm install
-cp .env.local.example .env.local   # add Notion credentials (optional)
+cp .env.local.example .env.local
+# Add BLOB_READ_WRITE_TOKEN and AUTH_PASSWORD to .env.local
 npm run dev
 ```
 
-Opens at `http://localhost:3000`
+## Environment variables
 
-## Notion integration (optional)
+| Variable | Description |
+|---|---|
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob store token (from Vercel dashboard → Storage) |
+| `AUTH_PASSWORD` | Password to access the app |
 
-Create a Notion integration at [notion.so/my-integrations](https://notion.so/my-integrations), share a database with it, then add to `.env.local`:
+## Deploying to Vercel
 
+1. Push to GitHub
+2. Import repo at vercel.com/new
+3. Create a Blob store: Vercel dashboard → Storage → Create → Blob → connect to project
+4. Add `AUTH_PASSWORD` in Project Settings → Environment Variables
+5. Deploy
+
+## Migrating existing data
+
+If you have local `data/` JSON files to upload to Blob:
+
+```bash
+BLOB_READ_WRITE_TOKEN=your_token npx tsx scripts/migrate-to-blob.ts
 ```
-NOTION_TOKEN=your_token
-NOTION_DATABASE_ID=your_database_id
-```
-
-Required database properties: `Day` (title), `Date` (date), `Type` (select), `Status` (select), `Week` (text), `Subtype` (text), `Notes` (text), `Duration` (number), `Avg HR` (number), `Calories` (number)
-
-## Data
-
-All training data is stored locally in `data/` (gitignored). Export files go to `exports/` (gitignored).
 
 ---
 
