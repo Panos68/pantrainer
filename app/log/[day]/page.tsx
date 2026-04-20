@@ -538,7 +538,7 @@ export default function LogDayPage() {
               Exercises — Planned → Actual
             </p>
             <div className="rounded-xl border border-zinc-800 overflow-hidden">
-              <div className="grid grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)] bg-zinc-900 border-b border-zinc-800">
+              <div className="grid grid-cols-[minmax(0,1fr)_repeat(6,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)] bg-zinc-900 border-b border-zinc-800">
                 <div className="px-3 py-2 text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Exercise</div>
                 <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">S</div>
                 <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">R</div>
@@ -550,9 +550,9 @@ export default function LogDayPage() {
               {session.exercises.map((ex, i) => (
                 <div
                   key={i}
-                  className="grid grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)] border-b border-zinc-800/60 last:border-0"
+                  className="grid grid-cols-[minmax(0,1fr)_repeat(6,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)] border-b border-zinc-800/60 last:border-0"
                 >
-                  <div className="bg-zinc-950 px-3 py-2.5 text-zinc-300 text-xs font-mono font-bold relative min-w-0 overflow-hidden">
+                  <div className="bg-zinc-950 px-3 py-2.5 text-zinc-300 text-xs font-mono font-bold relative min-w-0">
                     <div className="flex items-center gap-1.5 min-w-0">
                       <span className={`truncate ${swappedExercises[i] != null ? 'text-amber-400' : ''}`}>
                         {swappedExercises[i] != null
