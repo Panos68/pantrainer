@@ -910,12 +910,14 @@ export default function LogDayPage() {
                 </button>
               </>
             )}
-            <button
-              onClick={() => setShowImport(!showImport)}
-              className="w-full h-10 rounded-xl border border-zinc-800 bg-transparent hover:bg-zinc-900 text-zinc-600 hover:text-zinc-400 font-bold text-xs tracking-[0.15em] uppercase transition-colors"
-            >
-              Update from JSON
-            </button>
+            {session.status !== 'completed' && session.status !== 'skipped' && (
+              <button
+                onClick={() => setShowImport(!showImport)}
+                className="w-full h-10 rounded-xl border border-zinc-800 bg-transparent hover:bg-zinc-900 text-zinc-600 hover:text-zinc-400 font-bold text-xs tracking-[0.15em] uppercase transition-colors"
+              >
+                Update from JSON
+              </button>
+            )}
           </div>
         )}
 

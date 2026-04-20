@@ -48,12 +48,6 @@ export async function PATCH(
   }
 
   const session = week.sessions[sessionIndex]
-  if (session.status === 'completed' || session.status === 'skipped') {
-    return Response.json(
-      { error: 'Session is already finalized and cannot be updated' },
-      { status: 409 },
-    )
-  }
 
   const body = await req.json() as Partial<Session>
   const updatedSession: Session = { ...session, ...body }
