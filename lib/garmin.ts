@@ -1,8 +1,57 @@
 import pkg from 'garmin-connect'
+import { put, head } from '@vercel/blob'
 
 // garmin-connect is CJS — cast to any to avoid type issues
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { GarminConnect } = pkg as any
+
+const TOKEN_KEY = 'data/garmin-tokens.json'
+
+async function loadCachedToken(): Promise<{ oauth1: unknown; oauth2: unknown } | null> {
+  try {
+    const blob = await head(TOKEN_KEY)
+    const token = process.env.BLOB_READ_WRITE_TOKEN
+    const res = await fetch(blob.url, {
+      cache: 'no-store',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!res.ok) return null
+    return res.json()
+  } catch {
+    return null
+  }
+}
+
+async function saveCachedToken(token: unknown): Promise<void> {
+  await put(TOKEN_KEY, JSON.stringify(token), {
+    access: 'private',
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: 'application/json',
+  })
+}
+
+async function createClient() {
+  const email = process.env.GARMIN_EMAIL
+  const password = process.env.GARMIN_PASSWORD
+  if (!email || !password) throw new Error('GARMIN_EMAIL and GARMIN_PASSWORD must be set')
+
+  const client = new GarminConnect({ username: email, password })
+
+  const cached = await loadCachedToken()
+  if (cached) {
+    try {
+      await client.loadToken(cached.oauth1, cached.oauth2)
+      return client
+    } catch {
+      // Token invalid — fall through to fresh login
+    }
+  }
+
+  await client.login()
+  await saveCachedToken(client.exportToken())
+  return client
+}
 
 export type GarminActivityRaw = {
   activityId: number
@@ -25,18 +74,8 @@ export type GarminHRResult = {
   max_hr_bpm: number | null
 }
 
-async function createClient() {
-  const email = process.env.GARMIN_EMAIL
-  const password = process.env.GARMIN_PASSWORD
-  if (!email || !password) throw new Error('GARMIN_EMAIL and GARMIN_PASSWORD must be set')
-  const client = new GarminConnect({ username: email, password })
-  await client.login()
-  return client
-}
-
 export async function fetchActivitiesForDate(date: string): Promise<GarminActivityRaw[]> {
   const client = await createClient()
-  // Fetch last 20 activities and filter by date prefix on startTimeLocal
   const all: GarminActivityRaw[] = await client.getActivities(0, 20)
   return all.filter((a) => a.startTimeLocal?.startsWith(date))
 }
