@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import type { Session, GarminRecoveryDay } from '@/lib/schema'
 import GarminRecoveryCard from '@/components/GarminRecoveryCard'
-import { cn } from '@/lib/utils'
+import MuscleMap from '@/components/MuscleMap'
 
 // ─── Type colors ─────────────────────────────────────────────────────────
 
@@ -207,18 +207,6 @@ export default function LogDayPage() {
     training_stress_score?: number | null
     hr_zones?: Array<{ zone_name: string; secs_in_zone: number; zone_high_boundary: number }> | null
   }>({})
-  const [allGarminActivities, setAllGarminActivities] = useState<Array<{
-    garmin_activity_id: number
-    activity_name: string
-    activity_type?: string
-    duration_min: number | null
-    avg_hr_bpm: number | null
-    total_calories: number | null
-    aerobic_training_effect: number | null
-    anaerobic_training_effect: number | null
-    training_stress_score: number | null
-  }>>([])
-  const [selectedActivityId, setSelectedActivityId] = useState<number | null>(null)
 
   // Load session and week data
   useEffect(() => {
@@ -295,17 +283,6 @@ export default function LogDayPage() {
           anaerobic_training_effect?: number | null
           training_stress_score?: number | null
           hr_zones?: Array<{ zone_name: string; secs_in_zone: number; zone_high_boundary: number }> | null
-          all_activities?: Array<{
-            garmin_activity_id: number
-            activity_name: string
-            activity_type?: string
-            duration_min: number | null
-            avg_hr_bpm: number | null
-            total_calories: number | null
-            aerobic_training_effect: number | null
-            anaerobic_training_effect: number | null
-            training_stress_score: number | null
-          }>
         }
         if (sync.matched) {
           const synced: typeof garminSynced = { activity_id: sync.garmin_activity_id }
@@ -328,10 +305,6 @@ export default function LogDayPage() {
             training_stress_score: sync.training_stress_score,
             hr_zones: sync.hr_zones,
           })
-          if (sync.all_activities && sync.all_activities.length > 1) {
-            setAllGarminActivities(sync.all_activities)
-            setSelectedActivityId(sync.garmin_activity_id ?? null)
-          }
         }
       }
       if (recoveryResult.status === 'fulfilled') {
@@ -341,30 +314,6 @@ export default function LogDayPage() {
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.date])
-
-  function applyActivity(activity: typeof allGarminActivities[0]) {
-    if (activity.duration_min != null) setDuration(String(activity.duration_min))
-    if (activity.avg_hr_bpm != null) setAvgHr(String(activity.avg_hr_bpm))
-    if (activity.total_calories != null) setCalories(String(activity.total_calories))
-    setGarminSynced((s) => ({ ...s, activity_id: activity.garmin_activity_id, duration: activity.duration_min != null, avg_hr: activity.avg_hr_bpm != null, calories: activity.total_calories != null }))
-    setGarminTraining({
-      aerobic_training_effect: activity.aerobic_training_effect,
-      anaerobic_training_effect: activity.anaerobic_training_effect,
-      training_stress_score: activity.training_stress_score,
-      hr_zones: null,
-    })
-    const secondaries = allGarminActivities.filter((a) => a.garmin_activity_id !== activity.garmin_activity_id)
-    if (secondaries.length > 0) {
-      const secondaryBlock = secondaries
-        .map((a) => `${a.activity_name}${a.duration_min ? ` ${a.duration_min}min` : ''}${a.avg_hr_bpm ? ` avg HR ${a.avg_hr_bpm}bpm` : ''}${a.total_calories ? ` ${a.total_calories}kcal` : ''}`)
-        .join(', ')
-      setNotes((prev) => {
-        if (prev.includes('[Also: ')) return prev.replace(/\[Also:.*?\]/, `[Also: ${secondaryBlock}]`)
-        return prev ? `${prev}\n[Also: ${secondaryBlock}]` : `[Also: ${secondaryBlock}]`
-      })
-    }
-    setSelectedActivityId(activity.garmin_activity_id)
-  }
 
   const buildPayload = useCallback(() => {
     const exercises =
@@ -571,6 +520,9 @@ export default function LogDayPage() {
           </div>
         )}
 
+        {/* Muscle map */}
+        <MuscleMap muscles={session.muscle_groups ?? []} />
+
         {/* Exercise table — structured for Strength, read-only list for others */}
         {type === 'Strength' && session.exercises && session.exercises.length > 0 && (
           <div className="space-y-2">
@@ -677,39 +629,6 @@ export default function LogDayPage() {
             <span className="text-amber-400 text-xs font-mono font-bold tracking-widest uppercase">
               In Progress
             </span>
-          </div>
-        )}
-
-        {/* Multi-activity picker */}
-        {allGarminActivities.length > 1 && (
-          <div className="rounded-xl border border-amber-800/40 bg-amber-950/20 p-4 space-y-2">
-            <p className="text-amber-400/80 text-[10px] font-mono tracking-widest uppercase">
-              {allGarminActivities.length} Garmin activities found — select primary
-            </p>
-            <div className="space-y-1">
-              {allGarminActivities.map((a) => (
-                <button
-                  key={a.garmin_activity_id}
-                  type="button"
-                  onClick={() => applyActivity(a)}
-                  className={cn(
-                    'w-full text-left rounded-lg px-3 py-2 text-xs font-mono transition-colors',
-                    selectedActivityId === a.garmin_activity_id
-                      ? 'bg-lime-400/10 border border-lime-400/40 text-lime-300'
-                      : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300',
-                  )}
-                >
-                  <span className="font-bold">{a.activity_name}</span>
-                  <span className="text-zinc-500 ml-2">
-                    {[
-                      a.duration_min ? `${a.duration_min}min` : null,
-                      a.avg_hr_bpm ? `avg HR ${a.avg_hr_bpm}bpm` : null,
-                      a.total_calories ? `${a.total_calories}kcal` : null,
-                    ].filter(Boolean).join(' · ')}
-                  </span>
-                </button>
-              ))}
-            </div>
           </div>
         )}
 
