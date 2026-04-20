@@ -30,6 +30,14 @@ export const SessionSchema = z.object({
   photos: z.array(z.string()).default([]),
   garmin_activity_id: z.number().nullable().optional(),
   source: z.enum(['garmin', 'manual']).optional(),
+  aerobic_training_effect: z.number().nullable().optional(),
+  anaerobic_training_effect: z.number().nullable().optional(),
+  training_stress_score: z.number().nullable().optional(),
+  hr_zones: z.array(z.object({
+    zone_name: z.string(),
+    secs_in_zone: z.number(),
+    zone_high_boundary: z.number(),
+  })).nullable().optional(),
 })
 
 // Week summary

@@ -200,6 +200,12 @@ export default function LogDayPage() {
     activity_id?: number
   }>({})
   const [garminRecovery, setGarminRecovery] = useState<GarminRecoveryDay | null>(null)
+  const [garminTraining, setGarminTraining] = useState<{
+    aerobic_training_effect?: number | null
+    anaerobic_training_effect?: number | null
+    training_stress_score?: number | null
+    hr_zones?: Array<{ zone_name: string; secs_in_zone: number; zone_high_boundary: number }> | null
+  }>({})
 
   // Load session and week data
   useEffect(() => {
@@ -219,6 +225,14 @@ export default function LogDayPage() {
         if (sessionData.duration_min != null) setDuration(String(sessionData.duration_min))
         if (sessionData.avg_hr_bpm != null) setAvgHr(String(sessionData.avg_hr_bpm))
         if (sessionData.total_calories != null) setCalories(String(sessionData.total_calories))
+        if (sessionData.aerobic_training_effect != null || sessionData.hr_zones != null) {
+          setGarminTraining({
+            aerobic_training_effect: sessionData.aerobic_training_effect,
+            anaerobic_training_effect: sessionData.anaerobic_training_effect,
+            training_stress_score: sessionData.training_stress_score,
+            hr_zones: sessionData.hr_zones,
+          })
+        }
 
         // Initialize exercise actuals from planned values (or existing actuals if in_progress)
         setExerciseActuals(
@@ -264,6 +278,10 @@ export default function LogDayPage() {
           avg_hr_bpm?: number
           total_calories?: number
           garmin_activity_id?: number
+          aerobic_training_effect?: number | null
+          anaerobic_training_effect?: number | null
+          training_stress_score?: number | null
+          hr_zones?: Array<{ zone_name: string; secs_in_zone: number; zone_high_boundary: number }> | null
         }
         if (sync.matched) {
           const synced: typeof garminSynced = { activity_id: sync.garmin_activity_id }
@@ -280,6 +298,12 @@ export default function LogDayPage() {
             synced.calories = true
           }
           setGarminSynced(synced)
+          setGarminTraining({
+            aerobic_training_effect: sync.aerobic_training_effect,
+            anaerobic_training_effect: sync.anaerobic_training_effect,
+            training_stress_score: sync.training_stress_score,
+            hr_zones: sync.hr_zones,
+          })
         }
       }
       if (recoveryResult.status === 'fulfilled') {
@@ -321,8 +345,12 @@ export default function LogDayPage() {
       exercises,
       garmin_activity_id: garminSynced.activity_id ?? null,
       source: (garminSynced.duration || garminSynced.avg_hr || garminSynced.calories) ? 'garmin' as const : 'manual' as const,
+      aerobic_training_effect: garminTraining.aerobic_training_effect ?? null,
+      anaerobic_training_effect: garminTraining.anaerobic_training_effect ?? null,
+      training_stress_score: garminTraining.training_stress_score ?? null,
+      hr_zones: garminTraining.hr_zones ?? null,
     }
-  }, [type, subtype, duration, avgHr, calories, notes, photos, exerciseActuals, session, garminSynced])
+  }, [type, subtype, duration, avgHr, calories, notes, photos, exerciseActuals, session, garminSynced, garminTraining])
 
   async function handleSaveProgress() {
     setSaving(true)
