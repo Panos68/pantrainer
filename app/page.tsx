@@ -79,7 +79,7 @@ export default async function Home() {
               /{week.sessions.length} DONE
             </span>
           </div>
-          <WeekGrid sessions={week.sessions} todayISO={todayISO} />
+          <WeekGrid sessions={week.sessions} todayISO={todayISO} garminRecovery={week.garmin_recovery ?? {}} />
         </section>
 
         <footer className="flex items-center gap-4 pt-4 border-t border-zinc-800">
