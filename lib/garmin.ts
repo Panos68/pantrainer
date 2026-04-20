@@ -61,6 +61,18 @@ export type GarminActivityRaw = {
   duration: number         // seconds
   averageHR: number | null
   calories: number | null
+  // Training load & effect — present in activities list when available
+  aerobicTrainingEffect: number | null
+  anaerobicTrainingEffect: number | null
+  trainingStressScore: number | null
+  // HR zones — present in detailed activity response
+  hrZones?: HRZone[] | null
+}
+
+export type HRZone = {
+  zoneName: string
+  secsInZone: number
+  zoneHighBoundary: number
 }
 
 export type GarminSleepResult = {
@@ -78,6 +90,26 @@ export async function fetchActivitiesForDate(date: string): Promise<GarminActivi
   const client = await createClient()
   const all: GarminActivityRaw[] = await client.getActivities(0, 20)
   return all.filter((a) => a.startTimeLocal?.startsWith(date))
+}
+
+export async function fetchActivityDetail(activityId: number): Promise<{ hrZones: HRZone[] | null }> {
+  const client = await createClient()
+  try {
+    const detail = await client.getActivity({ activityId }) as {
+      heartRateZones?: Array<{ zoneName: string; secsInZone: number; zoneHighBoundary: number }>
+    }
+    const zones = detail?.heartRateZones
+    if (!zones?.length) return { hrZones: null }
+    return {
+      hrZones: zones.map((z) => ({
+        zoneName: z.zoneName,
+        secsInZone: z.secsInZone,
+        zoneHighBoundary: z.zoneHighBoundary,
+      })),
+    }
+  } catch {
+    return { hrZones: null }
+  }
 }
 
 export async function fetchSleepData(date: string): Promise<GarminSleepResult | null> {

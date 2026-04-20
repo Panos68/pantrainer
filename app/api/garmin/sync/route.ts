@@ -1,4 +1,4 @@
-import { fetchActivitiesForDate, type GarminActivityRaw } from '@/lib/garmin'
+import { fetchActivitiesForDate, fetchActivityDetail, type GarminActivityRaw } from '@/lib/garmin'
 
 const STRENGTH_TYPES = new Set([
   'strength_training', 'weight_training', 'gym_and_fitness_equipment', 'fitness_equipment',
@@ -47,6 +47,8 @@ export async function GET(req: Request) {
       return Response.json({ matched: false })
     }
 
+    const detail = await fetchActivityDetail(best.activityId)
+
     return Response.json({
       matched: true,
       garmin_activity_id: best.activityId,
@@ -55,6 +57,10 @@ export async function GET(req: Request) {
       total_calories: best.calories ? Math.round(best.calories) : null,
       activity_name: best.activityName,
       activity_type: best.activityType?.typeKey,
+      aerobic_training_effect: best.aerobicTrainingEffect ?? null,
+      anaerobic_training_effect: best.anaerobicTrainingEffect ?? null,
+      training_stress_score: best.trainingStressScore ?? null,
+      hr_zones: detail.hrZones,
     })
   } catch (err) {
     console.error('Garmin sync error:', err)
