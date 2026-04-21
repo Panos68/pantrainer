@@ -39,8 +39,11 @@ export async function POST(req: Request) {
       fetched_at: new Date().toISOString(),
     }
 
-    week.garmin_recovery = { ...week.garmin_recovery, [date]: recovery }
-    await writeCurrentWeek(week)
+    // Only cache if sleep data is present — Garmin sometimes returns 0 before sync completes
+    if (recovery.sleep_hours) {
+      week.garmin_recovery = { ...week.garmin_recovery, [date]: recovery }
+      await writeCurrentWeek(week)
+    }
 
     return Response.json({ recovery, cached: false })
   } catch (err) {
