@@ -118,6 +118,7 @@ export async function fetchSleepData(date: string): Promise<GarminSleepResult | 
   const dateObj = new Date(date + 'T12:00:00')
   const raw = await client.getSleepData(dateObj)
   const dto = raw?.dailySleepDTO
+  console.log('[garmin] raw sleep dto:', JSON.stringify(dto ?? null))
   if (!dto || !dto.sleepTimeSeconds) return null
   return {
     sleep_hours: Math.round((dto.sleepTimeSeconds / 3600) * 10) / 10,
