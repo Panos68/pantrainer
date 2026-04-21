@@ -57,6 +57,8 @@ export async function GET(req: Request) {
       total_calories: best.calories ? Math.round(best.calories) : null,
       activity_name: best.activityName,
       activity_type: best.activityType?.typeKey,
+      distance_m: best.distance ?? null,
+      avg_speed_mps: best.avgSpeed ?? null,
       aerobic_training_effect: best.aerobicTrainingEffect ?? null,
       anaerobic_training_effect: best.anaerobicTrainingEffect ?? null,
       training_stress_score: best.trainingStressScore ?? null,
