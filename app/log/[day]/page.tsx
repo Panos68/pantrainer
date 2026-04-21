@@ -285,20 +285,36 @@ export default function LogDayPage() {
           anaerobic_training_effect?: number | null
           training_stress_score?: number | null
           hr_zones?: Array<{ zone_name: string; secs_in_zone: number; zone_high_boundary: number }> | null
+          distance_m?: number | null
+          avg_speed_mps?: number | null
         }
         if (sync.matched) {
           const synced: typeof garminSynced = { activity_id: sync.garmin_activity_id }
-          if (sync.duration_min != null && !duration) {
+          // Always let Garmin overwrite planned values — only skip if already saved from Garmin
+          const alreadyGarminSaved = session?.source === 'garmin'
+          if (sync.duration_min != null && (!duration || !alreadyGarminSaved)) {
             setDuration(String(sync.duration_min))
             synced.duration = true
           }
-          if (sync.avg_hr_bpm != null && !avgHr) {
+          if (sync.avg_hr_bpm != null && (!avgHr || !alreadyGarminSaved)) {
             setAvgHr(String(sync.avg_hr_bpm))
             synced.avg_hr = true
           }
-          if (sync.total_calories != null && !calories) {
+          if (sync.total_calories != null && (!calories || !alreadyGarminSaved)) {
             setCalories(String(sync.total_calories))
             synced.calories = true
+          }
+          if (sync.distance_m && sync.distance_m > 0) {
+            const km = (sync.distance_m / 1000).toFixed(2)
+            let paceStr = ''
+            if (sync.avg_speed_mps && sync.avg_speed_mps > 0) {
+              const paceSecPerKm = 1000 / sync.avg_speed_mps
+              const paceMin = Math.floor(paceSecPerKm / 60)
+              const paceSec = Math.round(paceSecPerKm % 60).toString().padStart(2, '0')
+              paceStr = ` @ ${paceMin}:${paceSec}/km`
+            }
+            const distanceLine = `${km}km${paceStr}`
+            setNotes((prev) => prev?.includes(distanceLine) ? prev : (prev ? `${prev}\n${distanceLine}` : distanceLine))
           }
           setGarminSynced(synced)
           setGarminTraining({
