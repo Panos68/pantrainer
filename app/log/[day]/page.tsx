@@ -313,7 +313,7 @@ export default function LogDayPage() {
               const paceSec = Math.round(paceSecPerKm % 60).toString().padStart(2, '0')
               paceStr = ` @ ${paceMin}:${paceSec}/km`
             }
-            const distanceLine = `${km}km${paceStr}`
+            const distanceLine = `Distance: ${km}km${paceStr}`
             setNotes((prev) => prev?.includes(distanceLine) ? prev : (prev ? `${prev}\n${distanceLine}` : distanceLine))
           }
           setGarminSynced(synced)

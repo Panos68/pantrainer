@@ -62,7 +62,7 @@ export type GarminActivityRaw = {
   averageHR: number | null
   calories: number | null
   distance: number | null   // meters
-  avgSpeed: number | null   // m/s
+  averageSpeed: number | null   // m/s
   // Training load & effect — present in activities list when available
   aerobicTrainingEffect: number | null
   anaerobicTrainingEffect: number | null
