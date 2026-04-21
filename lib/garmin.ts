@@ -42,15 +42,12 @@ async function createClient() {
   if (cached) {
     try {
       await client.loadToken(cached.oauth1, cached.oauth2)
-      console.log('[garmin] using cached token')
       return client
-    } catch (e) {
-      console.log('[garmin] cached token invalid, re-logging in:', e)
+    } catch {
       // Token invalid — fall through to fresh login
     }
   }
 
-  console.log('[garmin] performing fresh login')
   await client.login()
   await saveCachedToken(client.exportToken())
   return client
@@ -120,9 +117,7 @@ export async function fetchSleepData(date: string): Promise<GarminSleepResult | 
   const client = await createClient()
   const dateObj = new Date(date + 'T12:00:00')
   const raw = await client.getSleepData(dateObj)
-  console.log('[garmin] raw sleep response keys:', raw ? Object.keys(raw) : null)
   const dto = raw?.dailySleepDTO
-  console.log('[garmin] raw sleep dto:', JSON.stringify(dto ?? null))
   if (!dto || !dto.sleepTimeSeconds) return null
   return {
     sleep_hours: Math.round((dto.sleepTimeSeconds / 3600) * 10) / 10,
