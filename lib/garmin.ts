@@ -86,14 +86,15 @@ export type GarminHRResult = {
   max_hr_bpm: number | null
 }
 
-export async function fetchActivitiesForDate(date: string): Promise<GarminActivityRaw[]> {
+export async function fetchActivitiesForDate(date: string): Promise<{ activities: GarminActivityRaw[]; client: unknown }> {
   const client = await createClient()
   const all: GarminActivityRaw[] = await client.getActivities(0, 20)
-  return all.filter((a) => a.startTimeLocal?.startsWith(date))
+  return { activities: all.filter((a) => a.startTimeLocal?.startsWith(date)), client }
 }
 
-export async function fetchActivityDetail(activityId: number): Promise<{ hrZones: HRZone[] | null }> {
-  const client = await createClient()
+export async function fetchActivityDetail(activityId: number, existingClient?: unknown): Promise<{ hrZones: HRZone[] | null }> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const client: any = existingClient ?? await createClient()
   try {
     const detail = await client.getActivity({ activityId }) as {
       heartRateZones?: Array<{ zoneName: string; secsInZone: number; zoneHighBoundary: number }>
