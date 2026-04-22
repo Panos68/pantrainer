@@ -17,6 +17,7 @@ interface WeekSummaryData {
 interface ExportSuccessData {
   photos_to_attach: string[]
   filename: string
+  version: 'v1' | 'v2'
 }
 
 type ImportState =
@@ -95,7 +96,7 @@ function Spinner() {
 function ExportSection() {
   const [weekData, setWeekData] = useState<WeekSummaryData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [exporting, setExporting] = useState(false)
+  const [exportingVersion, setExportingVersion] = useState<'v1' | 'v2' | null>(null)
   const [exportSuccess, setExportSuccess] = useState<ExportSuccessData | null>(null)
   const [exportError, setExportError] = useState<string | null>(null)
 
@@ -109,11 +110,12 @@ function ExportSection() {
       .catch(() => setLoading(false))
   }, [])
 
-  async function handleExport() {
-    setExporting(true)
+  async function handleExport(version: 'v1' | 'v2') {
+    setExportingVersion(version)
     setExportError(null)
     try {
-      const res = await fetch('/api/export', { method: 'POST' })
+      const endpoint = version === 'v2' ? '/api/export/v2' : '/api/export'
+      const res = await fetch(endpoint, { method: 'POST' })
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Export failed' }))
         setExportError((err as { error?: string }).error ?? 'Export failed')
@@ -143,11 +145,12 @@ function ExportSection() {
       setExportSuccess({
         photos_to_attach: payload.photos_to_attach ?? [],
         filename,
+        version,
       })
     } catch (e) {
       setExportError(e instanceof Error ? e.message : 'Unexpected error')
     } finally {
-      setExporting(false)
+      setExportingVersion(null)
     }
   }
 
@@ -206,22 +209,39 @@ function ExportSection() {
         </div>
       )}
 
-      {/* Export button */}
+      {/* Export buttons */}
       {!exportSuccess && (
-        <button
-          onClick={handleExport}
-          disabled={exporting || !weekData}
-          className="w-full h-14 bg-lime-400 hover:bg-lime-300 active:bg-lime-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase rounded-xl transition-colors flex items-center justify-center gap-3"
-        >
-          {exporting ? (
-            <>
-              <div className="w-4 h-4 border-2 border-zinc-700 border-t-zinc-950 rounded-full animate-spin" />
-              Exporting…
-            </>
-          ) : (
-            'Export Week'
-          )}
-        </button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button
+            onClick={() => handleExport('v1')}
+            disabled={exportingVersion !== null || !weekData}
+            className="w-full h-14 bg-lime-400 hover:bg-lime-300 active:bg-lime-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase rounded-xl transition-colors flex items-center justify-center gap-3"
+          >
+            {exportingVersion === 'v1' ? (
+              <>
+                <div className="w-4 h-4 border-2 border-zinc-700 border-t-zinc-950 rounded-full animate-spin" />
+                Exporting…
+              </>
+            ) : (
+              'Export Week (v1)'
+            )}
+          </button>
+
+          <button
+            onClick={() => handleExport('v2')}
+            disabled={exportingVersion !== null || !weekData}
+            className="w-full h-14 bg-sky-400 hover:bg-sky-300 active:bg-sky-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase rounded-xl transition-colors flex items-center justify-center gap-3"
+          >
+            {exportingVersion === 'v2' ? (
+              <>
+                <div className="w-4 h-4 border-2 border-zinc-700 border-t-zinc-950 rounded-full animate-spin" />
+                Exporting…
+              </>
+            ) : (
+              'Export Week (v2)'
+            )}
+          </button>
+        </div>
       )}
 
       {exportError && (
@@ -239,7 +259,7 @@ function ExportSection() {
             <span className="text-emerald-400 text-xl" aria-hidden="true">✓</span>
             <div>
               <p className="text-emerald-400 text-xs font-mono font-bold tracking-widest uppercase">
-                Export Saved to Downloads
+                Export {exportSuccess.version.toUpperCase()} Saved to Downloads
               </p>
               <p className="text-zinc-500 text-xs font-mono mt-0.5">{exportSuccess.filename}</p>
             </div>
