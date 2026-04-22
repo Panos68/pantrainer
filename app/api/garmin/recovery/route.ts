@@ -1,6 +1,28 @@
 import { fetchSleepData, fetchHRData } from '@/lib/garmin'
 import { readCurrentWeek, writeCurrentWeek } from '@/lib/data'
 
+function positiveOrNull(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+}
+
+function sanitizeRecovery(recovery: {
+  sleep_hours?: number | null
+  deep_sleep_hours?: number | null
+  rem_sleep_hours?: number | null
+  resting_hr_bpm?: number | null
+  max_hr_bpm?: number | null
+  fetched_at?: string
+}) {
+  return {
+    sleep_hours: positiveOrNull(recovery.sleep_hours),
+    deep_sleep_hours: positiveOrNull(recovery.deep_sleep_hours),
+    rem_sleep_hours: positiveOrNull(recovery.rem_sleep_hours),
+    resting_hr_bpm: positiveOrNull(recovery.resting_hr_bpm),
+    max_hr_bpm: positiveOrNull(recovery.max_hr_bpm),
+    fetched_at: recovery.fetched_at ?? new Date().toISOString(),
+  }
+}
+
 export async function POST(req: Request) {
   const body = await req.json() as { date?: string; force?: boolean }
   const { date, force = false } = body
@@ -18,9 +40,19 @@ export async function POST(req: Request) {
     return Response.json({ error: 'No active week' }, { status: 404 })
   }
 
+  const existingRaw = week.garmin_recovery?.[date]
+  const existing = existingRaw ? sanitizeRecovery(existingRaw) : null
+  let weekMutated = false
+  if (existingRaw && existing && JSON.stringify(existingRaw) !== JSON.stringify(existing)) {
+    week.garmin_recovery = { ...week.garmin_recovery, [date]: existing }
+    weekMutated = true
+  }
+
   // Return cached data if available and not forcing refresh
-  const existing = week.garmin_recovery?.[date]
   if (existing && !force) {
+    if (weekMutated) {
+      await writeCurrentWeek(week)
+    }
     return Response.json({ recovery: existing, cached: true })
   }
 
@@ -30,18 +62,22 @@ export async function POST(req: Request) {
       fetchHRData(date),
     ])
 
-    const recovery = {
+    const recovery = sanitizeRecovery({
       sleep_hours: sleep.status === 'fulfilled' ? (sleep.value?.sleep_hours ?? null) : null,
       deep_sleep_hours: sleep.status === 'fulfilled' ? (sleep.value?.deep_sleep_hours ?? null) : null,
       rem_sleep_hours: sleep.status === 'fulfilled' ? (sleep.value?.rem_sleep_hours ?? null) : null,
       resting_hr_bpm: hr.status === 'fulfilled' ? hr.value.resting_hr_bpm : null,
       max_hr_bpm: hr.status === 'fulfilled' ? hr.value.max_hr_bpm : null,
       fetched_at: new Date().toISOString(),
-    }
+    })
 
     // Only cache if sleep data is present — Garmin sometimes returns 0 before sync completes
-    if (recovery.sleep_hours) {
+    if (recovery.sleep_hours != null) {
       week.garmin_recovery = { ...week.garmin_recovery, [date]: recovery }
+      weekMutated = true
+    }
+
+    if (weekMutated) {
       await writeCurrentWeek(week)
     }
 

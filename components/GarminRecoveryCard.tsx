@@ -22,6 +22,11 @@ export default function GarminRecoveryCard({
   const [loading, setLoading] = useState(false)
   const [fetchedData, setFetchedData] = useState<GarminRecoveryDay | null>(null)
   const data = recovery ?? fetchedData
+  const sleepHours = typeof data?.sleep_hours === 'number' && data.sleep_hours > 0 ? data.sleep_hours : null
+  const deepSleepHours = typeof data?.deep_sleep_hours === 'number' && data.deep_sleep_hours > 0 ? data.deep_sleep_hours : null
+  const remSleepHours = typeof data?.rem_sleep_hours === 'number' && data.rem_sleep_hours > 0 ? data.rem_sleep_hours : null
+  const restingHr = typeof data?.resting_hr_bpm === 'number' && data.resting_hr_bpm > 0 ? data.resting_hr_bpm : null
+  const maxHr = typeof data?.max_hr_bpm === 'number' && data.max_hr_bpm > 0 ? data.max_hr_bpm : null
 
   async function fetchRecovery(force = false) {
     setLoading(true)
@@ -42,7 +47,7 @@ export default function GarminRecoveryCard({
   }
 
   if (compact) {
-    if (!data?.resting_hr_bpm && !data?.sleep_hours) {
+    if (!restingHr && !sleepHours) {
       if (!interactive) {
         return (
           <span className="text-[10px] font-mono text-zinc-700 tracking-widest uppercase">
@@ -61,12 +66,12 @@ export default function GarminRecoveryCard({
       )
     }
     return (
-      <div className="flex items-center gap-3 text-[10px] font-mono text-zinc-500">
-        {data.sleep_hours != null && (
-          <span>💤 {data.sleep_hours}h</span>
+        <div className="flex items-center gap-3 text-[10px] font-mono text-zinc-500">
+        {sleepHours != null && (
+          <span>💤 {sleepHours}h</span>
         )}
-        {data.resting_hr_bpm != null && (
-          <span>❤️ {data.resting_hr_bpm}bpm</span>
+        {restingHr != null && (
+          <span>❤️ {restingHr}bpm</span>
         )}
         {interactive && (
           <button
@@ -103,28 +108,28 @@ export default function GarminRecoveryCard({
 
       {data ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {data.sleep_hours != null && (
+          {sleepHours != null && (
             <div>
               <div className="text-zinc-500 text-[9px] font-mono tracking-widest uppercase mb-0.5">Sleep</div>
-              <div className="text-sky-400 text-lg font-mono font-black leading-none">{data.sleep_hours}h</div>
-              {(data.deep_sleep_hours != null || data.rem_sleep_hours != null) && (
+              <div className="text-sky-400 text-lg font-mono font-black leading-none">{sleepHours}h</div>
+              {(deepSleepHours != null || remSleepHours != null) && (
                 <div className="text-zinc-600 text-[9px] font-mono mt-0.5">
-                  deep {data.deep_sleep_hours}h · REM {data.rem_sleep_hours}h
+                  deep {deepSleepHours}h · REM {remSleepHours}h
                 </div>
               )}
             </div>
           )}
-          {data.resting_hr_bpm != null && (
+          {restingHr != null && (
             <div>
               <div className="text-zinc-500 text-[9px] font-mono tracking-widest uppercase mb-0.5">Resting HR</div>
-              <div className="text-rose-400 text-lg font-mono font-black leading-none">{data.resting_hr_bpm}</div>
+              <div className="text-rose-400 text-lg font-mono font-black leading-none">{restingHr}</div>
               <div className="text-zinc-600 text-[9px] font-mono mt-0.5">bpm</div>
             </div>
           )}
-          {data.max_hr_bpm != null && (
+          {maxHr != null && (
             <div>
               <div className="text-zinc-500 text-[9px] font-mono tracking-widest uppercase mb-0.5">Max HR</div>
-              <div className="text-amber-400 text-lg font-mono font-black leading-none">{data.max_hr_bpm}</div>
+              <div className="text-amber-400 text-lg font-mono font-black leading-none">{maxHr}</div>
               <div className="text-zinc-600 text-[9px] font-mono mt-0.5">bpm</div>
             </div>
           )}
