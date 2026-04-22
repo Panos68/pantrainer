@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { readAllArchivedWeeks, readCurrentWeek } from '@/lib/data'
 import LiftProgressChart from '@/components/LiftProgressChart'
-import ConditioningChart from '@/components/ConditioningChart'
+import ActivityTrendChart from '@/components/ActivityTrendChart'
 import type { WeekDoc } from '@/lib/schema'
 
 export default async function ProgressPage() {
@@ -57,8 +57,8 @@ export default async function ProgressPage() {
         {/* Lift Progress Chart */}
         <LiftProgressChart weeks={weeks} />
 
-        {/* Conditioning Chart */}
-        <ConditioningChart weeks={weeks} />
+        {/* Activity Trend Chart */}
+        <ActivityTrendChart weeks={weeks} />
 
       </div>
     </main>
