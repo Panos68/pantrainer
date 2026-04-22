@@ -1,5 +1,6 @@
 import type { WeekDoc } from './schema'
 import { readArchivedWeeks, readAppState } from './data'
+import { sessionToLoadPoint, type TrainingLoadPoint } from './training-load'
 
 export interface ExportPayload {
   week: string
@@ -12,6 +13,7 @@ export interface ExportPayload {
   is_deload_week: boolean
   photos_to_attach: string[]
   history: WeekHistory[]
+  training_load_history: TrainingLoadPoint[]
 }
 
 export interface WeekHistory {
@@ -44,10 +46,17 @@ export async function buildExport(currentWeek: WeekDoc): Promise<ExportPayload> 
     ),
   }))
 
+  const training_load_history: TrainingLoadPoint[] = [...archivedWeeks, currentWeek]
+    .flatMap((w) => w.sessions)
+    .map(sessionToLoadPoint)
+    .filter((p): p is TrainingLoadPoint => p !== null)
+    .sort((a, b) => a.date.localeCompare(b.date))
+
   return {
     ...currentWeek,
     is_deload_week: state.isDeloadWeek,
     photos_to_attach,
     history,
+    training_load_history,
   }
 }
