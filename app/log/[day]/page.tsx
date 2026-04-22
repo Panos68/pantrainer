@@ -23,6 +23,20 @@ function GarminBadge() {
   )
 }
 
+type GarminSyncResponse = {
+  matched: boolean
+  duration_min?: number
+  avg_hr_bpm?: number
+  total_calories?: number
+  garmin_activity_id?: number
+  aerobic_training_effect?: number | null
+  anaerobic_training_effect?: number | null
+  training_stress_score?: number | null
+  hr_zones?: Array<{ zone_name: string; secs_in_zone: number; zone_high_boundary: number }> | null
+  distance_m?: number | null
+  avg_speed_mps?: number | null
+}
+
 // ─── Read-only view ──────────────────────────────────────────────────────
 
 function ReadOnlyView({ session }: { session: Session }) {
@@ -209,6 +223,68 @@ export default function LogDayPage() {
     training_stress_score?: number | null
     hr_zones?: Array<{ zone_name: string; secs_in_zone: number; zone_high_boundary: number }> | null
   }>({})
+  const [refreshingGarmin, setRefreshingGarmin] = useState(false)
+
+  const refreshFromGarmin = useCallback(async (
+    targetSession: Pick<Session, 'date' | 'type'>,
+    overwriteMetrics = false,
+  ) => {
+    const syncUrl = `/api/garmin/sync?date=${targetSession.date}&type=${encodeURIComponent(targetSession.type)}`
+    const [syncResult, recoveryResult] = await Promise.allSettled([
+      fetch(syncUrl, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)),
+      fetch('/api/garmin/recovery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: targetSession.date }),
+      }).then((r) => (r.ok ? r.json() : null)),
+    ])
+
+    let matchedSync: GarminSyncResponse | null = null
+    if (syncResult.status === 'fulfilled' && syncResult.value?.matched) {
+      const sync = syncResult.value as GarminSyncResponse
+      matchedSync = sync
+      const synced: typeof garminSynced = { activity_id: sync.garmin_activity_id }
+
+      if (sync.duration_min != null) {
+        setDuration((prev) => (overwriteMetrics || !prev ? String(sync.duration_min) : prev))
+        synced.duration = true
+      }
+      if (sync.avg_hr_bpm != null) {
+        setAvgHr((prev) => (overwriteMetrics || !prev ? String(sync.avg_hr_bpm) : prev))
+        synced.avg_hr = true
+      }
+      if (sync.total_calories != null) {
+        setCalories((prev) => (overwriteMetrics || !prev ? String(sync.total_calories) : prev))
+        synced.calories = true
+      }
+      if (sync.distance_m && sync.distance_m > 0) {
+        const km = (sync.distance_m / 1000).toFixed(2)
+        let paceStr = ''
+        if (sync.avg_speed_mps && sync.avg_speed_mps > 0) {
+          const paceSecPerKm = 1000 / sync.avg_speed_mps
+          const paceMin = Math.floor(paceSecPerKm / 60)
+          const paceSec = Math.round(paceSecPerKm % 60).toString().padStart(2, '0')
+          paceStr = ` @ ${paceMin}:${paceSec}/km`
+        }
+        const distanceLine = `Distance: ${km}km${paceStr}`
+        setNotes((prev) => prev?.includes(distanceLine) ? prev : (prev ? `${prev}\n${distanceLine}` : distanceLine))
+      }
+
+      setGarminSynced(synced)
+      setGarminTraining({
+        aerobic_training_effect: sync.aerobic_training_effect,
+        anaerobic_training_effect: sync.anaerobic_training_effect,
+        training_stress_score: sync.training_stress_score,
+        hr_zones: sync.hr_zones,
+      })
+    }
+
+    if (recoveryResult.status === 'fulfilled' && recoveryResult.value?.recovery) {
+      setGarminRecovery(recoveryResult.value.recovery as GarminRecoveryDay)
+    }
+
+    return matchedSync
+  }, [])
 
   // Load session and week data
   useEffect(() => {
@@ -250,8 +326,12 @@ export default function LogDayPage() {
                 : ex.weight_kg != null
                 ? ex.weight_kg.toString()
                 : '',
-          }))
+            }))
         )
+
+        if (sessionData.status !== 'completed' && sessionData.status !== 'skipped') {
+          void refreshFromGarmin({ date: sessionData.date, type: sessionData.type }, false)
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load session')
       } finally {
@@ -259,79 +339,7 @@ export default function LogDayPage() {
       }
     }
     load()
-  }, [day])
-
-  // Auto-fill from Garmin when session loads
-  useEffect(() => {
-    if (!session || session.status === 'completed' || session.status === 'skipped') return
-    const dateStr = session.date
-    const syncUrl = `/api/garmin/sync?date=${dateStr}&type=${encodeURIComponent(session.type)}`
-    Promise.allSettled([
-      fetch(syncUrl).then((r) => r.json()),
-      fetch('/api/garmin/recovery', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: dateStr }),
-      }).then((r) => r.json()),
-    ]).then(([syncResult, recoveryResult]) => {
-      if (syncResult.status === 'fulfilled') {
-        const sync = syncResult.value as {
-          matched: boolean
-          duration_min?: number
-          avg_hr_bpm?: number
-          total_calories?: number
-          garmin_activity_id?: number
-          aerobic_training_effect?: number | null
-          anaerobic_training_effect?: number | null
-          training_stress_score?: number | null
-          hr_zones?: Array<{ zone_name: string; secs_in_zone: number; zone_high_boundary: number }> | null
-          distance_m?: number | null
-          avg_speed_mps?: number | null
-        }
-        if (sync.matched) {
-          const synced: typeof garminSynced = { activity_id: sync.garmin_activity_id }
-          // Always let Garmin overwrite planned values — only skip if already saved from Garmin
-          const alreadyGarminSaved = session?.source === 'garmin'
-          if (sync.duration_min != null && (!duration || !alreadyGarminSaved)) {
-            setDuration(String(sync.duration_min))
-            synced.duration = true
-          }
-          if (sync.avg_hr_bpm != null && (!avgHr || !alreadyGarminSaved)) {
-            setAvgHr(String(sync.avg_hr_bpm))
-            synced.avg_hr = true
-          }
-          if (sync.total_calories != null && (!calories || !alreadyGarminSaved)) {
-            setCalories(String(sync.total_calories))
-            synced.calories = true
-          }
-          if (sync.distance_m && sync.distance_m > 0) {
-            const km = (sync.distance_m / 1000).toFixed(2)
-            let paceStr = ''
-            if (sync.avg_speed_mps && sync.avg_speed_mps > 0) {
-              const paceSecPerKm = 1000 / sync.avg_speed_mps
-              const paceMin = Math.floor(paceSecPerKm / 60)
-              const paceSec = Math.round(paceSecPerKm % 60).toString().padStart(2, '0')
-              paceStr = ` @ ${paceMin}:${paceSec}/km`
-            }
-            const distanceLine = `Distance: ${km}km${paceStr}`
-            setNotes((prev) => prev?.includes(distanceLine) ? prev : (prev ? `${prev}\n${distanceLine}` : distanceLine))
-          }
-          setGarminSynced(synced)
-          setGarminTraining({
-            aerobic_training_effect: sync.aerobic_training_effect,
-            anaerobic_training_effect: sync.anaerobic_training_effect,
-            training_stress_score: sync.training_stress_score,
-            hr_zones: sync.hr_zones,
-          })
-        }
-      }
-      if (recoveryResult.status === 'fulfilled') {
-        const rec = recoveryResult.value as { recovery?: GarminRecoveryDay }
-        if (rec.recovery) setGarminRecovery(rec.recovery)
-      }
-    })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.date])
+  }, [day, refreshFromGarmin])
 
   const buildPayload = useCallback(() => {
     const exercises =
@@ -375,21 +383,50 @@ export default function LogDayPage() {
       training_stress_score: garminTraining.training_stress_score ?? null,
       hr_zones: garminTraining.hr_zones ?? null,
     }
-  }, [type, subtype, duration, avgHr, calories, notes, photos, exerciseActuals, session, garminSynced, garminTraining])
+  }, [type, subtype, duration, avgHr, calories, notes, photos, exerciseActuals, session, swappedExercises, garminSynced, garminTraining])
+
+  const mergeGarminIntoPayload = useCallback((
+    payload: ReturnType<typeof buildPayload>,
+    sync: GarminSyncResponse | null,
+  ) => {
+    if (!sync?.matched) return payload
+
+    const usedGarminMetric =
+      (payload.duration_min == null && sync.duration_min != null) ||
+      (payload.avg_hr_bpm == null && sync.avg_hr_bpm != null) ||
+      (payload.total_calories == null && sync.total_calories != null)
+
+    return {
+      ...payload,
+      garmin_activity_id: sync.garmin_activity_id ?? payload.garmin_activity_id ?? null,
+      duration_min: payload.duration_min ?? sync.duration_min ?? null,
+      avg_hr_bpm: payload.avg_hr_bpm ?? sync.avg_hr_bpm ?? null,
+      total_calories: payload.total_calories ?? sync.total_calories ?? null,
+      source: payload.source === 'garmin' || usedGarminMetric ? 'garmin' as const : 'manual' as const,
+      aerobic_training_effect: payload.aerobic_training_effect ?? sync.aerobic_training_effect ?? null,
+      anaerobic_training_effect: payload.anaerobic_training_effect ?? sync.anaerobic_training_effect ?? null,
+      training_stress_score: payload.training_stress_score ?? sync.training_stress_score ?? null,
+      hr_zones: payload.hr_zones ?? sync.hr_zones ?? null,
+    }
+  }, [])
 
   async function handleSaveProgress() {
     setSaving(true)
     setSaveMsg('')
     try {
+      const sync = session ? await refreshFromGarmin({ date: session.date, type: session.type }, false) : null
+      const payload = mergeGarminIntoPayload(buildPayload(), sync)
       const res = await fetch(`/api/session/${day}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...buildPayload(), status: 'in_progress' }),
+        body: JSON.stringify({ ...payload, status: 'in_progress' }),
       })
       if (!res.ok) {
         const err = await res.json()
         setSaveMsg(err.error ?? 'Save failed')
       } else {
+        const updated = await res.json() as Session
+        setSession(updated)
         setSaveMsg('Saved!')
         setTimeout(() => setSaveMsg(''), 2000)
       }
@@ -403,10 +440,12 @@ export default function LogDayPage() {
   async function handleMarkComplete() {
     setSaving(true)
     try {
+      const sync = session ? await refreshFromGarmin({ date: session.date, type: session.type }, false) : null
+      const payload = mergeGarminIntoPayload(buildPayload(), sync)
       const res = await fetch(`/api/session/${day}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...buildPayload(), status: 'completed' }),
+        body: JSON.stringify({ ...payload, status: 'completed' }),
       })
       if (!res.ok) {
         const err = await res.json()
@@ -452,6 +491,24 @@ export default function LogDayPage() {
 
   function removePhoto(index: number) {
     setPhotos((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  async function handleRefreshGarmin() {
+    setRefreshingGarmin(true)
+    setSaveMsg('')
+    try {
+      const sync = session ? await refreshFromGarmin({ date: session.date, type: session.type }, true) : null
+      if (sync?.matched) {
+        setSaveMsg('Garmin data refreshed')
+        setTimeout(() => setSaveMsg(''), 2000)
+      } else {
+        setSaveMsg('No Garmin activity found yet')
+      }
+    } catch {
+      setSaveMsg('Garmin refresh failed')
+    } finally {
+      setRefreshingGarmin(false)
+    }
   }
 
   if (loading) {
@@ -553,7 +610,7 @@ export default function LogDayPage() {
             <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
               Exercises — Planned → Actual
             </p>
-            <div className="rounded-xl border border-zinc-800 overflow-hidden">
+            <div className="rounded-xl border border-zinc-800 overflow-visible">
               <div className="grid grid-cols-[minmax(0,1fr)_repeat(6,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)] bg-zinc-900 border-b border-zinc-800">
                 <div className="px-3 py-2 text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Exercise</div>
                 <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">S</div>
@@ -563,10 +620,12 @@ export default function LogDayPage() {
                 <div className="py-2 text-violet-400/60 text-[10px] font-mono text-center">R</div>
                 <div className="py-2 text-violet-400/60 text-[10px] font-mono text-center">kg</div>
               </div>
-              {session.exercises.map((ex, i) => (
+              {session.exercises.map((ex, i) => {
+                const openUp = i >= session.exercises.length - 2
+                return (
                 <div
                   key={i}
-                  className="grid grid-cols-[minmax(0,1fr)_repeat(6,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)] border-b border-zinc-800/60 last:border-0"
+                  className="grid grid-cols-[minmax(0,1fr)_repeat(6,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)] border-b border-zinc-800/60 last:border-0 relative"
                 >
                   <div className="bg-zinc-950 px-3 py-2.5 text-zinc-300 text-xs font-mono font-bold relative min-w-0">
                     <div className="flex items-center gap-1.5 min-w-0">
@@ -590,7 +649,7 @@ export default function LogDayPage() {
                       <span className="block text-zinc-600 text-[10px] font-normal mt-0.5 line-clamp-2">{ex.notes}</span>
                     )}
                     {openSwapMenu === i && (
-                      <div className="absolute left-0 top-full z-10 w-56 rounded-xl border border-zinc-700 bg-zinc-900 shadow-xl mt-1">
+                      <div className={`absolute left-0 z-20 w-56 max-h-56 overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 shadow-xl ${openUp ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
                         <div className="px-3 py-2 text-zinc-500 text-[9px] font-mono tracking-widest uppercase border-b border-zinc-800">
                           Swap with
                         </div>
@@ -671,7 +730,7 @@ export default function LogDayPage() {
                     placeholder="—"
                   />
                 </div>
-              ))}
+              )})}
             </div>
             <p className="text-zinc-600 text-[10px] font-mono">
               Violet = actual. Pre-filled from plan — edit what changed.
@@ -717,6 +776,15 @@ export default function LogDayPage() {
           recovery={garminRecovery}
           onFetched={(data) => setGarminRecovery(data)}
         />
+
+        <button
+          type="button"
+          onClick={handleRefreshGarmin}
+          disabled={refreshingGarmin || saving}
+          className="w-full h-10 rounded-xl border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-bold text-xs tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
+        >
+          {refreshingGarmin ? 'Refreshing Garmin...' : 'Refresh Garmin Data'}
+        </button>
 
         {/* Form */}
         <form
