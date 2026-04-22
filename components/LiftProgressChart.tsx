@@ -32,8 +32,8 @@ function parseWeight(val: string | number | null | undefined): number | null {
 }
 
 function shortWeekLabel(weekStr: string): string {
-  // "Apr 14–20, 2026" → "Apr 14"
-  const match = weekStr.match(/^(\w+ \d+)/)
+  // "Apr 14–20, 2026" → "Apr 14–20"
+  const match = weekStr.match(/^(\w+ \d+[–-]\d+)/)
   return match ? match[1] : weekStr
 }
 
