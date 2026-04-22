@@ -8,6 +8,7 @@ import NewWeekButton from '@/components/NewWeekButton'
 import DeloadBanner from '@/components/DeloadBanner'
 import HealthFlagsBanner from '@/components/HealthFlagsBanner'
 import WeekBrowser from '@/components/WeekBrowser'
+import HomeQuickPanels from '@/components/HomeQuickPanels'
 
 export default async function Home() {
   const profile = await readAthleteProfile()
@@ -71,6 +72,8 @@ export default async function Home() {
           <DeloadBanner counter={appState.deloadCounter} />
           {hasActiveFlags && <HealthFlagsBanner flags={week.health_flags} />}
         </div>
+
+        <HomeQuickPanels week={week} todayISO={todayISO} baselineRhr={profile.rhr_bpm} />
 
         <WeekBrowser weeks={[...archivedWeeks, week]} todayISO={todayISO} />
 
