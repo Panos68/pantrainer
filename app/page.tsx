@@ -2,18 +2,22 @@ export const dynamic = 'force-dynamic'
 
 import { redirect } from 'next/navigation'
 import { format } from 'date-fns'
-import { readAthleteProfile, readCurrentWeek, readAppState } from '@/lib/data'
+import { readAthleteProfile, readCurrentWeek, readAppState, readAllArchivedWeeks } from '@/lib/data'
 import GymWeekBadge from '@/components/GymWeekBadge'
 import NewWeekButton from '@/components/NewWeekButton'
 import DeloadBanner from '@/components/DeloadBanner'
 import HealthFlagsBanner from '@/components/HealthFlagsBanner'
-import WeekGrid from '@/components/WeekGrid'
+import WeekBrowser from '@/components/WeekBrowser'
 
 export default async function Home() {
   const profile = await readAthleteProfile()
   if (!profile) redirect('/setup')
 
-  const [week, appState] = await Promise.all([readCurrentWeek(), readAppState()])
+  const [week, appState, archivedWeeks] = await Promise.all([
+    readCurrentWeek(),
+    readAppState(),
+    readAllArchivedWeeks(),
+  ])
   const todayISO = format(new Date(), 'yyyy-MM-dd')
 
   if (!week) {
@@ -68,19 +72,7 @@ export default async function Home() {
           {hasActiveFlags && <HealthFlagsBanner flags={week.health_flags} />}
         </div>
 
-        <section>
-          <div className="flex items-center gap-3 mb-4">
-            <h2 className="text-xs font-mono font-bold tracking-[0.25em] uppercase text-zinc-400">
-              This Week
-            </h2>
-            <div className="flex-1 h-px bg-zinc-800" />
-            <span className="text-zinc-600 text-xs font-mono">
-              {week.sessions.filter((s) => s.status === 'completed').length}
-              /{week.sessions.length} DONE
-            </span>
-          </div>
-          <WeekGrid sessions={week.sessions} todayISO={todayISO} garminRecovery={week.garmin_recovery ?? {}} />
-        </section>
+        <WeekBrowser weeks={[...archivedWeeks, week]} todayISO={todayISO} />
 
         <footer className="flex items-center gap-4 pt-4 border-t border-zinc-800">
           <a
@@ -95,7 +87,10 @@ export default async function Home() {
           >
             Progress
           </a>
-          <NewWeekButton className="px-6 h-9 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 hover:text-zinc-50 font-bold text-xs tracking-[0.15em] uppercase rounded-lg border border-zinc-700 hover:border-zinc-500 transition-all disabled:opacity-50" />
+          <NewWeekButton
+            label="Create from Saved Template"
+            className="px-6 h-9 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 hover:text-zinc-50 font-bold text-xs tracking-[0.15em] uppercase rounded-lg border border-zinc-700 hover:border-zinc-500 transition-all disabled:opacity-50"
+          />
         </footer>
 
       </div>

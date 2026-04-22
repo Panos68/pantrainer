@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { WeekDoc, NextWeekPlan } from '@/lib/schema'
@@ -364,8 +365,11 @@ function ImportSection() {
       <SectionDivider label="Import New Plan" />
 
       <h2 className="text-2xl sm:text-3xl font-black tracking-tight uppercase text-zinc-50">
-        Import Claude&apos;s Response
+        Import Next Week Plan
       </h2>
+      <p className="text-zinc-500 text-xs font-mono tracking-widest uppercase">
+        Recommended: Export → Claude plan → Import
+      </p>
 
       {/* Idle */}
       {(importState.status === 'idle' || importState.status === 'error') && (
@@ -495,12 +499,12 @@ export default function ExportPage() {
 
         {/* Page header */}
         <header>
-          <a
+          <Link
             href="/"
             className="text-zinc-600 hover:text-zinc-400 text-xs font-mono tracking-widest uppercase transition-colors"
           >
             ← Back
-          </a>
+          </Link>
           <div className="mt-4">
             <p className="text-lime-400 text-xs font-mono font-bold tracking-[0.3em] uppercase mb-1">
               PanTrainer
@@ -510,6 +514,15 @@ export default function ExportPage() {
             </h1>
           </div>
         </header>
+
+        <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+          <p className="text-zinc-400 text-[10px] font-mono tracking-[0.2em] uppercase mb-2">
+            Recommended Weekly Flow
+          </p>
+          <p className="text-zinc-300 text-sm font-mono">
+            Export this week → Ask Claude for next week JSON → Import here → Log workouts.
+          </p>
+        </section>
 
         {/* Export */}
         <ExportSection />

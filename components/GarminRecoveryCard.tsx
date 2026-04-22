@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { GarminRecoveryDay } from '@/lib/schema'
 
@@ -8,6 +8,7 @@ interface GarminRecoveryCardProps {
   date: string
   recovery: GarminRecoveryDay | null | undefined
   compact?: boolean
+  interactive?: boolean
   onFetched?: (data: GarminRecoveryDay) => void
 }
 
@@ -15,12 +16,12 @@ export default function GarminRecoveryCard({
   date,
   recovery,
   compact = false,
+  interactive = true,
   onFetched,
 }: GarminRecoveryCardProps) {
   const [loading, setLoading] = useState(false)
-  const [data, setData] = useState<GarminRecoveryDay | null | undefined>(recovery)
-
-  useEffect(() => { setData(recovery) }, [recovery])
+  const [fetchedData, setFetchedData] = useState<GarminRecoveryDay | null>(null)
+  const data = recovery ?? fetchedData
 
   async function fetchRecovery(force = false) {
     setLoading(true)
@@ -32,7 +33,7 @@ export default function GarminRecoveryCard({
       })
       if (res.ok) {
         const json = await res.json() as { recovery: GarminRecoveryDay }
-        setData(json.recovery)
+        setFetchedData(json.recovery)
         onFetched?.(json.recovery)
       }
     } finally {
@@ -42,6 +43,13 @@ export default function GarminRecoveryCard({
 
   if (compact) {
     if (!data?.resting_hr_bpm && !data?.sleep_hours) {
+      if (!interactive) {
+        return (
+          <span className="text-[10px] font-mono text-zinc-700 tracking-widest uppercase">
+            No recovery
+          </span>
+        )
+      }
       return (
         <button
           onClick={(e) => { e.preventDefault(); void fetchRecovery() }}
@@ -60,14 +68,16 @@ export default function GarminRecoveryCard({
         {data.resting_hr_bpm != null && (
           <span>❤️ {data.resting_hr_bpm}bpm</span>
         )}
-        <button
-          onClick={(e) => { e.preventDefault(); void fetchRecovery(true) }}
-          disabled={loading}
-          className="text-zinc-700 hover:text-zinc-500 transition-colors"
-          title="Refresh from Garmin"
-        >
-          ↻
-        </button>
+        {interactive && (
+          <button
+            onClick={(e) => { e.preventDefault(); void fetchRecovery(true) }}
+            disabled={loading}
+            className="text-zinc-700 hover:text-zinc-500 transition-colors"
+            title="Refresh from Garmin"
+          >
+            ↻
+          </button>
+        )}
       </div>
     )
   }

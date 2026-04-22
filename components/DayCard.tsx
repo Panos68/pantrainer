@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import type { Session, GarminRecoveryDay } from '@/lib/schema'
@@ -9,6 +10,7 @@ interface DayCardProps {
   session: Session
   isToday: boolean
   recovery?: GarminRecoveryDay | null
+  readOnly?: boolean
 }
 
 const STATUS_CONFIG = {
@@ -37,7 +39,8 @@ const TYPE_COLORS: Record<string, string> = {
   Rest: 'text-zinc-500',
 }
 
-export default function DayCard({ session, isToday, recovery }: DayCardProps) {
+export default function DayCard({ session, isToday, recovery, readOnly = false }: DayCardProps) {
+  const [expanded, setExpanded] = useState(false)
   const slug = session.day.toLowerCase()
   const status = session.status ?? 'planned'
   const statusCfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.planned
@@ -49,19 +52,19 @@ export default function DayCard({ session, isToday, recovery }: DayCardProps) {
   const dateObj = new Date(session.date + 'T12:00:00')
   const dateLabel = dateObj.toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })
 
-  return (
-    <Link
-      href={`/log/${slug}`}
-      className={cn(
-        'block rounded-xl border transition-all duration-150',
-        'bg-zinc-900 hover:bg-zinc-800/80',
-        isToday
-          ? 'border-lime-400/30 shadow-[0_0_20px_rgba(163,230,53,0.07)]'
-          : 'border-zinc-800',
-        isSkipped && 'opacity-60',
-      )}
-    >
-      <div className="p-4 space-y-3">
+  const cardClassName = cn(
+    'block rounded-xl border transition-all duration-150',
+    readOnly ? 'bg-zinc-900/70' : 'bg-zinc-900 hover:bg-zinc-800/80',
+    isToday
+      ? 'border-lime-400/30 shadow-[0_0_20px_rgba(163,230,53,0.07)]'
+      : 'border-zinc-800',
+    isSkipped && 'opacity-60',
+  )
+
+  const hasExtraDetails = Boolean(session.notes) || (session.exercises?.length ?? 0) > 0 || Boolean(session.subtype)
+
+  const content = (
+    <div className="p-4 space-y-3">
         {/* Header row */}
         <div className="flex items-start justify-between gap-2">
           <div>
@@ -131,10 +134,38 @@ export default function DayCard({ session, isToday, recovery }: DayCardProps) {
         ) : (
           /* Subtype / plan text for non-completed */
           session.subtype && (
-            <p className="text-zinc-500 text-xs font-mono leading-snug line-clamp-2 pt-1 border-t border-zinc-800/60">
+            <p className={cn(
+              'text-zinc-500 text-xs font-mono leading-snug pt-1 border-t border-zinc-800/60',
+              readOnly && expanded ? 'whitespace-pre-wrap' : 'line-clamp-2',
+            )}>
               {session.subtype}
             </p>
           )
+        )}
+
+        {readOnly && expanded && hasExtraDetails && (
+          <div className="pt-1 border-t border-zinc-800/60 space-y-2">
+            {session.notes && (
+              <div>
+                <p className="text-zinc-600 text-[10px] font-mono tracking-widest uppercase mb-1">Notes</p>
+                <p className="text-zinc-300 text-xs font-mono whitespace-pre-wrap leading-relaxed">
+                  {session.notes}
+                </p>
+              </div>
+            )}
+            {session.exercises.length > 0 && (
+              <div>
+                <p className="text-zinc-600 text-[10px] font-mono tracking-widest uppercase mb-1">Exercises</p>
+                <ul className="space-y-1">
+                  {session.exercises.map((ex, i) => (
+                    <li key={i} className="text-zinc-400 text-xs font-mono">
+                      {ex.name}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         )}
 
         {/* Today indicator */}
@@ -153,9 +184,34 @@ export default function DayCard({ session, isToday, recovery }: DayCardProps) {
             date={session.date}
             recovery={recovery}
             compact
+            interactive={!readOnly}
           />
         </div>
+        {readOnly && hasExtraDetails && (
+          <div className="pt-1 border-t border-zinc-800/40">
+            <span className="text-zinc-600 text-[10px] font-mono tracking-widest uppercase">
+              {expanded ? 'Tap to collapse' : 'Tap to expand'}
+            </span>
+          </div>
+        )}
       </div>
+  )
+
+  if (readOnly) {
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded((prev) => !prev)}
+        className={cn(cardClassName, 'w-full text-left')}
+      >
+        {content}
+      </button>
+    )
+  }
+
+  return (
+    <Link href={`/log/${slug}`} className={cardClassName}>
+      {content}
     </Link>
   )
 }

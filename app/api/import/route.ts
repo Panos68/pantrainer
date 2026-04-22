@@ -1,4 +1,4 @@
-import { validateImport, applyImport } from '@/lib/import'
+import { validateImport, applyImport, isApplyImportError } from '@/lib/import'
 
 // POST /api/import
 // Body: { json: string }  — the raw Claude response text
@@ -22,7 +22,15 @@ export async function POST(request: Request) {
     return Response.json(result, { status: 422 })
   }
 
-  const applied = await applyImport(result.data)
+  let applied
+  try {
+    applied = await applyImport(result.data)
+  } catch (error) {
+    if (isApplyImportError(error)) {
+      return Response.json({ ok: false, raw: body.json, errors: error.errors }, { status: 422 })
+    }
+    return Response.json({ ok: false, raw: body.json, errors: ['Failed to apply imported plan'] }, { status: 500 })
+  }
 
   return Response.json({
     ...result,
