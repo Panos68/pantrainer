@@ -5,9 +5,10 @@ interface WeekGridProps {
   sessions: Session[]
   todayISO: string
   garminRecovery: Record<string, GarminRecoveryDay>
+  readOnly?: boolean
 }
 
-export default function WeekGrid({ sessions, todayISO, garminRecovery }: WeekGridProps) {
+export default function WeekGrid({ sessions, todayISO, garminRecovery, readOnly = false }: WeekGridProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-7 gap-3">
       {sessions.map((session) => (
@@ -16,6 +17,7 @@ export default function WeekGrid({ sessions, todayISO, garminRecovery }: WeekGri
           session={session}
           isToday={session.date === todayISO}
           recovery={garminRecovery[session.date] ?? null}
+          readOnly={readOnly}
         />
       ))}
     </div>

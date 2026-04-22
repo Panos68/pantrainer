@@ -1,6 +1,7 @@
 import { WeekDocSchema } from './schema'
 import type { WeekDoc } from './schema'
-import { readCurrentWeek, writeCurrentWeek } from './data'
+import { archiveWeek, readCurrentWeek, writeCurrentWeek } from './data'
+import { addDays, format, parseISO } from 'date-fns'
 
 
 export interface ImportResult {
@@ -51,53 +52,139 @@ export function validateImport(raw: string): ImportResult | ImportError {
 
 const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
-// Apply the imported plan: update current week in place, preserving completed sessions.
-// Always ensures all 7 days exist with correct dates — guards against Claude omitting days.
-export async function applyImport(importedDoc: WeekDoc): Promise<WeekDoc> {
-  const currentWeek = await readCurrentWeek()
+class ApplyImportError extends Error {
+  constructor(public readonly errors: string[]) {
+    super(errors[0] ?? 'Import could not be applied')
+    this.name = 'ApplyImportError'
+  }
+}
 
-  // Build lookup of completed/skipped sessions to preserve
-  const preservedByDay: Record<string, WeekDoc['sessions'][number]> = {}
-  if (currentWeek) {
-    for (const s of currentWeek.sessions) {
-      if (s.status === 'completed' || s.status === 'skipped') {
-        preservedByDay[s.day] = s
-      }
+function parseDateAtNoon(date: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
+  try {
+    const parsed = parseISO(date)
+    if (Number.isNaN(parsed.getTime())) return null
+    parsed.setHours(12, 0, 0, 0)
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function deriveMondayFromSessions(sessions: WeekDoc['sessions']): Date | null {
+  for (const session of sessions) {
+    const dayIndex = ALL_DAYS.indexOf(session.day)
+    const date = parseDateAtNoon(session.date)
+    if (dayIndex >= 0 && date) {
+      const monday = new Date(date)
+      monday.setDate(date.getDate() - dayIndex)
+      monday.setHours(12, 0, 0, 0)
+      return monday
+    }
+  }
+  return null
+}
+
+function hasStartedSessions(sessions: WeekDoc['sessions']): boolean {
+  return sessions.some((s) => s.status === 'in_progress' || s.status === 'completed' || s.status === 'skipped')
+}
+
+function weekLabelFromMonday(monday: Date): string {
+  const sunday = addDays(monday, 6)
+  return `${format(monday, 'MMM d')}–${format(sunday, 'd, yyyy')}`
+}
+
+function expectedDateByDay(monday: Date): Record<string, string> {
+  return Object.fromEntries(
+    ALL_DAYS.map((day, i) => [day, format(addDays(monday, i), 'yyyy-MM-dd')]),
+  )
+}
+
+function validateAndDecideMode(
+  currentWeek: WeekDoc | null,
+  importedDoc: WeekDoc,
+): { importedMonday: Date; mode: 'replace_current' | 'advance_next' } {
+  const importedMonday = deriveMondayFromSessions(importedDoc.sessions)
+  if (!importedMonday) {
+    throw new ApplyImportError(['Imported plan must include at least one valid dated session (YYYY-MM-DD).'])
+  }
+
+  const expectedImportedDates = expectedDateByDay(importedMonday)
+  const errors: string[] = []
+
+  for (const session of importedDoc.sessions) {
+    if (!ALL_DAYS.includes(session.day)) {
+      errors.push(`Invalid day "${session.day}" in imported sessions.`)
+      continue
+    }
+    const expectedDate = expectedImportedDates[session.day]
+    if (session.date !== expectedDate) {
+      errors.push(`Date mismatch for ${session.day}: expected ${expectedDate}, got ${session.date}.`)
     }
   }
 
-  // Build lookup of imported sessions by day
+  if (errors.length > 0) {
+    throw new ApplyImportError(errors)
+  }
+
+  if (!currentWeek) {
+    return { importedMonday, mode: 'replace_current' }
+  }
+
+  const currentMonday = deriveMondayFromSessions(currentWeek.sessions)
+  if (!currentMonday) {
+    return { importedMonday, mode: 'replace_current' }
+  }
+
+  const importedKey = importedMonday.toISOString().slice(0, 10)
+  const currentKey = currentMonday.toISOString().slice(0, 10)
+  const nextKey = addDays(currentMonday, 7).toISOString().slice(0, 10)
+
+  const isCurrentWeek = importedKey === currentKey
+  const isNextWeek = importedKey === nextKey
+
+  if (!isCurrentWeek && !isNextWeek) {
+    throw new ApplyImportError([
+      `Imported week (${weekLabelFromMonday(importedMonday)}) does not match current week (${weekLabelFromMonday(currentMonday)}) or next week (${weekLabelFromMonday(addDays(currentMonday, 7))}).`,
+    ])
+  }
+
+  if (isCurrentWeek && hasStartedSessions(currentWeek.sessions)) {
+    throw new ApplyImportError([
+      'Current week already has logged sessions. Import is blocked to prevent losing workout logs.',
+      'If you intended to move forward, import the next week (date range must be +7 days).',
+    ])
+  }
+
+  return { importedMonday, mode: isNextWeek ? 'advance_next' : 'replace_current' }
+}
+
+// Apply imported plan safely:
+// - only current week (when untouched) or next week can be imported
+// - next-week import archives current week first
+// - always returns exactly 7 sessions with canonical day/date mapping
+export async function applyImport(importedDoc: WeekDoc): Promise<WeekDoc> {
+  const currentWeek = await readCurrentWeek()
+  const { importedMonday, mode } = validateAndDecideMode(currentWeek, importedDoc)
+
   const importedByDay: Record<string, WeekDoc['sessions'][number]> = {}
   for (const s of importedDoc.sessions) {
     importedByDay[s.day] = s
   }
 
-  // Derive the week's Monday date from the first available session date
-  // so we can fill in missing days with correct dates
-  const firstSession = importedDoc.sessions.find((s) => s.date)
-  let mondayDate: Date | null = null
-  if (firstSession) {
-    const d = new Date(firstSession.date + 'T12:00:00')
-    const dayIndex = ALL_DAYS.indexOf(firstSession.day)
-    if (dayIndex >= 0) {
-      mondayDate = new Date(d)
-      mondayDate.setDate(d.getDate() - dayIndex)
+  const expectedDates = expectedDateByDay(importedMonday)
+
+  const mergedSessions = ALL_DAYS.map((dayName) => {
+    if (importedByDay[dayName]) {
+      return {
+        ...importedByDay[dayName],
+        day: dayName,
+        date: expectedDates[dayName],
+      }
     }
-  }
 
-  const mergedSessions = ALL_DAYS.map((dayName, i) => {
-    // Preserved session takes priority
-    if (preservedByDay[dayName]) return preservedByDay[dayName]
-
-    // Use imported session if present
-    if (importedByDay[dayName]) return importedByDay[dayName]
-
-    // Fill missing day with a rest session using the correct date
-    const date = mondayDate
-      ? new Date(mondayDate.getTime() + i * 86400000).toISOString().slice(0, 10)
-      : ''
     return {
-      date,
+      date: expectedDates[dayName],
       day: dayName,
       type: 'Rest',
       subtype: null,
@@ -117,6 +204,13 @@ export async function applyImport(importedDoc: WeekDoc): Promise<WeekDoc> {
     sessions: mergedSessions,
   }
 
+  if (mode === 'advance_next' && currentWeek) {
+    await archiveWeek(currentWeek)
+  }
   await writeCurrentWeek(merged)
   return merged
+}
+
+export function isApplyImportError(error: unknown): error is ApplyImportError {
+  return error instanceof ApplyImportError
 }

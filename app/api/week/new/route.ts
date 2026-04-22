@@ -25,6 +25,38 @@ function inferSessionType(planText: string): string {
   return 'Recovery'
 }
 
+function hasSavedTemplatePlan(plan: NextWeekPlan | undefined): boolean {
+  if (!plan) return false
+  const days: Array<keyof NextWeekPlan> = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+  return days.some((day) => {
+    const value = plan[day]
+    return typeof value === 'string' && value.trim().length > 0
+  })
+}
+
+function getCreationReadiness(prevWeek: WeekDoc | null): { canCreate: boolean; reason?: string } {
+  if (!prevWeek) {
+    return { canCreate: true }
+  }
+
+  if (!hasSavedTemplatePlan(prevWeek.next_week_plan)) {
+    return {
+      canCreate: false,
+      reason: 'No saved next-week template yet. Import a plan first, then create from template.',
+    }
+  }
+
+  return { canCreate: true }
+}
+
+// GET /api/week/new
+// Returns whether "Create from Saved Template" should be enabled
+export async function GET() {
+  const prevWeek = await readCurrentWeek()
+  const readiness = getCreationReadiness(prevWeek)
+  return Response.json(readiness)
+}
+
 // POST /api/week/new
 // Creates a new week document from the previous week's next_week_plan and lift_progression
 export async function POST() {
@@ -35,6 +67,11 @@ export async function POST() {
 
   if (!athlete) {
     return Response.json({ error: 'Athlete profile not found' }, { status: 400 })
+  }
+
+  const readiness = getCreationReadiness(prevWeek)
+  if (!readiness.canCreate) {
+    return Response.json({ error: readiness.reason ?? 'Cannot create next week yet' }, { status: 409 })
   }
 
   const { label, startDate } = getNextWeekRange()
