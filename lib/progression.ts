@@ -1,8 +1,10 @@
 import type { Exercise, LiftProgression } from './schema'
 
 // Maps exercise names (lowercase, partial) to the canonical lift_progression keys
-// used by the charts. Add entries here when new tracked lifts are introduced.
+// used by the charts. More-specific patterns must come before generic ones.
+// Add entries here when new tracked lifts are introduced.
 const EXERCISE_NAME_TO_KEY: Array<[pattern: string, key: string]> = [
+  ['romanian deadlift', 'romanian_deadlift_kg'],
   ['barbell deadlift', 'deadlift_kg'],
   ['deadlift', 'deadlift_kg'],
   ['weighted pull', 'weighted_pullups_added_kg'],
