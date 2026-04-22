@@ -11,6 +11,7 @@ A personal training management app that closes the loop between logging workouts
 - **Recovery data** — fetch sleep, resting HR, and max HR from Garmin per day; cached in the week doc
 - **Structured exercise logging** — planned sets/reps/weight pre-filled, edit actuals per exercise
 - **Export to Claude** — downloads a structured JSON snapshot of your week including Garmin recovery data
+- **Export v2 (Coach Context)** — optional enriched export with derived readiness/load/adherence metrics for A/B plan quality checks
 - **Import Claude's plan** — paste the AI response back to load next week's sessions and exercises
 - **Progress charts** — conditioning output and lift progression over time
 - **Deload tracking** — automatic reminders after 4 weeks of high output
