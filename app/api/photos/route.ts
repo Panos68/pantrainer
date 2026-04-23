@@ -29,14 +29,14 @@ export async function POST(request: Request) {
   const pathname = `data/session-photos/${date}/${filename}`
 
   try {
-    const uploaded = await put(pathname, file, {
+    await put(pathname, file, {
       access: 'private',
       addRandomSuffix: true,
       contentType: file.type,
     })
 
     return Response.json({
-      pathname: uploaded.pathname,
+      pathname,
     })
   } catch (error) {
     return Response.json(
