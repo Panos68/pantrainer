@@ -532,7 +532,9 @@ export default function LogDayPage() {
           try {
             data = JSON.parse(raw) as { pathname?: string; url?: string; error?: string }
           } catch {
-            throw new Error(`Upload failed for ${file.name} (${res.status})`)
+            throw new Error(
+              `Upload failed for ${file.name} (${res.status}): ${raw.slice(0, 120)}`,
+            )
           }
         }
         const uploadedRef = data.pathname ?? data.url
