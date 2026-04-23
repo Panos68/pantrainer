@@ -435,26 +435,39 @@ export default function LogDayPage() {
     }
   }, [])
 
-  async function handleSaveProgress() {
+  async function saveSession(
+    nextStatus: Session['status'],
+    options?: { redirectHome?: boolean; successMessage?: string; syncGarmin?: boolean },
+  ) {
     setSaving(true)
     setSaveMsg('')
     try {
-      const sync = session ? await refreshFromGarmin({ date: session.date, type: session.type }, false) : null
+      const shouldSyncGarmin = options?.syncGarmin ?? false
+      const sync = shouldSyncGarmin && session
+        ? await refreshFromGarmin({ date: session.date, type: session.type }, false)
+        : null
       const payload = mergeGarminIntoPayload(buildPayload(), sync)
       const res = await fetch(`/api/session/${day}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, status: 'in_progress' }),
+        body: JSON.stringify({ ...payload, status: nextStatus }),
       })
       if (!res.ok) {
-        const err = await res.json()
-        setSaveMsg(err.error ?? 'Save failed')
-      } else {
-        const updated = await res.json() as Session
-        setSession(updated)
-        setSaveMsg('Saved!')
-        setTimeout(() => setSaveMsg(''), 2000)
+        const err = await res.json().catch(() => ({ error: 'Save failed' }))
+        setSaveMsg((err as { error?: string }).error ?? 'Save failed')
+        return
       }
+
+      const updated = await res.json() as Session
+      setSession(updated)
+
+      if (options?.redirectHome) {
+        router.push('/')
+        return
+      }
+
+      setSaveMsg(options?.successMessage ?? 'Saved!')
+      setTimeout(() => setSaveMsg(''), 2000)
     } catch {
       setSaveMsg('Network error')
     } finally {
@@ -462,27 +475,20 @@ export default function LogDayPage() {
     }
   }
 
+  async function handleSaveProgress() {
+    await saveSession('in_progress', { successMessage: 'Saved!', syncGarmin: true })
+  }
+
+  async function handleSaveChanges() {
+    const currentStatus = session?.status ?? 'in_progress'
+    await saveSession(currentStatus, {
+      successMessage: 'Saved!',
+      syncGarmin: currentStatus !== 'completed' && currentStatus !== 'skipped',
+    })
+  }
+
   async function handleMarkComplete() {
-    setSaving(true)
-    try {
-      const sync = session ? await refreshFromGarmin({ date: session.date, type: session.type }, false) : null
-      const payload = mergeGarminIntoPayload(buildPayload(), sync)
-      const res = await fetch(`/api/session/${day}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, status: 'completed' }),
-      })
-      if (!res.ok) {
-        const err = await res.json()
-        setSaveMsg(err.error ?? 'Failed to complete session')
-        setSaving(false)
-      } else {
-        router.push('/')
-      }
-    } catch {
-      setSaveMsg('Network error')
-      setSaving(false)
-    }
+    await saveSession('completed', { redirectHome: true, syncGarmin: true })
   }
 
   async function handleSkip() {
@@ -1107,7 +1113,7 @@ export default function LogDayPage() {
           <div className="grid grid-cols-1 gap-3 pt-2">
             {session.status === 'completed' || session.status === 'skipped' ? (
               <button
-                onClick={handleMarkComplete}
+                onClick={handleSaveChanges}
                 disabled={saving}
                 className="w-full h-14 rounded-xl bg-lime-400 hover:bg-lime-300 active:bg-lime-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
               >
