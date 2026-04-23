@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { WeekDoc, NextWeekPlan } from '@/lib/schema'
 import type { ImportResult, ImportError } from '@/lib/import'
+import NewWeekButton from '@/components/NewWeekButton'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -362,7 +363,7 @@ function ImportSection() {
 
   return (
     <section className="space-y-5">
-      <SectionDivider label="Import New Plan" />
+      <SectionDivider label="Plan Next Week" />
 
       <h2 className="text-2xl sm:text-3xl font-black tracking-tight uppercase text-zinc-50">
         Import Next Week Plan
@@ -370,6 +371,16 @@ function ImportSection() {
       <p className="text-zinc-500 text-xs font-mono tracking-widest uppercase">
         Recommended: Export → Claude plan → Import
       </p>
+
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
+        <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
+          Or create from saved template
+        </p>
+        <NewWeekButton
+          label="Create from Saved Template"
+          className="w-full h-11 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 hover:text-zinc-50 font-bold text-xs tracking-[0.15em] uppercase rounded-lg border border-zinc-700 hover:border-zinc-500 transition-all disabled:opacity-50"
+        />
+      </div>
 
       {/* Idle */}
       {(importState.status === 'idle' || importState.status === 'error') && (
