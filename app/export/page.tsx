@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import type { WeekDoc, NextWeekPlan } from '@/lib/schema'
+import type { WeekDoc, NextWeekPlan, AppState } from '@/lib/schema'
 import type { ImportResult, ImportError } from '@/lib/import'
 import NewWeekButton from '@/components/NewWeekButton'
 
@@ -99,17 +99,21 @@ function Spinner() {
 
 function ExportSection() {
   const [weekData, setWeekData] = useState<WeekSummaryData | null>(null)
+  const [appState, setAppState] = useState<AppState | null>(null)
   const [loading, setLoading] = useState(true)
   const [exportingVersion, setExportingVersion] = useState<'v1' | 'v2' | null>(null)
   const [exportSuccess, setExportSuccess] = useState<ExportSuccessData | null>(null)
   const [exportError, setExportError] = useState<string | null>(null)
   const [includePhotosInBundle, setIncludePhotosInBundle] = useState(false)
+  const [includeDeloadInExport, setIncludeDeloadInExport] = useState(false)
 
   useEffect(() => {
-    fetch('/api/week')
-      .then((r) => r.json())
-      .then((data) => {
-        if (!data.empty) setWeekData(data as WeekSummaryData)
+    Promise.all([fetch('/api/week'), fetch('/api/state')])
+      .then(async ([weekRes, stateRes]) => {
+        const week = (await weekRes.json()) as WeekSummaryData | { empty: true }
+        const state = (await stateRes.json()) as AppState
+        if (!('empty' in week)) setWeekData(week)
+        setAppState(state)
         setLoading(false)
       })
       .catch(() => setLoading(false))
@@ -120,7 +124,7 @@ function ExportSection() {
     setExportError(null)
     try {
       const endpoint = version === 'v2' ? '/api/export/v2' : '/api/export'
-      const endpointWithParams = `${endpoint}?includePhotos=${includePhotosInBundle ? '1' : '0'}`
+      const endpointWithParams = `${endpoint}?includePhotos=${includePhotosInBundle ? '1' : '0'}&includeDeload=${includeDeloadInExport ? '1' : '0'}`
       const res = await fetch(endpointWithParams, { method: 'POST' })
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Export failed' }))
@@ -156,6 +160,25 @@ function ExportSection() {
         photosIncludedCount = 0
       }
 
+      if (includeDeloadInExport && weekData) {
+        const stateRes = await fetch('/api/state', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            deloadCounter: 0,
+            lastDeloadWeek: weekData.week,
+            isDeloadWeek: false,
+          }),
+        })
+        if (!stateRes.ok) {
+          const err = await stateRes.json().catch(() => ({ error: 'Failed to update deload state' }))
+          setExportError((err as { error?: string }).error ?? 'Failed to update deload state')
+          return
+        }
+        const updatedState = (await stateRes.json()) as AppState
+        setAppState(updatedState)
+      }
+
       setExportSuccess({
         photos_to_attach: photosToAttach,
         filename,
@@ -173,6 +196,15 @@ function ExportSection() {
   const completedSessions = weekData?.sessions.filter((s) => s.status === 'completed').length ?? 0
   const totalCalories = weekData?.week_summary.total_calories ?? 0
   const activeFlags = (weekData?.health_flags ?? []).filter((f) => !f.cleared).length
+  const deloadCounter = appState?.deloadCounter ?? 0
+  const deloadWindowLabel =
+    deloadCounter === 0
+      ? 'Deload tagged this week'
+      : deloadCounter < 8
+        ? `${8 - deloadCounter} week${8 - deloadCounter === 1 ? '' : 's'} to deload window`
+        : deloadCounter <= 10
+          ? 'In deload window (8–10 weeks)'
+          : `${deloadCounter - 10} week${deloadCounter - 10 === 1 ? '' : 's'} overdue`
 
   return (
     <section className="space-y-5">
@@ -228,6 +260,14 @@ function ExportSection() {
       {/* Export buttons */}
       {!exportSuccess && (
         <div className="space-y-3">
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+            <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase mb-1">
+              Deload Counter
+            </p>
+            <p className="text-zinc-300 text-xs font-mono">
+              Week {deloadCounter} since last deload • {deloadWindowLabel}
+            </p>
+          </div>
           <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
             <input
               type="checkbox"
@@ -237,6 +277,17 @@ function ExportSection() {
             />
             <span className="text-zinc-300 text-xs font-mono">
               Include photos in one ZIP bundle
+            </span>
+          </label>
+          <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+            <input
+              type="checkbox"
+              checked={includeDeloadInExport}
+              onChange={(e) => setIncludeDeloadInExport(e.target.checked)}
+              className="h-4 w-4 accent-lime-400"
+            />
+            <span className="text-zinc-300 text-xs font-mono">
+              Mark this export as a deload week
             </span>
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -6,7 +6,6 @@ import Link from 'next/link'
 import { readAthleteProfile, readCurrentWeek, readAppState, readAllArchivedWeeks } from '@/lib/data'
 import GymWeekBadge from '@/components/GymWeekBadge'
 import NewWeekButton from '@/components/NewWeekButton'
-import DeloadBanner from '@/components/DeloadBanner'
 import HealthFlagsBanner from '@/components/HealthFlagsBanner'
 import WeekBrowser from '@/components/WeekBrowser'
 import HomeQuickPanels from '@/components/HomeQuickPanels'
@@ -70,7 +69,6 @@ export default async function Home() {
         </header>
 
         <div className="space-y-3">
-          <DeloadBanner counter={appState.deloadCounter} />
           {hasActiveFlags && <HealthFlagsBanner flags={week.health_flags} />}
         </div>
 

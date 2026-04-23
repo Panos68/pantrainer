@@ -256,7 +256,7 @@ function buildCoachContext(
   }
 }
 
-export async function buildExport(currentWeek: WeekDoc): Promise<ExportPayload> {
+export async function buildExport(currentWeek: WeekDoc, options?: { includeDeload?: boolean }): Promise<ExportPayload> {
   const state = await readAppState()
 
   const photos_to_attach = currentWeek.sessions
@@ -285,15 +285,18 @@ export async function buildExport(currentWeek: WeekDoc): Promise<ExportPayload> 
 
   return {
     ...currentWeek,
-    is_deload_week: state.isDeloadWeek,
+    is_deload_week: options?.includeDeload ?? state.isDeloadWeek,
     photos_to_attach,
     history,
     training_load_history,
   }
 }
 
-export async function buildExportV2(currentWeek: WeekDoc): Promise<ExportPayloadV2> {
-  const base = await buildExport(currentWeek)
+export async function buildExportV2(
+  currentWeek: WeekDoc,
+  options?: { includeDeload?: boolean },
+): Promise<ExportPayloadV2> {
+  const base = await buildExport(currentWeek, options)
   const archivedWeeks = await readArchivedWeeks(8)
 
   return {

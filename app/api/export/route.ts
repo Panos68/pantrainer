@@ -9,7 +9,9 @@ export async function POST(request: Request) {
     return Response.json({ error: 'No current week found' }, { status: 404 })
   }
 
-  const payload = await buildExport(currentWeek)
+  const { searchParams } = new URL(request.url)
+  const includeDeload = searchParams.get('includeDeload') === '1'
+  const payload = await buildExport(currentWeek, { includeDeload })
 
   let filename: string
   if (currentWeek.sessions && currentWeek.sessions.length > 0) {
@@ -19,7 +21,6 @@ export async function POST(request: Request) {
     filename = `week-${format(new Date(), 'yyyy-ww')}.json`
   }
 
-  const { searchParams } = new URL(request.url)
   const includePhotos = searchParams.get('includePhotos') === '1'
   if (includePhotos) {
     return buildExportBundleResponse(payload, filename)
