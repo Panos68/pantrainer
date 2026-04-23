@@ -59,6 +59,9 @@ export async function GET(request: Request) {
   if (!pathname) {
     return Response.json({ error: 'Missing pathname' }, { status: 400 })
   }
+  if (!pathname.startsWith('data/session-photos/')) {
+    return Response.json({ error: 'Invalid pathname' }, { status: 403 })
+  }
 
   try {
     const blob = await head(pathname)
