@@ -1,11 +1,20 @@
 import { put, head, del, list } from '@vercel/blob'
-import { WeekDocSchema, AthleteProfileSchema, AppStateSchema } from './schema'
-import type { WeekDoc, AthleteProfile, AppState } from './schema'
+import {
+  WeekDocSchema,
+  AthleteProfileSchema,
+  AppStateSchema,
+  AutomationNotesSchema,
+  ProposedPlanSchema,
+} from './schema'
+import type { WeekDoc, AthleteProfile, AppState, AutomationNotes, ProposedPlan } from './schema'
 import { format, parseISO } from 'date-fns'
 
 const CURRENT_WEEK_KEY = 'data/current-week.json'
 const ATHLETE_KEY = 'data/athlete.json'
 const STATE_KEY = 'data/state.json'
+const AUTOMATION_NOTES_KEY = 'data/automation-notes.json'
+const PROPOSED_LATEST_KEY = 'data/proposed/latest.json'
+const PROPOSED_HISTORY_PREFIX = 'data/proposed/history/'
 const WEEKS_PREFIX = 'data/weeks/'
 
 async function readBlobAsJson<T>(pathname: string): Promise<T | null> {
@@ -73,6 +82,42 @@ export async function readAppState(): Promise<AppState> {
 
 export async function writeAppState(state: AppState): Promise<void> {
   await writeBlobAsJson(STATE_KEY, state)
+}
+
+function toProposalSnapshotKey(createdAt: string): string {
+  const safeStamp = createdAt.replace(/[:.]/g, '-')
+  return `${PROPOSED_HISTORY_PREFIX}${safeStamp}.json`
+}
+
+export async function readAutomationNotes(): Promise<AutomationNotes> {
+  const raw = await readBlobAsJson<unknown>(AUTOMATION_NOTES_KEY)
+  if (!raw) {
+    const defaults = AutomationNotesSchema.parse({})
+    await writeBlobAsJson(AUTOMATION_NOTES_KEY, defaults)
+    return defaults
+  }
+  return AutomationNotesSchema.parse(raw)
+}
+
+export async function writeAutomationNotes(notes: AutomationNotes): Promise<void> {
+  await writeBlobAsJson(AUTOMATION_NOTES_KEY, notes)
+}
+
+export async function readProposedPlan(): Promise<ProposedPlan | null> {
+  const raw = await readBlobAsJson<unknown>(PROPOSED_LATEST_KEY)
+  if (!raw) return null
+  return ProposedPlanSchema.parse(raw)
+}
+
+export async function writeProposedPlan(plan: ProposedPlan): Promise<void> {
+  await Promise.all([
+    writeBlobAsJson(PROPOSED_LATEST_KEY, plan),
+    writeBlobAsJson(toProposalSnapshotKey(plan.created_at), plan),
+  ])
+}
+
+export async function clearProposedPlan(): Promise<void> {
+  await deleteBlobIfExists(PROPOSED_LATEST_KEY)
 }
 
 function getWeekFilename(week: WeekDoc): string {

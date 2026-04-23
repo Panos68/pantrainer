@@ -61,8 +61,25 @@ npm run dev
 |---|---|
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob store token (from Vercel dashboard → Storage) |
 | `AUTH_PASSWORD` | Password to access the app |
+| `AUTOMATION_API_TOKEN` | Bearer token used by scheduled cowork jobs to write proposed plans |
 | `GARMIN_EMAIL` | Garmin Connect account email (optional — Garmin features disabled if unset) |
 | `GARMIN_PASSWORD` | Garmin Connect account password |
+
+## Proposed plan automation (daily/weekly)
+
+- Scheduled jobs should write candidate plans to `POST /api/automation/proposed` (Bearer token auth via `AUTOMATION_API_TOKEN`).
+- Candidate payloads are stored as a **proposed** plan (not live/current).
+- In the app (`/export`), use **Load proposed JSON** to review before applying.
+- Save context/rules for automation in **Automation notes** on the same page.
+
+### API-only cowork flow (no browser login)
+
+- `GET /api/automation/export/v2` returns:
+  - `export_v2`: full current week export v2 payload
+  - `automation_notes`: current notes/rules
+- `POST /api/automation/proposed/today` accepts a single session update (`session` object or `json` string), merges it into today's session, and stores it as the latest proposed week.
+- Both endpoints require `Authorization: Bearer <AUTOMATION_API_TOKEN>`.
+- UI day-level review uses `GET /api/proposed/session?date=YYYY-MM-DD` to load only that day from the latest proposed week.
 
 ## Deploying to Vercel
 

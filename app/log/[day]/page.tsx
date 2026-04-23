@@ -194,6 +194,7 @@ export default function LogDayPage() {
   const [showImport, setShowImport] = useState(false)
   const [importJson, setImportJson] = useState('')
   const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [loadingProposedDay, setLoadingProposedDay] = useState(false)
 
   // Exercise actuals state (indexed to match session.exercises)
   type ExerciseActual = { sets: string; reps: string; weight_kg: string }
@@ -560,6 +561,29 @@ export default function LogDayPage() {
       }
     } catch {
       setImportMsg({ ok: false, text: 'Network error' })
+    }
+  }
+
+  async function handleLoadProposedForDay() {
+    if (!session) return
+    setLoadingProposedDay(true)
+    try {
+      const res = await fetch(`/api/proposed/session?date=${session.date}`, { cache: 'no-store' })
+      const data = await res.json()
+      if (!res.ok) {
+        setImportMsg({ ok: false, text: data.error ?? 'No proposed update found for this day' })
+        setShowImport(true)
+        return
+      }
+
+      setImportJson(JSON.stringify(data.session, null, 2))
+      setShowImport(true)
+      setImportMsg({ ok: true, text: 'Loaded proposed session for this day' })
+    } catch {
+      setImportMsg({ ok: false, text: 'Failed to load proposed session' })
+      setShowImport(true)
+    } finally {
+      setLoadingProposedDay(false)
     }
   }
 
@@ -1062,12 +1086,21 @@ export default function LogDayPage() {
               </>
             )}
             {session.status !== 'completed' && session.status !== 'skipped' && (
-              <button
-                onClick={() => setShowImport(!showImport)}
-                className="w-full h-10 rounded-xl border border-zinc-800 bg-transparent hover:bg-zinc-900 text-zinc-600 hover:text-zinc-400 font-bold text-xs tracking-[0.15em] uppercase transition-colors"
-              >
-                Update from JSON
-              </button>
+              <>
+                <button
+                  onClick={handleLoadProposedForDay}
+                  disabled={loadingProposedDay}
+                  className="w-full h-10 rounded-xl border border-lime-400/30 bg-lime-400/5 hover:bg-lime-400/10 text-lime-400 font-bold text-xs tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
+                >
+                  {loadingProposedDay ? 'Loading Proposed…' : 'Load Proposed for This Day'}
+                </button>
+                <button
+                  onClick={() => setShowImport(!showImport)}
+                  className="w-full h-10 rounded-xl border border-zinc-800 bg-transparent hover:bg-zinc-900 text-zinc-600 hover:text-zinc-400 font-bold text-xs tracking-[0.15em] uppercase transition-colors"
+                >
+                  Update from JSON
+                </button>
+              </>
             )}
           </div>
         )}

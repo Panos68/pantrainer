@@ -140,6 +140,27 @@ export const AppStateSchema = z.object({
   isDeloadWeek: z.boolean().default(false),
 })
 
+// Automation notes consumed by scheduled jobs
+export const AutomationNotesSchema = z.object({
+  travel_window: z.string().default(''),
+  flag_overrides: z.string().default(''),
+  priority_rules: z.string().default(''),
+  temporary_constraints: z.string().default(''),
+  freeform_notes: z.string().default(''),
+  updated_at: z.string().nullable().default(null),
+})
+
+export const ProposedPlanRunTypeSchema = z.enum(['manual', 'daily', 'weekly'])
+
+export const ProposedPlanSchema = z.object({
+  created_at: z.string(),
+  source: z.string().default('manual'),
+  run_type: ProposedPlanRunTypeSchema.default('manual'),
+  notes_version: z.string().nullable().default(null),
+  raw_json: z.string(),
+  week_doc: WeekDocSchema,
+})
+
 // Export types
 export type Exercise = z.infer<typeof ExerciseSchema>
 export type Session = z.infer<typeof SessionSchema>
@@ -152,3 +173,6 @@ export type NextWeekPlan = z.infer<typeof NextWeekPlanSchema>
 export type WeekDoc = z.infer<typeof WeekDocSchema>
 export type AthleteProfile = z.infer<typeof AthleteProfileSchema>
 export type AppState = z.infer<typeof AppStateSchema>
+export type AutomationNotes = z.infer<typeof AutomationNotesSchema>
+export type ProposedPlanRunType = z.infer<typeof ProposedPlanRunTypeSchema>
+export type ProposedPlan = z.infer<typeof ProposedPlanSchema>

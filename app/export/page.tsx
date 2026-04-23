@@ -28,6 +28,24 @@ type ImportState =
   | { status: 'success'; result: ImportResult }
   | { status: 'error'; errors: string[] }
 
+interface AutomationNotesData {
+  travel_window: string
+  flag_overrides: string
+  priority_rules: string
+  temporary_constraints: string
+  freeform_notes: string
+  updated_at: string | null
+}
+
+interface ProposedPlanData {
+  empty: boolean
+  created_at?: string
+  source?: string
+  run_type?: 'manual' | 'daily' | 'weekly'
+  notes_version?: string | null
+  raw_json?: string
+}
+
 // ─── Day labels ───────────────────────────────────────────────────────────────
 
 const DAY_KEYS: (keyof NextWeekPlan)[] = [
@@ -317,6 +335,89 @@ function ImportSection() {
   const [rawText, setRawText] = useState('')
   const [importState, setImportState] = useState<ImportState>({ status: 'idle' })
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [notes, setNotes] = useState<AutomationNotesData>({
+    travel_window: '',
+    flag_overrides: '',
+    priority_rules: '',
+    temporary_constraints: '',
+    freeform_notes: '',
+    updated_at: null,
+  })
+  const [notesSaving, setNotesSaving] = useState(false)
+  const [notesMsg, setNotesMsg] = useState<string | null>(null)
+  const [proposed, setProposed] = useState<ProposedPlanData>({ empty: true })
+  const [proposedLoading, setProposedLoading] = useState(true)
+  const [proposedMsg, setProposedMsg] = useState<string | null>(null)
+
+  async function refreshProposed() {
+    setProposedLoading(true)
+    try {
+      const res = await fetch('/api/proposed', { cache: 'no-store' })
+      const data = (await res.json()) as ProposedPlanData
+      setProposed(data)
+    } finally {
+      setProposedLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [notesRes] = await Promise.all([
+          fetch('/api/automation/notes', { cache: 'no-store' }),
+          refreshProposed(),
+        ])
+        if (notesRes.ok) {
+          const notesData = (await notesRes.json()) as AutomationNotesData
+          setNotes(notesData)
+        }
+      } catch {
+        // Non-blocking UI section
+      }
+    })()
+  }, [])
+
+  async function handleSaveNotes() {
+    setNotesSaving(true)
+    setNotesMsg(null)
+    try {
+      const res = await fetch('/api/automation/notes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(notes),
+      })
+      const data = (await res.json()) as AutomationNotesData | { error?: string }
+      if (!res.ok) {
+        setNotesMsg((data as { error?: string }).error ?? 'Failed to save notes')
+        return
+      }
+      setNotes(data as AutomationNotesData)
+      setNotesMsg('Saved')
+    } catch {
+      setNotesMsg('Failed to save notes')
+    } finally {
+      setNotesSaving(false)
+    }
+  }
+
+  async function handleLoadProposedJson() {
+    if (!proposed.raw_json) return
+    setRawText(proposed.raw_json)
+    setImportState({ status: 'idle' })
+    setProposedMsg('Loaded proposed JSON into editor')
+    setTimeout(() => textareaRef.current?.focus(), 50)
+  }
+
+  async function handleClearProposed() {
+    setProposedMsg(null)
+    const res = await fetch('/api/proposed', { method: 'DELETE' })
+    if (!res.ok) {
+      setProposedMsg('Failed to clear proposed JSON')
+      return
+    }
+    setProposed({ empty: true })
+    setProposedMsg('Cleared proposed JSON')
+  }
 
   async function handleImport() {
     if (!rawText.trim()) return
@@ -371,6 +472,100 @@ function ImportSection() {
       <p className="text-zinc-500 text-xs font-mono tracking-widest uppercase">
         Recommended: Export → Claude plan → Import
       </p>
+
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
+        <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
+          Automation notes (used by cowork runs)
+        </p>
+        <div className="grid grid-cols-1 gap-3">
+          <textarea
+            value={notes.travel_window}
+            onChange={(e) => setNotes((prev) => ({ ...prev, travel_window: e.target.value }))}
+            rows={2}
+            placeholder="Travel window notes (dates, location constraints)"
+            className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-xl px-4 py-3 text-zinc-200 text-xs font-mono placeholder:text-zinc-600 resize-y outline-none transition-colors"
+          />
+          <textarea
+            value={notes.flag_overrides}
+            onChange={(e) => setNotes((prev) => ({ ...prev, flag_overrides: e.target.value }))}
+            rows={2}
+            placeholder="Flag overrides (injury/strain priority rules)"
+            className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-xl px-4 py-3 text-zinc-200 text-xs font-mono placeholder:text-zinc-600 resize-y outline-none transition-colors"
+          />
+          <textarea
+            value={notes.priority_rules}
+            onChange={(e) => setNotes((prev) => ({ ...prev, priority_rules: e.target.value }))}
+            rows={2}
+            placeholder="Priority rules (what to optimize first)"
+            className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-xl px-4 py-3 text-zinc-200 text-xs font-mono placeholder:text-zinc-600 resize-y outline-none transition-colors"
+          />
+          <textarea
+            value={notes.temporary_constraints}
+            onChange={(e) => setNotes((prev) => ({ ...prev, temporary_constraints: e.target.value }))}
+            rows={2}
+            placeholder="Temporary constraints (equipment, schedule, sleep)"
+            className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-xl px-4 py-3 text-zinc-200 text-xs font-mono placeholder:text-zinc-600 resize-y outline-none transition-colors"
+          />
+          <textarea
+            value={notes.freeform_notes}
+            onChange={(e) => setNotes((prev) => ({ ...prev, freeform_notes: e.target.value }))}
+            rows={3}
+            placeholder="Freeform notes for automation"
+            className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-xl px-4 py-3 text-zinc-200 text-xs font-mono placeholder:text-zinc-600 resize-y outline-none transition-colors"
+          />
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <button
+            onClick={handleSaveNotes}
+            disabled={notesSaving}
+            className="h-10 px-4 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-200 font-bold text-[10px] tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
+          >
+            {notesSaving ? 'Saving…' : 'Save notes'}
+          </button>
+          <p className="text-zinc-600 text-[10px] font-mono">
+            {notes.updated_at ? `Updated ${new Date(notes.updated_at).toLocaleString()}` : 'Not saved yet'}
+          </p>
+        </div>
+        {notesMsg && (
+          <p className={`text-[10px] font-mono ${notesMsg === 'Saved' ? 'text-lime-400' : 'text-red-400'}`}>
+            {notesMsg}
+          </p>
+        )}
+      </div>
+
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
+        <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
+          Proposed plan from automation
+        </p>
+        {proposedLoading ? (
+          <p className="text-zinc-600 text-xs font-mono">Loading…</p>
+        ) : proposed.empty ? (
+          <p className="text-zinc-500 text-xs font-mono">No proposed plan yet.</p>
+        ) : (
+          <>
+            <div className="text-xs font-mono text-zinc-400 space-y-1">
+              <p>Source: {proposed.source ?? 'unknown'}</p>
+              <p>Run: {proposed.run_type ?? 'manual'}</p>
+              <p>Created: {proposed.created_at ? new Date(proposed.created_at).toLocaleString() : 'unknown'}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={handleLoadProposedJson}
+                className="h-10 px-4 rounded-lg bg-lime-400 hover:bg-lime-300 active:bg-lime-500 text-zinc-950 font-black text-[10px] tracking-[0.15em] uppercase transition-colors"
+              >
+                Load proposed JSON
+              </button>
+              <button
+                onClick={handleClearProposed}
+                className="h-10 px-4 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-200 font-bold text-[10px] tracking-[0.15em] uppercase transition-colors"
+              >
+                Clear proposed
+              </button>
+            </div>
+          </>
+        )}
+        {proposedMsg && <p className="text-lime-400 text-[10px] font-mono">{proposedMsg}</p>}
+      </div>
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
         <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
