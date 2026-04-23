@@ -1,6 +1,7 @@
 import { WeekDocSchema } from './schema'
 import type { WeekDoc } from './schema'
 import { archiveWeek, readCurrentWeek, writeCurrentWeek } from './data'
+import { rollDeloadCounterOnWeekAdvance } from './state'
 import { addDays, format, parseISO } from 'date-fns'
 
 
@@ -206,6 +207,7 @@ export async function applyImport(importedDoc: WeekDoc): Promise<WeekDoc> {
 
   if (mode === 'advance_next' && currentWeek) {
     await archiveWeek(currentWeek)
+    await rollDeloadCounterOnWeekAdvance()
   }
   await writeCurrentWeek(merged)
   return merged
