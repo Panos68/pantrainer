@@ -11,6 +11,7 @@ interface DayCardProps {
   isToday: boolean
   recovery?: GarminRecoveryDay | null
   readOnly?: boolean
+  collapsibleOnMobile?: boolean
 }
 
 const STATUS_CONFIG = {
@@ -39,7 +40,13 @@ const TYPE_COLORS: Record<string, string> = {
   Rest: 'text-zinc-500',
 }
 
-export default function DayCard({ session, isToday, recovery, readOnly = false }: DayCardProps) {
+export default function DayCard({
+  session,
+  isToday,
+  recovery,
+  readOnly = false,
+  collapsibleOnMobile = false,
+}: DayCardProps) {
   const [expanded, setExpanded] = useState(false)
   const slug = session.day.toLowerCase()
   const status = session.status ?? 'planned'
@@ -62,6 +69,8 @@ export default function DayCard({ session, isToday, recovery, readOnly = false }
   )
 
   const hasExtraDetails = Boolean(session.notes) || (session.exercises?.length ?? 0) > 0 || Boolean(session.subtype)
+  const isMobileCollapsible = !readOnly && collapsibleOnMobile
+  const showDetails = readOnly ? expanded : isMobileCollapsible ? expanded : true
 
   const content = (
     <div className="p-4 space-y-3">
@@ -98,7 +107,7 @@ export default function DayCard({ session, isToday, recovery, readOnly = false }
         </div>
 
         {/* Metrics if completed */}
-        {isCompleted && (session.duration_min || session.avg_hr_bpm || session.total_calories) ? (
+        {showDetails && isCompleted && (session.duration_min || session.avg_hr_bpm || session.total_calories) ? (
           <div className="grid grid-cols-3 gap-2 pt-1 border-t border-zinc-800">
             {session.duration_min != null && (
               <div>
@@ -136,14 +145,14 @@ export default function DayCard({ session, isToday, recovery, readOnly = false }
           session.subtype && (
             <p className={cn(
               'text-zinc-500 text-xs font-mono leading-snug pt-1 border-t border-zinc-800/60',
-              readOnly && expanded ? 'whitespace-pre-wrap' : 'line-clamp-2',
+              (readOnly && expanded) || (isMobileCollapsible && expanded) ? 'whitespace-pre-wrap' : 'line-clamp-2',
             )}>
               {session.subtype}
             </p>
           )
         )}
 
-        {readOnly && expanded && hasExtraDetails && (
+        {showDetails && (readOnly || isMobileCollapsible) && hasExtraDetails && (
           <div className="pt-1 border-t border-zinc-800/60 space-y-2">
             {session.notes && (
               <div>
@@ -179,15 +188,17 @@ export default function DayCard({ session, isToday, recovery, readOnly = false }
         )}
 
         {/* Recovery strip */}
-        <div className="pt-1 border-t border-zinc-800/40">
-          <GarminRecoveryCard
-            date={session.date}
-            recovery={recovery}
-            compact
-            interactive={!readOnly}
-          />
-        </div>
-        {readOnly && hasExtraDetails && (
+        {showDetails && (
+          <div className="pt-1 border-t border-zinc-800/40">
+            <GarminRecoveryCard
+              date={session.date}
+              recovery={recovery}
+              compact
+              interactive={!readOnly && !isMobileCollapsible}
+            />
+          </div>
+        )}
+        {(readOnly || isMobileCollapsible) && hasExtraDetails && (
           <div className="pt-1 border-t border-zinc-800/40">
             <span className="text-zinc-600 text-[10px] font-mono tracking-widest uppercase">
               {expanded ? 'Tap to collapse' : 'Tap to expand'}
@@ -206,6 +217,30 @@ export default function DayCard({ session, isToday, recovery, readOnly = false }
       >
         {content}
       </button>
+    )
+  }
+
+  if (isMobileCollapsible) {
+    return (
+      <div className={cn(cardClassName, 'md:hover:bg-zinc-800/80')}>
+        <button
+          type="button"
+          onClick={() => setExpanded((prev) => !prev)}
+          className="w-full text-left"
+        >
+          {content}
+        </button>
+        {showDetails && (
+          <div className="px-4 pb-4">
+            <Link
+              href={`/log/${slug}`}
+              className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 px-3 text-[10px] font-mono font-bold tracking-[0.12em] uppercase transition-colors"
+            >
+              Open Session
+            </Link>
+          </div>
+        )}
+      </div>
     )
   }
 

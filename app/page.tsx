@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { redirect } from 'next/navigation'
 import { format } from 'date-fns'
+import Link from 'next/link'
 import { readAthleteProfile, readCurrentWeek, readAppState, readAllArchivedWeeks } from '@/lib/data'
 import GymWeekBadge from '@/components/GymWeekBadge'
 import NewWeekButton from '@/components/NewWeekButton'
@@ -77,23 +78,19 @@ export default async function Home() {
 
         <WeekBrowser weeks={[...archivedWeeks, week]} todayISO={todayISO} />
 
-        <footer className="flex items-center gap-4 pt-4 border-t border-zinc-800">
-          <a
+        <footer className="hidden md:flex items-center gap-4 pt-4 border-t border-zinc-800">
+          <Link
             href="/export"
             className="text-xs font-mono font-bold tracking-widest uppercase text-zinc-500 hover:text-zinc-300 transition-colors"
           >
-            Export Week
-          </a>
-          <a
+            Plan Next Week
+          </Link>
+          <Link
             href="/progress"
             className="text-xs font-mono font-bold tracking-widest uppercase text-zinc-500 hover:text-zinc-300 transition-colors"
           >
             Progress
-          </a>
-          <NewWeekButton
-            label="Create from Saved Template"
-            className="px-6 h-9 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 hover:text-zinc-50 font-bold text-xs tracking-[0.15em] uppercase rounded-lg border border-zinc-700 hover:border-zinc-500 transition-all disabled:opacity-50"
-          />
+          </Link>
         </footer>
 
       </div>
