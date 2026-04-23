@@ -4,7 +4,7 @@ import { readCurrentWeek, writeCurrentWeek } from '@/lib/data'
 
 // POST /api/session/import
 // Body: { json: string } — raw JSON for a single session
-// Updates the matching day in current week, preserving status if already completed/skipped
+// Updates the matching day in current week while preserving canonical day/date and current status
 export async function POST(req: NextRequest) {
   let body: { json?: string }
   try {
@@ -38,12 +38,15 @@ export async function POST(req: NextRequest) {
   if (idx === -1) return Response.json({ ok: false, errors: [`No session found for ${imported.day}`] }, { status: 404 })
 
   const existing = week.sessions[idx]
-  if (existing.status === 'completed' || existing.status === 'skipped') {
-    return Response.json({ ok: false, errors: [`${imported.day} is already finalized`] }, { status: 409 })
+  const merged = {
+    ...existing,
+    ...imported,
+    day: existing.day,
+    date: existing.date,
+    status: existing.status,
   }
-
-  week.sessions[idx] = imported
+  week.sessions[idx] = merged
   await writeCurrentWeek(week)
 
-  return Response.json({ ok: true, session: imported })
+  return Response.json({ ok: true, session: merged })
 }

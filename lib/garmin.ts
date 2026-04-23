@@ -72,9 +72,9 @@ export type GarminActivityRaw = {
 }
 
 export type HRZone = {
-  zoneName: string
-  secsInZone: number
-  zoneHighBoundary: number
+  zone_name: string
+  secs_in_zone: number
+  zone_high_boundary: number
 }
 
 export type GarminSleepResult = {
@@ -105,9 +105,9 @@ export async function fetchActivityDetail(activityId: number, existingClient?: u
     if (!zones?.length) return { hrZones: null }
     return {
       hrZones: zones.map((z) => ({
-        zoneName: z.zoneName,
-        secsInZone: z.secsInZone,
-        zoneHighBoundary: z.zoneHighBoundary,
+        zone_name: z.zoneName,
+        secs_in_zone: z.secsInZone,
+        zone_high_boundary: z.zoneHighBoundary,
       })),
     }
   } catch {
