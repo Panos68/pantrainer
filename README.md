@@ -25,7 +25,7 @@ Log sessions on phone → Export JSON → Paste into Claude chat → Claude plan
           └──────────────── Import JSON response ───────────────────────┘
 ```
 
-For workout photos (whiteboard schedules): attach directly to Claude chat alongside the JSON export — no in-app storage needed.
+Workout photos uploaded on the log page are stored in Vercel Blob and saved on each session. Export JSON includes their URLs in `photos_to_attach`.
 
 ## Garmin Connect integration
 

@@ -20,6 +20,8 @@ interface ExportSuccessData {
   photos_to_attach: string[]
   filename: string
   version: 'v1' | 'v2'
+  includes_photo_bundle: boolean
+  photos_included_count: number
 }
 
 type ImportState =
@@ -101,6 +103,7 @@ function ExportSection() {
   const [exportingVersion, setExportingVersion] = useState<'v1' | 'v2' | null>(null)
   const [exportSuccess, setExportSuccess] = useState<ExportSuccessData | null>(null)
   const [exportError, setExportError] = useState<string | null>(null)
+  const [includePhotosInBundle, setIncludePhotosInBundle] = useState(false)
 
   useEffect(() => {
     fetch('/api/week')
@@ -117,7 +120,8 @@ function ExportSection() {
     setExportError(null)
     try {
       const endpoint = version === 'v2' ? '/api/export/v2' : '/api/export'
-      const res = await fetch(endpoint, { method: 'POST' })
+      const endpointWithParams = `${endpoint}?includePhotos=${includePhotosInBundle ? '1' : '0'}`
+      const res = await fetch(endpointWithParams, { method: 'POST' })
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Export failed' }))
         setExportError((err as { error?: string }).error ?? 'Export failed')
@@ -140,14 +144,24 @@ function ExportSection() {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
 
-      // Parse the JSON to get photos_to_attach
-      const text = await blob.text()
-      const payload = JSON.parse(text) as { photos_to_attach?: string[] }
+      const isZipBundle = (res.headers.get('Content-Type') ?? '').includes('application/zip')
+      let photosToAttach: string[] = []
+      let photosIncludedCount = Number(res.headers.get('X-Photos-Included') ?? 0)
+
+      if (!isZipBundle) {
+        const text = await blob.text()
+        const payload = JSON.parse(text) as { photos_to_attach?: string[] }
+        photosToAttach = payload.photos_to_attach ?? []
+      } else if (!Number.isFinite(photosIncludedCount)) {
+        photosIncludedCount = 0
+      }
 
       setExportSuccess({
-        photos_to_attach: payload.photos_to_attach ?? [],
+        photos_to_attach: photosToAttach,
         filename,
         version,
+        includes_photo_bundle: isZipBundle,
+        photos_included_count: photosIncludedCount,
       })
     } catch (e) {
       setExportError(e instanceof Error ? e.message : 'Unexpected error')
@@ -213,7 +227,19 @@ function ExportSection() {
 
       {/* Export buttons */}
       {!exportSuccess && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="space-y-3">
+          <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+            <input
+              type="checkbox"
+              checked={includePhotosInBundle}
+              onChange={(e) => setIncludePhotosInBundle(e.target.checked)}
+              className="h-4 w-4 accent-lime-400"
+            />
+            <span className="text-zinc-300 text-xs font-mono">
+              Include photos in one ZIP bundle
+            </span>
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <button
             onClick={() => handleExport('v1')}
             disabled={exportingVersion !== null || !weekData}
@@ -243,6 +269,7 @@ function ExportSection() {
               'Export Week (v2)'
             )}
           </button>
+          </div>
         </div>
       )}
 
@@ -267,8 +294,19 @@ function ExportSection() {
             </div>
           </div>
 
-          {/* Photos to attach */}
-          {exportSuccess.photos_to_attach.length > 0 && (
+          {exportSuccess.includes_photo_bundle && (
+            <div className="bg-sky-400/10 border border-sky-400/30 rounded-xl px-5 py-4">
+              <p className="text-sky-400 text-xs font-mono font-bold tracking-widest uppercase mb-1">
+                Bundle Includes Photos
+              </p>
+              <p className="text-sky-200 text-xs font-mono">
+                ZIP contains JSON and {exportSuccess.photos_included_count} photo{exportSuccess.photos_included_count === 1 ? '' : 's'}.
+              </p>
+            </div>
+          )}
+
+          {/* Photos to attach (JSON-only export) */}
+          {!exportSuccess.includes_photo_bundle && exportSuccess.photos_to_attach.length > 0 && (
             <div className="bg-amber-400/10 border border-amber-400/30 rounded-xl px-5 py-4">
               <p className="text-amber-400 text-xs font-mono font-bold tracking-widest uppercase mb-3">
                 📎 Attach These Photos to Your Claude Message
@@ -289,7 +327,9 @@ function ExportSection() {
               Next Steps
             </p>
             <p className="text-zinc-300 text-sm leading-relaxed">
-              Paste the exported JSON into your Claude project chat. Attach any listed photos.
+              {exportSuccess.includes_photo_bundle
+                ? 'Upload the ZIP to Claude. It already includes your JSON and photos.'
+                : 'Paste the exported JSON into your Claude project chat. Attach any listed photos.'}
               Claude will return a new training plan JSON.
             </p>
           </div>

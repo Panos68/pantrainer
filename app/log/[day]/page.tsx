@@ -37,6 +37,10 @@ type GarminSyncResponse = {
   avg_speed_mps?: number | null
 }
 
+function isPreviewablePhotoUrl(value: string): boolean {
+  return value.startsWith('http://') || value.startsWith('https://')
+}
+
 // ─── Read-only view ──────────────────────────────────────────────────────
 
 function ReadOnlyView({ session }: { session: Session }) {
@@ -150,7 +154,24 @@ function ReadOnlyView({ session }: { session: Session }) {
               <div className="text-zinc-500 text-[10px] font-mono tracking-widest uppercase mb-2">Photos</div>
               <ul className="space-y-1">
                 {session.photos.map((p, i) => (
-                  <li key={i} className="text-zinc-400 text-xs font-mono">{p}</li>
+                  <li key={i} className="flex items-center gap-3">
+                    {isPreviewablePhotoUrl(p) && (
+                      <a href={p} target="_blank" rel="noreferrer" className="shrink-0">
+                        <div
+                          className="h-12 w-12 rounded border border-zinc-700 bg-zinc-800 bg-cover bg-center"
+                          style={{ backgroundImage: `url("${p}")` }}
+                        />
+                      </a>
+                    )}
+                    <a
+                      href={p}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-zinc-400 hover:text-zinc-200 text-xs font-mono break-all"
+                    >
+                      {p}
+                    </a>
+                  </li>
                 ))}
               </ul>
             </div>
@@ -188,7 +209,8 @@ export default function LogDayPage() {
   const [calories, setCalories] = useState('')
   const [notes, setNotes] = useState('')
   const [photos, setPhotos] = useState<string[]>([])
-  const [photoInput, setPhotoInput] = useState('')
+  const [uploadingPhotos, setUploadingPhotos] = useState(false)
+  const [photoUploadMsg, setPhotoUploadMsg] = useState<string | null>(null)
 
   // Session import state
   const [showImport, setShowImport] = useState(false)
@@ -481,16 +503,41 @@ export default function LogDayPage() {
     }
   }
 
-  function addPhoto() {
-    const trimmed = photoInput.trim()
-    if (trimmed) {
-      setPhotos((prev) => [...prev, trimmed])
-      setPhotoInput('')
-    }
-  }
-
   function removePhoto(index: number) {
     setPhotos((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  async function handlePhotoFilesUpload(fileList: FileList | null) {
+    const files = Array.from(fileList ?? [])
+    if (files.length === 0 || !session) return
+
+    setUploadingPhotos(true)
+    setPhotoUploadMsg(null)
+    try {
+      const uploadedUrls: string[] = []
+      for (const file of files) {
+        const formData = new FormData()
+        formData.set('file', file)
+        formData.set('date', session.date)
+        const res = await fetch('/api/photos', {
+          method: 'POST',
+          body: formData,
+        })
+        const data = await res.json()
+        if (!res.ok || !data.url) {
+          throw new Error(data.error ?? `Upload failed for ${file.name}`)
+        }
+        uploadedUrls.push(data.url as string)
+      }
+
+      setPhotos((prev) => [...prev, ...uploadedUrls])
+      setPhotoUploadMsg(`Uploaded ${uploadedUrls.length} photo${uploadedUrls.length > 1 ? 's' : ''}`)
+      setTimeout(() => setPhotoUploadMsg(null), 2500)
+    } catch (error) {
+      setPhotoUploadMsg(error instanceof Error ? error.message : 'Photo upload failed')
+    } finally {
+      setUploadingPhotos(false)
+    }
   }
 
   async function handleRefreshGarmin() {
@@ -912,21 +959,22 @@ export default function LogDayPage() {
                     multiple
                     className="hidden"
                     onChange={(e) => {
-                      const files = Array.from(e.target.files ?? [])
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      files.forEach((f) => setPhotos((prev) => [...prev, (f as any).path ?? f.name]))
+                      void handlePhotoFilesUpload(e.target.files)
                       e.target.value = ''
                     }}
                   />
                 </label>
-                <button
-                  type="button"
-                  onClick={addPhoto}
-                  className="h-11 px-4 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs tracking-widest uppercase transition-colors"
-                >
-                  Add path
-                </button>
               </div>
+              {photoUploadMsg && (
+                <p className={`text-[10px] font-mono ${photoUploadMsg.startsWith('Uploaded') ? 'text-lime-400' : 'text-red-400'}`}>
+                  {photoUploadMsg}
+                </p>
+              )}
+              {uploadingPhotos && (
+                <p className="text-zinc-500 text-[10px] font-mono">
+                  Uploading photos...
+                </p>
+              )}
               {photos.length > 0 && (
                 <ul className="space-y-1.5 mt-2">
                   {photos.map((p, i) => (
@@ -934,7 +982,24 @@ export default function LogDayPage() {
                       key={i}
                       className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2"
                     >
-                      <span className="text-zinc-400 text-xs font-mono truncate">{p}</span>
+                      <div className="flex items-center gap-3 min-w-0">
+                        {isPreviewablePhotoUrl(p) && (
+                          <a href={p} target="_blank" rel="noreferrer" className="shrink-0">
+                            <div
+                              className="h-12 w-12 rounded border border-zinc-700 bg-zinc-800 bg-cover bg-center"
+                              style={{ backgroundImage: `url("${p}")` }}
+                            />
+                          </a>
+                        )}
+                        <a
+                          href={p}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-zinc-400 hover:text-zinc-200 text-xs font-mono truncate"
+                        >
+                          {p}
+                        </a>
+                      </div>
                       <button
                         type="button"
                         onClick={() => removePhoto(i)}
