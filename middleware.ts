@@ -6,6 +6,11 @@ const PUBLIC_PATHS = ['/login', '/api/auth/login']
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // Allow unauthenticated photo reads so previews/open-in-new-tab work on mobile browsers/PWAs.
+  if (pathname.startsWith('/api/photos') && request.method === 'GET') {
+    return NextResponse.next()
+  }
+
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next()
   }

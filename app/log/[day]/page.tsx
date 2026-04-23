@@ -37,6 +37,15 @@ type GarminSyncResponse = {
   avg_speed_mps?: number | null
 }
 
+function isPreviewablePhotoUrl(value: string): boolean {
+  return value.startsWith('http://') || value.startsWith('https://')
+}
+
+function resolvePhotoHref(value: string): string {
+  if (isPreviewablePhotoUrl(value)) return value
+  return `/api/photos?pathname=${encodeURIComponent(value)}`
+}
+
 // ─── Read-only view ──────────────────────────────────────────────────────
 
 function ReadOnlyView({ session }: { session: Session }) {
@@ -150,7 +159,22 @@ function ReadOnlyView({ session }: { session: Session }) {
               <div className="text-zinc-500 text-[10px] font-mono tracking-widest uppercase mb-2">Photos</div>
               <ul className="space-y-1">
                 {session.photos.map((p, i) => (
-                  <li key={i} className="text-zinc-400 text-xs font-mono">{p}</li>
+                  <li key={i} className="flex items-center gap-3">
+                    <a href={resolvePhotoHref(p)} target="_blank" rel="noreferrer" className="shrink-0">
+                      <div
+                        className="h-12 w-12 rounded border border-zinc-700 bg-zinc-800 bg-cover bg-center"
+                        style={{ backgroundImage: `url("${resolvePhotoHref(p)}")` }}
+                      />
+                    </a>
+                    <a
+                      href={resolvePhotoHref(p)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-zinc-400 hover:text-zinc-200 text-xs font-mono break-all"
+                    >
+                      {p}
+                    </a>
+                  </li>
                 ))}
               </ul>
             </div>
@@ -188,7 +212,8 @@ export default function LogDayPage() {
   const [calories, setCalories] = useState('')
   const [notes, setNotes] = useState('')
   const [photos, setPhotos] = useState<string[]>([])
-  const [photoInput, setPhotoInput] = useState('')
+  const [uploadingPhotos, setUploadingPhotos] = useState(false)
+  const [photoUploadMsg, setPhotoUploadMsg] = useState<string | null>(null)
 
   // Session import state
   const [showImport, setShowImport] = useState(false)
@@ -410,26 +435,39 @@ export default function LogDayPage() {
     }
   }, [])
 
-  async function handleSaveProgress() {
+  async function saveSession(
+    nextStatus: Session['status'],
+    options?: { redirectHome?: boolean; successMessage?: string; syncGarmin?: boolean },
+  ) {
     setSaving(true)
     setSaveMsg('')
     try {
-      const sync = session ? await refreshFromGarmin({ date: session.date, type: session.type }, false) : null
+      const shouldSyncGarmin = options?.syncGarmin ?? false
+      const sync = shouldSyncGarmin && session
+        ? await refreshFromGarmin({ date: session.date, type: session.type }, false)
+        : null
       const payload = mergeGarminIntoPayload(buildPayload(), sync)
       const res = await fetch(`/api/session/${day}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, status: 'in_progress' }),
+        body: JSON.stringify({ ...payload, status: nextStatus }),
       })
       if (!res.ok) {
-        const err = await res.json()
-        setSaveMsg(err.error ?? 'Save failed')
-      } else {
-        const updated = await res.json() as Session
-        setSession(updated)
-        setSaveMsg('Saved!')
-        setTimeout(() => setSaveMsg(''), 2000)
+        const err = await res.json().catch(() => ({ error: 'Save failed' }))
+        setSaveMsg((err as { error?: string }).error ?? 'Save failed')
+        return
       }
+
+      const updated = await res.json() as Session
+      setSession(updated)
+
+      if (options?.redirectHome) {
+        router.push('/')
+        return
+      }
+
+      setSaveMsg(options?.successMessage ?? 'Saved!')
+      setTimeout(() => setSaveMsg(''), 2000)
     } catch {
       setSaveMsg('Network error')
     } finally {
@@ -437,27 +475,20 @@ export default function LogDayPage() {
     }
   }
 
+  async function handleSaveProgress() {
+    await saveSession('in_progress', { successMessage: 'Saved!', syncGarmin: true })
+  }
+
+  async function handleSaveChanges() {
+    const currentStatus = session?.status ?? 'in_progress'
+    await saveSession(currentStatus, {
+      successMessage: 'Saved!',
+      syncGarmin: currentStatus !== 'completed' && currentStatus !== 'skipped',
+    })
+  }
+
   async function handleMarkComplete() {
-    setSaving(true)
-    try {
-      const sync = session ? await refreshFromGarmin({ date: session.date, type: session.type }, false) : null
-      const payload = mergeGarminIntoPayload(buildPayload(), sync)
-      const res = await fetch(`/api/session/${day}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, status: 'completed' }),
-      })
-      if (!res.ok) {
-        const err = await res.json()
-        setSaveMsg(err.error ?? 'Failed to complete session')
-        setSaving(false)
-      } else {
-        router.push('/')
-      }
-    } catch {
-      setSaveMsg('Network error')
-      setSaving(false)
-    }
+    await saveSession('completed', { redirectHome: true, syncGarmin: true })
   }
 
   async function handleSkip() {
@@ -481,16 +512,52 @@ export default function LogDayPage() {
     }
   }
 
-  function addPhoto() {
-    const trimmed = photoInput.trim()
-    if (trimmed) {
-      setPhotos((prev) => [...prev, trimmed])
-      setPhotoInput('')
-    }
-  }
-
   function removePhoto(index: number) {
     setPhotos((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  async function handlePhotoFilesUpload(fileList: FileList | null) {
+    const files = Array.from(fileList ?? [])
+    if (files.length === 0 || !session) return
+
+    setUploadingPhotos(true)
+    setPhotoUploadMsg(null)
+    try {
+      const uploadedUrls: string[] = []
+      for (const file of files) {
+        const formData = new FormData()
+        formData.set('file', file)
+        formData.set('date', session.date)
+        const res = await fetch('/api/photos', {
+          method: 'POST',
+          body: formData,
+        })
+        const raw = await res.text()
+        let data: { pathname?: string; url?: string; error?: string } = {}
+        if (raw.trim().length > 0) {
+          try {
+            data = JSON.parse(raw) as { pathname?: string; url?: string; error?: string }
+          } catch {
+            throw new Error(
+              `Upload failed for ${file.name} (${res.status}): ${raw.slice(0, 120)}`,
+            )
+          }
+        }
+        const uploadedRef = data.pathname ?? data.url
+        if (!res.ok || !uploadedRef) {
+          throw new Error(data.error ?? `Upload failed for ${file.name} (${res.status})`)
+        }
+        uploadedUrls.push(uploadedRef)
+      }
+
+      setPhotos((prev) => [...prev, ...uploadedUrls])
+      setPhotoUploadMsg(`Uploaded ${uploadedUrls.length} photo${uploadedUrls.length > 1 ? 's' : ''}`)
+      setTimeout(() => setPhotoUploadMsg(null), 2500)
+    } catch (error) {
+      setPhotoUploadMsg(error instanceof Error ? error.message : 'Photo upload failed')
+    } finally {
+      setUploadingPhotos(false)
+    }
   }
 
   async function handleRefreshGarmin() {
@@ -912,21 +979,22 @@ export default function LogDayPage() {
                     multiple
                     className="hidden"
                     onChange={(e) => {
-                      const files = Array.from(e.target.files ?? [])
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      files.forEach((f) => setPhotos((prev) => [...prev, (f as any).path ?? f.name]))
+                      void handlePhotoFilesUpload(e.target.files)
                       e.target.value = ''
                     }}
                   />
                 </label>
-                <button
-                  type="button"
-                  onClick={addPhoto}
-                  className="h-11 px-4 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs tracking-widest uppercase transition-colors"
-                >
-                  Add path
-                </button>
               </div>
+              {photoUploadMsg && (
+                <p className={`text-[10px] font-mono ${photoUploadMsg.startsWith('Uploaded') ? 'text-lime-400' : 'text-red-400'}`}>
+                  {photoUploadMsg}
+                </p>
+              )}
+              {uploadingPhotos && (
+                <p className="text-zinc-500 text-[10px] font-mono">
+                  Uploading photos...
+                </p>
+              )}
               {photos.length > 0 && (
                 <ul className="space-y-1.5 mt-2">
                   {photos.map((p, i) => (
@@ -934,7 +1002,22 @@ export default function LogDayPage() {
                       key={i}
                       className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2"
                     >
-                      <span className="text-zinc-400 text-xs font-mono truncate">{p}</span>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <a href={resolvePhotoHref(p)} target="_blank" rel="noreferrer" className="shrink-0">
+                          <div
+                            className="h-12 w-12 rounded border border-zinc-700 bg-zinc-800 bg-cover bg-center"
+                            style={{ backgroundImage: `url("${resolvePhotoHref(p)}")` }}
+                          />
+                        </a>
+                        <a
+                          href={resolvePhotoHref(p)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-zinc-400 hover:text-zinc-200 text-xs font-mono truncate"
+                        >
+                          {p}
+                        </a>
+                      </div>
                       <button
                         type="button"
                         onClick={() => removePhoto(i)}
@@ -1030,7 +1113,7 @@ export default function LogDayPage() {
           <div className="grid grid-cols-1 gap-3 pt-2">
             {session.status === 'completed' || session.status === 'skipped' ? (
               <button
-                onClick={handleMarkComplete}
+                onClick={handleSaveChanges}
                 disabled={saving}
                 className="w-full h-14 rounded-xl bg-lime-400 hover:bg-lime-300 active:bg-lime-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
               >
