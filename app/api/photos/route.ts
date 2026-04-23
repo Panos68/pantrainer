@@ -6,6 +6,13 @@ function sanitizeFilename(name: string): string {
 }
 
 export async function POST(request: Request) {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return Response.json(
+      { error: 'BLOB_READ_WRITE_TOKEN is not configured' },
+      { status: 500 },
+    )
+  }
+
   const formData = await request.formData()
   const file = formData.get('file')
   const date = (formData.get('date') as string | null) ?? 'unknown-date'
@@ -18,17 +25,24 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Only image uploads are supported' }, { status: 415 })
   }
 
-  const filename = sanitizeFilename(file.name || 'photo.jpg')
+  const filename = sanitizeFilename(file.name || 'photo.jpg') || 'photo.jpg'
   const pathname = `data/session-photos/${date}/${filename}`
 
-  const uploaded = await put(pathname, file, {
-    access: 'public',
-    addRandomSuffix: true,
-    contentType: file.type,
-  })
+  try {
+    const uploaded = await put(pathname, file, {
+      access: 'public',
+      addRandomSuffix: true,
+      contentType: file.type,
+    })
 
-  return Response.json({
-    url: uploaded.url,
-    pathname: uploaded.pathname,
-  })
+    return Response.json({
+      url: uploaded.url,
+      pathname: uploaded.pathname,
+    })
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : 'Failed to upload photo' },
+      { status: 500 },
+    )
+  }
 }

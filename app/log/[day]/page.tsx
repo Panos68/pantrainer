@@ -523,9 +523,17 @@ export default function LogDayPage() {
           method: 'POST',
           body: formData,
         })
-        const data = await res.json()
+        const raw = await res.text()
+        let data: { url?: string; error?: string } = {}
+        if (raw.trim().length > 0) {
+          try {
+            data = JSON.parse(raw) as { url?: string; error?: string }
+          } catch {
+            throw new Error(`Upload failed for ${file.name} (${res.status})`)
+          }
+        }
         if (!res.ok || !data.url) {
-          throw new Error(data.error ?? `Upload failed for ${file.name}`)
+          throw new Error(data.error ?? `Upload failed for ${file.name} (${res.status})`)
         }
         uploadedUrls.push(data.url as string)
       }
