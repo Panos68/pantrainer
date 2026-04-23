@@ -41,6 +41,11 @@ function isPreviewablePhotoUrl(value: string): boolean {
   return value.startsWith('http://') || value.startsWith('https://')
 }
 
+function resolvePhotoHref(value: string): string {
+  if (isPreviewablePhotoUrl(value)) return value
+  return `/api/photos?pathname=${encodeURIComponent(value)}`
+}
+
 // ─── Read-only view ──────────────────────────────────────────────────────
 
 function ReadOnlyView({ session }: { session: Session }) {
@@ -155,16 +160,14 @@ function ReadOnlyView({ session }: { session: Session }) {
               <ul className="space-y-1">
                 {session.photos.map((p, i) => (
                   <li key={i} className="flex items-center gap-3">
-                    {isPreviewablePhotoUrl(p) && (
-                      <a href={p} target="_blank" rel="noreferrer" className="shrink-0">
-                        <div
-                          className="h-12 w-12 rounded border border-zinc-700 bg-zinc-800 bg-cover bg-center"
-                          style={{ backgroundImage: `url("${p}")` }}
-                        />
-                      </a>
-                    )}
+                    <a href={resolvePhotoHref(p)} target="_blank" rel="noreferrer" className="shrink-0">
+                      <div
+                        className="h-12 w-12 rounded border border-zinc-700 bg-zinc-800 bg-cover bg-center"
+                        style={{ backgroundImage: `url("${resolvePhotoHref(p)}")` }}
+                      />
+                    </a>
                     <a
-                      href={p}
+                      href={resolvePhotoHref(p)}
                       target="_blank"
                       rel="noreferrer"
                       className="text-zinc-400 hover:text-zinc-200 text-xs font-mono break-all"
@@ -524,18 +527,19 @@ export default function LogDayPage() {
           body: formData,
         })
         const raw = await res.text()
-        let data: { url?: string; error?: string } = {}
+        let data: { pathname?: string; url?: string; error?: string } = {}
         if (raw.trim().length > 0) {
           try {
-            data = JSON.parse(raw) as { url?: string; error?: string }
+            data = JSON.parse(raw) as { pathname?: string; url?: string; error?: string }
           } catch {
             throw new Error(`Upload failed for ${file.name} (${res.status})`)
           }
         }
-        if (!res.ok || !data.url) {
+        const uploadedRef = data.pathname ?? data.url
+        if (!res.ok || !uploadedRef) {
           throw new Error(data.error ?? `Upload failed for ${file.name} (${res.status})`)
         }
-        uploadedUrls.push(data.url as string)
+        uploadedUrls.push(uploadedRef)
       }
 
       setPhotos((prev) => [...prev, ...uploadedUrls])
@@ -991,16 +995,14 @@ export default function LogDayPage() {
                       className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2"
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        {isPreviewablePhotoUrl(p) && (
-                          <a href={p} target="_blank" rel="noreferrer" className="shrink-0">
-                            <div
-                              className="h-12 w-12 rounded border border-zinc-700 bg-zinc-800 bg-cover bg-center"
-                              style={{ backgroundImage: `url("${p}")` }}
-                            />
-                          </a>
-                        )}
+                        <a href={resolvePhotoHref(p)} target="_blank" rel="noreferrer" className="shrink-0">
+                          <div
+                            className="h-12 w-12 rounded border border-zinc-700 bg-zinc-800 bg-cover bg-center"
+                            style={{ backgroundImage: `url("${resolvePhotoHref(p)}")` }}
+                          />
+                        </a>
                         <a
-                          href={p}
+                          href={resolvePhotoHref(p)}
                           target="_blank"
                           rel="noreferrer"
                           className="text-zinc-400 hover:text-zinc-200 text-xs font-mono truncate"

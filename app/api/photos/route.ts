@@ -1,4 +1,4 @@
-import { put } from '@vercel/blob'
+import { head, put } from '@vercel/blob'
 
 function sanitizeFilename(name: string): string {
   const normalized = name.trim().replace(/\s+/g, '-').toLowerCase()
@@ -30,18 +30,56 @@ export async function POST(request: Request) {
 
   try {
     const uploaded = await put(pathname, file, {
-      access: 'public',
+      access: 'private',
       addRandomSuffix: true,
       contentType: file.type,
     })
 
     return Response.json({
-      url: uploaded.url,
       pathname: uploaded.pathname,
     })
   } catch (error) {
     return Response.json(
       { error: error instanceof Error ? error.message : 'Failed to upload photo' },
+      { status: 500 },
+    )
+  }
+}
+
+export async function GET(request: Request) {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return Response.json(
+      { error: 'BLOB_READ_WRITE_TOKEN is not configured' },
+      { status: 500 },
+    )
+  }
+
+  const { searchParams } = new URL(request.url)
+  const pathname = searchParams.get('pathname')
+  if (!pathname) {
+    return Response.json({ error: 'Missing pathname' }, { status: 400 })
+  }
+
+  try {
+    const blob = await head(pathname)
+    const res = await fetch(blob.url, {
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` },
+    })
+    if (!res.ok) {
+      return Response.json({ error: 'Failed to read photo blob' }, { status: 502 })
+    }
+
+    const bytes = await res.arrayBuffer()
+    return new Response(bytes, {
+      headers: {
+        'Content-Type': res.headers.get('Content-Type') ?? 'application/octet-stream',
+        'Cache-Control': 'private, max-age=60',
+      },
+    })
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : 'Failed to read photo blob' },
       { status: 500 },
     )
   }
