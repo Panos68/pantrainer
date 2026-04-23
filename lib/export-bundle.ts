@@ -1,4 +1,5 @@
 import JSZip from 'jszip'
+import { head } from '@vercel/blob'
 
 interface ExportWithPhotos {
   photos_to_attach: string[]
@@ -11,6 +12,34 @@ function fileExtFromUrl(url: string): string {
     return match ? match[1].toLowerCase() : '.jpg'
   } catch {
     return '.jpg'
+  }
+}
+
+async function fetchPhotoBytes(photoRef: string): Promise<{ bytes: ArrayBuffer; ext: string }> {
+  if (photoRef.startsWith('http://') || photoRef.startsWith('https://')) {
+    const photoRes = await fetch(photoRef, { cache: 'no-store' })
+    if (!photoRes.ok) {
+      throw new Error(`Failed to fetch photo for bundle: ${photoRef}`)
+    }
+    return {
+      bytes: await photoRes.arrayBuffer(),
+      ext: fileExtFromUrl(photoRef),
+    }
+  }
+
+  const blob = await head(photoRef)
+  const token = process.env.BLOB_READ_WRITE_TOKEN
+  const photoRes = await fetch(blob.url, {
+    cache: 'no-store',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!photoRes.ok) {
+    throw new Error(`Failed to fetch private photo for bundle: ${photoRef}`)
+  }
+
+  return {
+    bytes: await photoRes.arrayBuffer(),
+    ext: fileExtFromUrl(blob.url),
   }
 }
 
@@ -36,16 +65,18 @@ export async function buildExportBundleResponse(
 
   for (let i = 0; i < uniquePhotos.length; i += 1) {
     const sourceUrl = uniquePhotos[i]
-    const photoRes = await fetch(sourceUrl, { cache: 'no-store' })
-    if (!photoRes.ok) {
+    let photoBytes: ArrayBuffer
+    let ext: string
+    try {
+      const fetched = await fetchPhotoBytes(sourceUrl)
+      photoBytes = fetched.bytes
+      ext = fetched.ext
+    } catch (error) {
       return Response.json(
-        { error: `Failed to fetch photo for bundle: ${sourceUrl}` },
+        { error: error instanceof Error ? error.message : `Failed to fetch photo for bundle: ${sourceUrl}` },
         { status: 502 },
       )
     }
-
-    const photoBytes = await photoRes.arrayBuffer()
-    const ext = fileExtFromUrl(sourceUrl)
     const bundlePath = `photos/${String(i + 1).padStart(2, '0')}${ext}`
     zip.file(bundlePath, photoBytes)
     photoManifest.push({
