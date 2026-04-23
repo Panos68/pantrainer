@@ -26,12 +26,12 @@ export async function POST(request: Request) {
   }
 
   const filename = sanitizeFilename(file.name || 'photo.jpg') || 'photo.jpg'
-  const pathname = `data/session-photos/${date}/${filename}`
+  const pathname = `data/session-photos/${date}/${Date.now()}-${filename}`
 
   try {
     await put(pathname, file, {
       access: 'private',
-      addRandomSuffix: true,
+      addRandomSuffix: false,
       contentType: file.type,
     })
 
