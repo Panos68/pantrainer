@@ -46,6 +46,14 @@ function resolvePhotoHref(value: string): string {
   return `/api/photos?pathname=${encodeURIComponent(value)}`
 }
 
+function todayIsoLocal(): string {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 // ─── Read-only view ──────────────────────────────────────────────────────
 
 function ReadOnlyView({ session }: { session: Session }) {
@@ -249,6 +257,7 @@ export default function LogDayPage() {
     hr_zones?: Array<{ zone_name: string; secs_in_zone: number; zone_high_boundary: number }> | null
   }>({})
   const [refreshingGarmin, setRefreshingGarmin] = useState(false)
+  const isFutureSession = session != null && session.date > todayIsoLocal()
 
   const refreshFromGarmin = useCallback(async (
     targetSession: Pick<Session, 'date' | 'type'>,
@@ -476,6 +485,13 @@ export default function LogDayPage() {
   }
 
   async function handleSaveProgress() {
+    if (isFutureSession) {
+      await saveSession('planned', {
+        successMessage: 'Plan saved!',
+        syncGarmin: false,
+      })
+      return
+    }
     await saveSession('in_progress', { successMessage: 'Saved!', syncGarmin: true })
   }
 
@@ -488,10 +504,18 @@ export default function LogDayPage() {
   }
 
   async function handleMarkComplete() {
+    if (isFutureSession) {
+      setSaveMsg('Cannot complete a future session')
+      return
+    }
     await saveSession('completed', { redirectHome: true, syncGarmin: true })
   }
 
   async function handleSkip() {
+    if (isFutureSession) {
+      setSaveMsg('Cannot skip a future session')
+      return
+    }
     setSaving(true)
     try {
       const res = await fetch(`/api/session/${day}`, {
@@ -622,7 +646,7 @@ export default function LogDayPage() {
         setNotes(data.session.notes ?? '')
         setImportJson('')
         setShowImport(false)
-        setImportMsg({ ok: true, text: 'Session updated' })
+        setImportMsg({ ok: true, text: 'Session updated and saved' })
         setTimeout(() => setImportMsg(null), 2500)
       }
     } catch {
@@ -664,6 +688,14 @@ export default function LogDayPage() {
             </p>
             <p className="text-zinc-300 text-sm font-mono leading-relaxed">
               {session.subtype}
+            </p>
+          </div>
+        )}
+
+        {isFutureSession && (
+          <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3">
+            <p className="text-amber-300 text-xs font-mono tracking-widest uppercase">
+              Future session — logging opens on the session date
             </p>
           </div>
         )}
@@ -1123,7 +1155,7 @@ export default function LogDayPage() {
               <>
                 <button
                   onClick={handleMarkComplete}
-                  disabled={saving}
+                  disabled={saving || isFutureSession}
                   className="w-full h-14 rounded-xl bg-lime-400 hover:bg-lime-300 active:bg-lime-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
                 >
                   {saving ? 'Saving...' : 'Mark Complete'}
@@ -1133,11 +1165,11 @@ export default function LogDayPage() {
                   disabled={saving}
                   className="w-full h-12 rounded-xl border border-zinc-600 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-bold text-xs tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
                 >
-                  {saving ? 'Saving...' : 'Save Progress'}
+                  {saving ? 'Saving...' : isFutureSession ? 'Save Plan' : 'Save Progress'}
                 </button>
                 <button
                   onClick={() => setShowSkip(true)}
-                  disabled={saving}
+                  disabled={saving || isFutureSession}
                   className="w-full h-11 rounded-xl border border-zinc-800 bg-transparent hover:bg-zinc-900 text-zinc-600 hover:text-zinc-400 font-bold text-xs tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
                 >
                   Skip Session
