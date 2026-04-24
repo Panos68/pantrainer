@@ -13,6 +13,7 @@ export const ExerciseSchema = z.object({
   actual_sets: z.number().nullable().optional(),
   actual_reps: z.union([z.number(), z.string()]).nullable().optional(),
   actual_weight_kg: z.number().nullable().optional(),
+  effort: z.enum(['easy', 'perfect', 'hard']).nullable().optional(),
   alternatives: z.array(z.object({
     name: z.string(),
     sets: z.number().nullable().optional(),
