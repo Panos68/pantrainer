@@ -43,6 +43,11 @@ export interface CoachContext {
     current_lifts: Record<string, number>
     pr_lifts: string[]
     plateau_lifts: string[]
+    effort_summary: {
+      easy: number
+      perfect: number
+      hard: number
+    }
   }
   constraints: {
     active_flags: WeekDoc['health_flags']
@@ -240,6 +245,18 @@ function buildCoachContext(
       current_lifts: currentLifts,
       pr_lifts,
       plateau_lifts,
+      effort_summary: currentWeek.sessions
+        .filter((s) => s.status === 'completed' && s.type === 'Strength')
+        .flatMap((s) => s.exercises)
+        .reduce(
+          (acc, ex) => {
+            if (ex.effort === 'easy') acc.easy++
+            else if (ex.effort === 'perfect') acc.perfect++
+            else if (ex.effort === 'hard') acc.hard++
+            return acc
+          },
+          { easy: 0, perfect: 0, hard: 0 },
+        ),
     },
     constraints: {
       active_flags,
