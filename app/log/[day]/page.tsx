@@ -269,7 +269,7 @@ export default function LogDayPage() {
       fetch('/api/garmin/recovery', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: targetSession.date }),
+        body: JSON.stringify({ date: targetSession.date, force: overwriteMetrics }),
       }).then((r) => (r.ok ? r.json() : null)),
     ])
 
