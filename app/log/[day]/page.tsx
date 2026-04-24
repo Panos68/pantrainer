@@ -794,7 +794,7 @@ export default function LogDayPage() {
                     )}
                   </div>
                   <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">{ex.sets ?? '—'}</div>
-                  <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">{ex.reps ?? '—'}</div>
+                  <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center overflow-hidden leading-tight break-words">{ex.reps ?? '—'}</div>
                   {type === 'Strength' && (
                     <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">
                       {ex.weight_kg != null ? ex.weight_kg : '—'}
