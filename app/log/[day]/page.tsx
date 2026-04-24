@@ -229,7 +229,7 @@ export default function LogDayPage() {
   const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
   // Exercise actuals state (indexed to match session.exercises)
-  type ExerciseActual = { sets: string; reps: string; weight_kg: string }
+  type ExerciseActual = { sets: string; reps: string; weight_kg: string; effort: 'easy' | 'perfect' | 'hard' | null }
   const [exerciseActuals, setExerciseActuals] = useState<ExerciseActual[]>([])
   const [swappedExercises, setSwappedExercises] = useState<Record<number, number>>({}) // index → alt index
   const [openSwapMenu, setOpenSwapMenu] = useState<number | null>(null)
@@ -360,6 +360,7 @@ export default function LogDayPage() {
                 : ex.weight_kg != null
                 ? ex.weight_kg.toString()
                 : '',
+            effort: ex.effort ?? null,
             }))
         )
 
@@ -397,6 +398,7 @@ export default function LogDayPage() {
                   : undefined,
               actual_weight_kg:
                 actual?.weight_kg !== '' ? Number(actual?.weight_kg) : undefined,
+              effort: actual?.effort ?? null,
             }
           })
         : session?.exercises ?? []
@@ -773,6 +775,7 @@ export default function LogDayPage() {
                                   sets: alt.sets?.toString() ?? a.sets,
                                   reps: alt.reps?.toString() ?? a.reps,
                                   weight_kg: alt.weight_kg?.toString() ?? '',
+                                  effort: null,
                                 } : a
                               ))
                               setOpenSwapMenu(null)
