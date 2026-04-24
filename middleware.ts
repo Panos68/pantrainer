@@ -4,8 +4,11 @@ import type { NextRequest } from 'next/server'
 const PUBLIC_PATHS = [
   '/login',
   '/api/auth/login',
-  '/api/automation/proposed',
-  '/api/automation/export',
+  '/.well-known/oauth-authorization-server',
+  '/api/oauth/authorize',
+  '/api/oauth/token',
+  '/api/mcp',
+  '/api/automation',
 ]
 
 export function middleware(request: NextRequest) {
