@@ -726,7 +726,10 @@ export default function LogDayPage() {
                 return (
                 <div
                   key={i}
-                  className="grid grid-cols-[minmax(0,1fr)_repeat(6,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)] border-b border-zinc-800/60 last:border-0 relative"
+                  className="border-b border-zinc-800/60 last:border-0"
+                >
+                <div
+                  className="grid grid-cols-[minmax(0,1fr)_repeat(6,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)] relative"
                 >
                   <div className="bg-zinc-950 px-3 py-2.5 text-zinc-300 text-xs font-mono font-bold relative min-w-0">
                     <div className="flex items-center gap-1.5 min-w-0">
@@ -831,6 +834,31 @@ export default function LogDayPage() {
                     className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full"
                     placeholder="—"
                   />
+                </div>
+                <div className="flex gap-1.5 px-3 py-2 bg-zinc-950 border-t border-zinc-800/40">
+                  {(['easy', 'perfect', 'hard'] as const).map((level) => {
+                    const selected = exerciseActuals[i]?.effort === level
+                    const colors: Record<string, string> = {
+                      easy: selected ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' : 'text-zinc-600 border-zinc-800 hover:border-zinc-700 hover:text-zinc-400',
+                      perfect: selected ? 'bg-blue-500/20 text-blue-400 border-blue-500/40' : 'text-zinc-600 border-zinc-800 hover:border-zinc-700 hover:text-zinc-400',
+                      hard: selected ? 'bg-red-500/20 text-red-400 border-red-500/40' : 'text-zinc-600 border-zinc-800 hover:border-zinc-700 hover:text-zinc-400',
+                    }
+                    return (
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() =>
+                          setExerciseActuals((prev) =>
+                            prev.map((a, j) => j === i ? { ...a, effort: a.effort === level ? null : level } : a)
+                          )
+                        }
+                        className={`flex-1 py-1 text-[10px] font-mono tracking-widest uppercase rounded border transition-colors ${colors[level]}`}
+                      >
+                        {level}
+                      </button>
+                    )
+                  })}
+                </div>
                 </div>
               )})}
             </div>
