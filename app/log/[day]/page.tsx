@@ -705,21 +705,21 @@ export default function LogDayPage() {
         {/* Muscle map */}
         <MuscleMap muscles={session.muscle_groups ?? []} />
 
-        {/* Exercise table — structured for Strength, read-only list for others */}
-        {type === 'Strength' && session.exercises && session.exercises.length > 0 && (
+        {/* Exercise table — interactive for all session types with exercises */}
+        {session.exercises && session.exercises.length > 0 && (
           <div className="space-y-2">
             <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
               Exercises — Planned → Actual
             </p>
             <div className="rounded-xl border border-zinc-800 overflow-visible">
-              <div className="grid grid-cols-[minmax(0,1fr)_repeat(6,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)] bg-zinc-900 border-b border-zinc-800">
+              <div className={`grid ${type === 'Strength' ? 'grid-cols-[minmax(0,1fr)_repeat(6,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)]' : 'grid-cols-[minmax(0,1fr)_repeat(4,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(4,2.75rem)]'} bg-zinc-900 border-b border-zinc-800`}>
                 <div className="px-3 py-2 text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Exercise</div>
                 <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">S</div>
                 <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">R</div>
-                <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">kg</div>
+                {type === 'Strength' && <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">kg</div>}
                 <div className="py-2 text-violet-400/60 text-[10px] font-mono text-center">S</div>
                 <div className="py-2 text-violet-400/60 text-[10px] font-mono text-center">R</div>
-                <div className="py-2 text-violet-400/60 text-[10px] font-mono text-center">kg</div>
+                {type === 'Strength' && <div className="py-2 text-violet-400/60 text-[10px] font-mono text-center">kg</div>}
               </div>
               {session.exercises.map((ex, i) => {
                 const openUp = i >= session.exercises.length - 2
@@ -729,7 +729,7 @@ export default function LogDayPage() {
                   className="border-b border-zinc-800/60 last:border-0"
                 >
                 <div
-                  className="grid grid-cols-[minmax(0,1fr)_repeat(6,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)] relative"
+                  className={`grid ${type === 'Strength' ? 'grid-cols-[minmax(0,1fr)_repeat(6,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)]' : 'grid-cols-[minmax(0,1fr)_repeat(4,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(4,2.75rem)]'} relative`}
                 >
                   <div className="bg-zinc-950 px-3 py-2.5 text-zinc-300 text-xs font-mono font-bold relative min-w-0">
                     <div className="flex items-center gap-1.5 min-w-0">
@@ -795,9 +795,11 @@ export default function LogDayPage() {
                   </div>
                   <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">{ex.sets ?? '—'}</div>
                   <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">{ex.reps ?? '—'}</div>
-                  <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">
-                    {ex.weight_kg != null ? ex.weight_kg : '—'}
-                  </div>
+                  {type === 'Strength' && (
+                    <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">
+                      {ex.weight_kg != null ? ex.weight_kg : '—'}
+                    </div>
+                  )}
                   <input
                     type="number"
                     inputMode="numeric"
@@ -822,20 +824,22 @@ export default function LogDayPage() {
                     className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full"
                     placeholder="—"
                   />
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    value={exerciseActuals[i]?.weight_kg ?? ''}
-                    onChange={(e) =>
-                      setExerciseActuals((prev) =>
-                        prev.map((a, j) => (j === i ? { ...a, weight_kg: e.target.value } : a))
-                      )
-                    }
-                    className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full"
-                    placeholder="—"
-                  />
+                  {type === 'Strength' && (
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={exerciseActuals[i]?.weight_kg ?? ''}
+                      onChange={(e) =>
+                        setExerciseActuals((prev) =>
+                          prev.map((a, j) => (j === i ? { ...a, weight_kg: e.target.value } : a))
+                        )
+                      }
+                      className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full"
+                      placeholder="—"
+                    />
+                  )}
                 </div>
-                <div className="flex gap-1.5 px-3 py-2 bg-zinc-950 border-t border-zinc-800/40">
+                {type !== 'Recovery' && <div className="flex gap-1.5 px-3 py-2 bg-zinc-950 border-t border-zinc-800/40">
                   {(['easy', 'perfect', 'hard'] as const).map((level) => {
                     const selected = exerciseActuals[i]?.effort === level
                     const colors: Record<string, string> = {
@@ -858,35 +862,13 @@ export default function LogDayPage() {
                       </button>
                     )
                   })}
-                </div>
+                </div>}
                 </div>
               )})}
             </div>
             <p className="text-zinc-600 text-[10px] font-mono">
               Violet = actual. Pre-filled from plan — edit what changed.
             </p>
-          </div>
-        )}
-
-        {type !== 'Strength' && session.exercises && session.exercises.length > 0 && (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-2">
-            <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase mb-2">
-              Planned
-            </p>
-            <ul className="space-y-1.5">
-              {session.exercises.map((ex, i) => (
-                <li key={i} className="flex items-baseline gap-2 text-sm font-mono">
-                  <span className="text-zinc-300 font-bold">{ex.name}</span>
-                  {ex.sets != null && ex.reps != null && (
-                    <span className="text-zinc-500">{ex.sets}×{ex.reps}</span>
-                  )}
-                  {ex.weight_kg != null && (
-                    <span className="text-violet-400">@ {ex.weight_kg}kg</span>
-                  )}
-                  {ex.notes && <span className="text-zinc-600 text-xs">— {ex.notes}</span>}
-                </li>
-              ))}
-            </ul>
           </div>
         )}
 
