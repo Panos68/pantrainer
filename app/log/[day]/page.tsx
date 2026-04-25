@@ -743,7 +743,7 @@ export default function LogDayPage() {
                           : ex.name}
                       </span>
                       <a
-                        href={`https://muscles.wiki/exercises/${(swappedExercises[i] != null ? (ex.alternatives[swappedExercises[i]]?.name ?? ex.name) : ex.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`}
+                        href={`https://musclewiki.com/exercise/${(swappedExercises[i] != null ? (ex.alternatives[swappedExercises[i]]?.name ?? ex.name) : ex.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="shrink-0 text-zinc-700 hover:text-zinc-400 transition-colors text-[10px]"
