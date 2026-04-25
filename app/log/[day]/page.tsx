@@ -422,7 +422,7 @@ export default function LogDayPage() {
       training_stress_score: garminTraining.training_stress_score ?? null,
       hr_zones: garminTraining.hr_zones ?? null,
     }
-  }, [type, subtype, duration, avgHr, calories, notes, photos, exerciseActuals, session, swappedExercises, garminSynced, garminTraining])
+  }, [type, subtype, duration, avgHr, calories, rpe, notes, photos, exerciseActuals, session, swappedExercises, garminSynced, garminTraining])
 
   const mergeGarminIntoPayload = useCallback((
     payload: ReturnType<typeof buildPayload>,
@@ -1004,20 +1004,24 @@ export default function LogDayPage() {
               Session RPE
             </label>
             <div className="flex gap-1.5 flex-wrap">
-              {[1,2,3,4,5,6,7,8,9,10].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setRpe(rpe === String(n) ? '' : String(n))}
-                  className={`w-9 h-9 rounded-lg text-sm font-bold transition-colors ${
-                    rpe === String(n)
-                      ? 'bg-lime-400 text-zinc-950'
-                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                  }`}
-                >
-                  {n}
-                </button>
-              ))}
+              {[1,2,3,4,5,6,7,8,9,10].map((n) => {
+                const selected = rpe === String(n)
+                const color = n <= 3
+                  ? selected ? 'bg-emerald-500 text-white' : 'bg-zinc-800 text-emerald-600 hover:bg-zinc-700'
+                  : n <= 6
+                  ? selected ? 'bg-amber-400 text-zinc-950' : 'bg-zinc-800 text-amber-600 hover:bg-zinc-700'
+                  : selected ? 'bg-red-500 text-white' : 'bg-zinc-800 text-red-600 hover:bg-zinc-700'
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setRpe(rpe === String(n) ? '' : String(n))}
+                    className={`w-9 h-9 rounded-lg text-sm font-bold transition-colors ${color}`}
+                  >
+                    {n}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
