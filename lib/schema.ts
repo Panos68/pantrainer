@@ -48,6 +48,7 @@ export const SessionSchema = z.object({
   })).nullable().optional(),
   muscle_groups: z.array(z.string()).default([]),
   rpe: z.number().min(1).max(10).nullable().optional(),
+  reasoning: z.string().nullable().optional(),
 })
 
 // Week summary
