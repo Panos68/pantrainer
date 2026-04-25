@@ -742,6 +742,16 @@ export default function LogDayPage() {
                           ? ex.alternatives[swappedExercises[i]]?.name ?? ex.name
                           : ex.name}
                       </span>
+                      <a
+                        href={`https://muscles.wiki/exercises/${(swappedExercises[i] != null ? (ex.alternatives[swappedExercises[i]]?.name ?? ex.name) : ex.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 text-zinc-700 hover:text-zinc-400 transition-colors text-[10px]"
+                        title="How to perform"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        ↗
+                      </a>
                       {ex.alternatives && ex.alternatives.length > 0 && (
                         <button
                           type="button"
