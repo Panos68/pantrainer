@@ -48,7 +48,6 @@ export default function ExerciseDemo({ name }: { name: string }) {
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
-  const videoUrl = match?.videoURL?.find((u) => u) ?? null
   const youtubeWatch = match?.youtubeURL
     ? match.youtubeURL.replace('/embed/', '/watch?v=')
     : null
@@ -69,17 +68,6 @@ export default function ExerciseDemo({ name }: { name: string }) {
         <div className="absolute left-0 top-full mt-1 z-30 w-64 rounded-xl border border-zinc-700 bg-zinc-900 shadow-xl overflow-hidden">
           {loading && (
             <div className="p-3 text-zinc-500 text-[10px] font-mono">Loading…</div>
-          )}
-
-          {!loading && videoUrl && (
-            <video
-              src={videoUrl}
-              autoPlay
-              loop
-              muted
-              playsInline
-              className="w-full"
-            />
           )}
 
           {!loading && (
