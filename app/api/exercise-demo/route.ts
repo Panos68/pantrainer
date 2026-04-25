@@ -20,7 +20,14 @@ export async function GET(req: Request) {
   const musclewikiUrl = `https://musclewiki.com/exercise/${slugify(name)}`
 
   try {
-    const res = await fetch(musclewikiUrl, { method: 'HEAD', redirect: 'follow' })
+    const res = await fetch(musclewikiUrl, {
+      method: 'GET',
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      },
+    })
+    console.log(`[exercise-demo] ${musclewikiUrl} → ${res.status}`)
     const url = res.ok ? musclewikiUrl : youtubeUrl(name)
     cache.set(name, url)
     return Response.json({ url })
