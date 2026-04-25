@@ -34,14 +34,22 @@ function score(exercise: WorkoutExercise, needleTokens: string[], needleCore: st
   // Exact match
   if (hayTokens.join(' ') === needleTokens.join(' ')) return 100
 
-  // Count how many needle words appear in the exercise name
-  const fullMatches = needleTokens.filter((t) => hayTokens.includes(t)).length
-  const coreMatches = needleCore.filter((t) => hayCore.includes(t)).length
+  // All needle words must appear somewhere
+  const allPresent = needleTokens.every((t) => hayTokens.includes(t))
+  if (!allPresent) return 0
 
-  // Penalise if the exercise has many extra words not in the needle
+  // Core movement word matches
+  const coreMatches = needleCore.filter((t) => hayCore.includes(t)).length
+  if (coreMatches === 0) return 0
+
+  // Penalise extra words in the exercise not in the needle
   const extraWords = hayTokens.filter((t) => !needleTokens.includes(t)).length
 
-  return (coreMatches * 3) + fullMatches - extraWords
+  // If needle has no equipment word, prefer barbell variants slightly
+  const needleHasEquipment = needleTokens.some((t) => EQUIPMENT.has(t))
+  const barbellBonus = !needleHasEquipment && hayTokens.includes('barbell') ? 1 : 0
+
+  return (coreMatches * 4) + barbellBonus - extraWords
 }
 
 function findMatch(exercises: WorkoutExercise[], name: string): WorkoutExercise | null {
