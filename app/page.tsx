@@ -9,6 +9,7 @@ import NewWeekButton from '@/components/NewWeekButton'
 import HealthFlagsBanner from '@/components/HealthFlagsBanner'
 import WeekBrowser from '@/components/WeekBrowser'
 import HomeQuickPanels from '@/components/HomeQuickPanels'
+import RecoveryScorePanel from '@/components/RecoveryScorePanel'
 
 export default async function Home() {
   const profile = await readAthleteProfile()
@@ -67,6 +68,8 @@ export default async function Home() {
             <GymWeekBadge gymWeek={appState.gymWeek} />
           </div>
         </header>
+
+        <RecoveryScorePanel />
 
         <div className="space-y-3">
           {hasActiveFlags && <HealthFlagsBanner flags={week.health_flags} />}
