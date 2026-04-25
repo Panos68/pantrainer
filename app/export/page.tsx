@@ -401,6 +401,42 @@ function ExportSection() {
   )
 }
 
+// ─── Claude Prompt Section ────────────────────────────────────────────────────
+
+const REASONING_PROMPT = `For each session in the plan, add a "reasoning" field (string, max 2 sentences) explaining why this session type and intensity was chosen for that day — referencing recovery score, ACWR, lift history, or constraints where relevant. Keep it factual and specific.`
+
+function ClaudePromptSection() {
+  const [copied, setCopied] = useState(false)
+
+  function handleCopy() {
+    navigator.clipboard.writeText(REASONING_PROMPT)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <details className="rounded-xl border border-zinc-800 bg-zinc-900/60">
+      <summary className="cursor-pointer p-4 text-zinc-400 text-xs font-mono tracking-widest uppercase select-none hover:text-zinc-300 transition-colors">
+        Claude prompt instructions ▾
+      </summary>
+      <div className="px-4 pb-4 space-y-2">
+        <p className="text-zinc-500 text-xs leading-relaxed">
+          Include this in your Claude message alongside the exported JSON to get reasoning per session:
+        </p>
+        <pre className="bg-zinc-950 rounded-lg p-3 text-[11px] text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed overflow-x-auto">
+          {REASONING_PROMPT}
+        </pre>
+        <button
+          onClick={handleCopy}
+          className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors font-mono"
+        >
+          {copied ? 'Copied!' : 'Copy to clipboard'}
+        </button>
+      </div>
+    </details>
+  )
+}
+
 // ─── Import Section ───────────────────────────────────────────────────────────
 
 function ImportSection() {
@@ -628,6 +664,9 @@ export default function ExportPage() {
 
         {/* Export */}
         <ExportSection />
+
+        {/* Claude prompt instructions */}
+        <ClaudePromptSection />
 
         {/* Divider */}
         <div className="h-px bg-zinc-800" />
