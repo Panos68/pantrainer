@@ -366,7 +366,8 @@ export default function LogDayPage() {
             }))
         )
 
-        if (sessionData.status !== 'completed' && sessionData.status !== 'skipped') {
+        // Auto-fetch if no Garmin match yet — regardless of status
+        if (!sessionData.garmin_activity_id) {
           void refreshFromGarmin({ date: sessionData.date, type: sessionData.type }, false)
         }
       } catch (err) {
