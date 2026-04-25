@@ -1,4 +1,5 @@
 import type { WeekDoc } from './schema'
+import { calcRecoveryScore } from './recovery-score'
 import { readArchivedWeeks, readAppState } from './data'
 import { sessionToLoadPoint, type TrainingLoadPoint } from './training-load'
 import { format, parseISO, subDays } from 'date-fns'
@@ -60,6 +61,12 @@ export interface CoachContext {
     sessions_with_calories: number
     recovery_days_logged: number
     confidence_score: number
+  }
+  readiness_summary: {
+    today_score: number | null
+    today_label: string | null
+    recent_rpe: Array<{ date: string; rpe: number }>
+    avg_rpe_7d: number | null
   }
 }
 
@@ -219,6 +226,22 @@ function buildCoachContext(
     (confidenceComponents.reduce((sum, value) => sum + value, 0) / confidenceComponents.length) * 100,
   )
 
+  // Recovery score for today
+  const todayDate = format(new Date(), 'yyyy-MM-dd')
+  const todayGarmin = currentWeek.garmin_recovery?.[todayDate] ?? null
+  const todayReadiness = currentWeek.daily_readiness?.[todayDate] ?? null
+  const todayScore = calcRecoveryScore(todayGarmin, currentWeek.athlete.rhr_bpm, acwr, todayReadiness)
+
+  // RPE from completed sessions this week
+  const recentRpe = currentWeek.sessions
+    .filter((s) => s.status === 'completed' && s.rpe != null)
+    .map((s) => ({ date: s.date, rpe: s.rpe! }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+  const avg_rpe_7d =
+    recentRpe.length > 0
+      ? Math.round((recentRpe.reduce((sum, r) => sum + r.rpe, 0) / recentRpe.length) * 10) / 10
+      : null
+
   return {
     adherence: {
       completed,
@@ -269,6 +292,12 @@ function buildCoachContext(
       sessions_with_calories,
       recovery_days_logged: uniqueRecoveryDates,
       confidence_score,
+    },
+    readiness_summary: {
+      today_score: todayScore.total,
+      today_label: todayScore.label,
+      recent_rpe: recentRpe,
+      avg_rpe_7d,
     },
   }
 }
