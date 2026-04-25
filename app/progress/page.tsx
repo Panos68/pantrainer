@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic'
 
-import { readAllArchivedWeeks, readCurrentWeek } from '@/lib/data'
+import { readAllArchivedWeeks, readCurrentWeek, readAthleteProfile } from '@/lib/data'
 import LiftProgressChart from '@/components/LiftProgressChart'
 import ActivityTrendChart from '@/components/ActivityTrendChart'
 import PmcChart from '@/components/PmcChart'
@@ -9,13 +9,17 @@ import { sessionToLoadPoint } from '@/lib/training-load'
 import type { WeekDoc } from '@/lib/schema'
 
 export default async function ProgressPage() {
-  const [archived, current] = await Promise.all([readAllArchivedWeeks(), readCurrentWeek()])
+  const [archived, current, profile] = await Promise.all([readAllArchivedWeeks(), readCurrentWeek(), readAthleteProfile()])
   const weeks: WeekDoc[] = current ? [...archived, current] : archived
+
+  const athlete = profile
+    ? { rhr: profile.rhr_bpm, maxHr: 220 - profile.age }
+    : undefined
 
   const loadPoints = weeks
     .flatMap((w) => w.sessions)
     .filter((s) => s.status === 'completed')
-    .map(sessionToLoadPoint)
+    .map((s) => sessionToLoadPoint(s, athlete))
     .filter((p): p is NonNullable<typeof p> => p !== null)
 
   const pmcData = calcPmc(loadPoints)

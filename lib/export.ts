@@ -323,9 +323,10 @@ export async function buildExport(currentWeek: WeekDoc, options?: { includeDeloa
     ),
   }))
 
+  const exportAthlete = { rhr: currentWeek.athlete.rhr_bpm, maxHr: 220 - currentWeek.athlete.age }
   const training_load_history: TrainingLoadPoint[] = [...archivedWeeks, currentWeek]
     .flatMap((w) => w.sessions)
-    .map(sessionToLoadPoint)
+    .map((s) => sessionToLoadPoint(s, exportAthlete))
     .filter((p): p is TrainingLoadPoint => p !== null)
     .sort((a, b) => a.date.localeCompare(b.date))
 

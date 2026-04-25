@@ -38,7 +38,7 @@ function TypeDot(props: { cx?: number; cy?: number; payload?: TrainingLoadPoint 
 export default function ActivityTrendChart({ weeks }: ActivityTrendChartProps) {
   const points: TrainingLoadPoint[] = weeks
     .flatMap((w) => w.sessions)
-    .map(sessionToLoadPoint)
+    .map((s) => sessionToLoadPoint(s))
     .filter((p): p is TrainingLoadPoint => p !== null)
     .sort((a, b) => a.date.localeCompare(b.date))
 
