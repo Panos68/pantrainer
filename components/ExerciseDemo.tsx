@@ -1,38 +1,22 @@
 'use client'
 
-import { useState } from 'react'
+function slugify(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
 
 export default function ExerciseDemo({ name }: { name: string }) {
-  const [loading, setLoading] = useState(false)
-
-  async function handleClick(e: React.MouseEvent) {
-    e.stopPropagation()
-    if (loading) return
-    setLoading(true)
-    try {
-      const res = await fetch(`/api/exercise-demo?name=${encodeURIComponent(name)}`)
-      const { url } = await res.json()
-      window.open(url, '_blank', 'noopener,noreferrer')
-    } catch {
-      window.open(
-        `https://www.youtube.com/results?search_query=${encodeURIComponent(`how to ${name}`)}`,
-        '_blank',
-        'noopener,noreferrer'
-      )
-    } finally {
-      setLoading(false)
-    }
-  }
+  const url = `https://musclewiki.com/exercise/${slugify(name)}`
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className="shrink-0 text-zinc-700 hover:text-zinc-400 transition-colors text-[10px] disabled:opacity-50"
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="shrink-0 text-zinc-700 hover:text-zinc-400 transition-colors text-[10px]"
       title="How to perform"
-      disabled={loading}
+      onClick={(e) => e.stopPropagation()}
     >
-      {loading ? '…' : '↗'}
-    </button>
+      ↗
+    </a>
   )
 }
