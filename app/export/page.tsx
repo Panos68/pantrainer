@@ -19,7 +19,6 @@ interface WeekSummaryData {
 interface ExportSuccessData {
   photos_to_attach: string[]
   filename: string
-  version: 'v1' | 'v2'
   includes_photo_bundle: boolean
   photos_included_count: number
 }
@@ -101,7 +100,7 @@ function ExportSection() {
   const [weekData, setWeekData] = useState<WeekSummaryData | null>(null)
   const [appState, setAppState] = useState<AppState | null>(null)
   const [loading, setLoading] = useState(true)
-  const [exportingVersion, setExportingVersion] = useState<'v1' | 'v2' | null>(null)
+  const [exporting, setExporting] = useState(false)
   const [exportSuccess, setExportSuccess] = useState<ExportSuccessData | null>(null)
   const [exportError, setExportError] = useState<string | null>(null)
   const [includePhotosInBundle, setIncludePhotosInBundle] = useState(false)
@@ -119,12 +118,11 @@ function ExportSection() {
       .catch(() => setLoading(false))
   }, [])
 
-  async function handleExport(version: 'v1' | 'v2') {
-    setExportingVersion(version)
+  async function handleExport() {
+    setExporting(true)
     setExportError(null)
     try {
-      const endpoint = version === 'v2' ? '/api/export/v2' : '/api/export'
-      const endpointWithParams = `${endpoint}?includePhotos=${includePhotosInBundle ? '1' : '0'}&includeDeload=${includeDeloadInExport ? '1' : '0'}`
+      const endpointWithParams = `/api/export/v2?includePhotos=${includePhotosInBundle ? '1' : '0'}&includeDeload=${includeDeloadInExport ? '1' : '0'}`
       const res = await fetch(endpointWithParams, { method: 'POST' })
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Export failed' }))
@@ -182,14 +180,13 @@ function ExportSection() {
       setExportSuccess({
         photos_to_attach: photosToAttach,
         filename,
-        version,
         includes_photo_bundle: isZipBundle,
         photos_included_count: photosIncludedCount,
       })
     } catch (e) {
       setExportError(e instanceof Error ? e.message : 'Unexpected error')
     } finally {
-      setExportingVersion(null)
+      setExporting(false)
     }
   }
 
@@ -290,37 +287,20 @@ function ExportSection() {
               Mark this export as a deload week
             </span>
           </label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <button
-            onClick={() => handleExport('v1')}
-            disabled={exportingVersion !== null || !weekData}
+            onClick={() => handleExport()}
+            disabled={exporting || !weekData}
             className="w-full h-14 bg-lime-400 hover:bg-lime-300 active:bg-lime-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase rounded-xl transition-colors flex items-center justify-center gap-3"
           >
-            {exportingVersion === 'v1' ? (
+            {exporting ? (
               <>
                 <div className="w-4 h-4 border-2 border-zinc-700 border-t-zinc-950 rounded-full animate-spin" />
                 Exporting…
               </>
             ) : (
-              'Export Week (v1)'
+              'Export Week'
             )}
           </button>
-
-          <button
-            onClick={() => handleExport('v2')}
-            disabled={exportingVersion !== null || !weekData}
-            className="w-full h-14 bg-sky-400 hover:bg-sky-300 active:bg-sky-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase rounded-xl transition-colors flex items-center justify-center gap-3"
-          >
-            {exportingVersion === 'v2' ? (
-              <>
-                <div className="w-4 h-4 border-2 border-zinc-700 border-t-zinc-950 rounded-full animate-spin" />
-                Exporting…
-              </>
-            ) : (
-              'Export Week (v2)'
-            )}
-          </button>
-          </div>
         </div>
       )}
 
@@ -339,7 +319,7 @@ function ExportSection() {
             <span className="text-emerald-400 text-xl" aria-hidden="true">✓</span>
             <div>
               <p className="text-emerald-400 text-xs font-mono font-bold tracking-widest uppercase">
-                Export {exportSuccess.version.toUpperCase()} Saved to Downloads
+                Export Saved to Downloads
               </p>
               <p className="text-zinc-500 text-xs font-mono mt-0.5">{exportSuccess.filename}</p>
             </div>
@@ -398,42 +378,6 @@ function ExportSection() {
         </div>
       )}
     </section>
-  )
-}
-
-// ─── Claude Prompt Section ────────────────────────────────────────────────────
-
-const REASONING_PROMPT = `For each session in the plan, add a "reasoning" field (string, max 2 sentences) explaining why this session type and intensity was chosen for that day — referencing recovery score, ACWR, lift history, or constraints where relevant. Keep it factual and specific.`
-
-function ClaudePromptSection() {
-  const [copied, setCopied] = useState(false)
-
-  function handleCopy() {
-    navigator.clipboard.writeText(REASONING_PROMPT)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  return (
-    <details className="rounded-xl border border-zinc-800 bg-zinc-900/60">
-      <summary className="cursor-pointer p-4 text-zinc-400 text-xs font-mono tracking-widest uppercase select-none hover:text-zinc-300 transition-colors">
-        Claude prompt instructions ▾
-      </summary>
-      <div className="px-4 pb-4 space-y-2">
-        <p className="text-zinc-500 text-xs leading-relaxed">
-          Include this in your Claude message alongside the exported JSON to get reasoning per session:
-        </p>
-        <pre className="bg-zinc-950 rounded-lg p-3 text-[11px] text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed overflow-x-auto">
-          {REASONING_PROMPT}
-        </pre>
-        <button
-          onClick={handleCopy}
-          className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors font-mono"
-        >
-          {copied ? 'Copied!' : 'Copy to clipboard'}
-        </button>
-      </div>
-    </details>
   )
 }
 
@@ -664,9 +608,6 @@ export default function ExportPage() {
 
         {/* Export */}
         <ExportSection />
-
-        {/* Claude prompt instructions */}
-        <ClaudePromptSection />
 
         {/* Divider */}
         <div className="h-px bg-zinc-800" />
