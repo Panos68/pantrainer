@@ -23,6 +23,7 @@ interface ApiResponse {
   date: string
   score: ScoreBreakdown
   readiness: ReadinessData | null
+  sleep_avg_7d: number | null
 }
 
 const EMOJI_SCALE = ['😴', '😕', '😐', '🙂', '⚡']
@@ -143,6 +144,9 @@ export default function RecoveryScorePanel() {
 
       <div className="space-y-1.5">
         <BreakdownBar label="Sleep" value={score.sleep} max={40} />
+        {data.sleep_avg_7d != null && (
+          <p className="text-[10px] text-zinc-600 pl-16 -mt-1">7d avg {data.sleep_avg_7d}h</p>
+        )}
         <BreakdownBar label="RHR" value={score.rhr} max={30} />
         <BreakdownBar label="Load" value={score.load} max={20} />
         <BreakdownBar label="Feeling" value={score.subjective} max={10} />

@@ -51,7 +51,15 @@ export async function GET(req: NextRequest) {
   const acwr = calcACWR(loadPoints)
   const score = calcRecoveryScore(garmin, profile.rhr_bpm, acwr, readiness)
 
-  return NextResponse.json({ date, score, readiness, garmin })
+  // 7-day average sleep from current week's Garmin recovery data
+  const sleepValues = Object.values(week.garmin_recovery ?? {})
+    .map((r) => r.sleep_hours)
+    .filter((v): v is number => typeof v === 'number' && v > 0)
+  const sleep_avg_7d = sleepValues.length > 0
+    ? Math.round((sleepValues.reduce((a, b) => a + b, 0) / sleepValues.length) * 10) / 10
+    : null
+
+  return NextResponse.json({ date, score, readiness, garmin, sleep_avg_7d })
 }
 
 export async function POST(req: NextRequest) {
