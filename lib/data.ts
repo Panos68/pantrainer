@@ -1,6 +1,6 @@
 import { put, head, del, list } from '@vercel/blob'
 import { WeekDocSchema, AthleteProfileSchema, AppStateSchema } from './schema'
-import type { WeekDoc, AthleteProfile, AppState } from './schema'
+import type { WeekDoc, AthleteProfile, AppState, DailyReadiness } from './schema'
 import { format, parseISO } from 'date-fns'
 
 const CURRENT_WEEK_KEY = 'data/current-week.json'
@@ -120,4 +120,17 @@ export async function readAllArchivedWeeks(): Promise<WeekDoc[]> {
       return WeekDocSchema.parse(await res.json())
     })
   )
+}
+
+export async function readDailyReadiness(date: string): Promise<DailyReadiness | null> {
+  const week = await readCurrentWeek()
+  if (!week) return null
+  return week.daily_readiness?.[date] ?? null
+}
+
+export async function writeDailyReadiness(readiness: DailyReadiness): Promise<void> {
+  const week = await readCurrentWeek()
+  if (!week) throw new Error('No active week')
+  week.daily_readiness = { ...week.daily_readiness, [readiness.date]: readiness }
+  await writeCurrentWeek(week)
 }
