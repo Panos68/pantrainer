@@ -2,6 +2,7 @@ import type { WeekDoc } from './schema'
 import { calcRecoveryScore } from './recovery-score'
 import { readArchivedWeeks, readAppState } from './data'
 import { sessionToLoadPoint, type TrainingLoadPoint } from './training-load'
+import { calcOverloadInsights } from './overload'
 import { format, parseISO, subDays } from 'date-fns'
 
 export interface ExportPayload {
@@ -68,6 +69,12 @@ export interface CoachContext {
     recent_rpe: Array<{ date: string; rpe: number }>
     avg_rpe_7d: number | null
   }
+  overload_signals: Array<{
+    exercise: string
+    signal: string
+    weeksAtCurrentWeight: number
+    suggestion: string
+  }>
 }
 
 export interface ExportPayloadV2 extends ExportPayload {
@@ -299,6 +306,11 @@ function buildCoachContext(
       recent_rpe: recentRpe,
       avg_rpe_7d,
     },
+    overload_signals: calcOverloadInsights(currentWeek, archivedWeeks)
+      .filter((i) => i.signal !== 'ok')
+      .map(({ exercise, signal, weeksAtCurrentWeight, suggestion }) => ({
+        exercise, signal, weeksAtCurrentWeight, suggestion,
+      })),
   }
 }
 
