@@ -48,8 +48,11 @@ export default function ExerciseDemo({ name }: { name: string }) {
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
-  const videoUrl = match?.videoURL?.[0] ?? null
-  const youtubeEmbed = match?.youtubeURL ?? null
+  const videoUrl = match?.videoURL?.find((u) => u) ?? null
+  const youtubeWatch = match?.youtubeURL
+    ? match.youtubeURL.replace('/embed/', '/watch?v=')
+    : null
+  const youtubeLink = youtubeWatch ?? youtubeSearchUrl(name)
 
   return (
     <div ref={ref} className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -85,28 +88,16 @@ export default function ExerciseDemo({ name }: { name: string }) {
                 {match ? match.exercise_name : name}
               </p>
               {!match && (
-                <p className="text-zinc-600 text-[10px]">Not found in database</p>
+                <p className="text-zinc-600 text-[10px]">Not in database — searching YouTube</p>
               )}
-              {youtubeEmbed && (
-                <a
-                  href={youtubeEmbed.replace('/embed/', '/watch?v=')}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-zinc-500 hover:text-red-400 transition-colors text-[10px]"
-                >
-                  Watch on YouTube ↗
-                </a>
-              )}
-              {!youtubeEmbed && (
-                <a
-                  href={youtubeSearchUrl(name)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-zinc-500 hover:text-red-400 transition-colors text-[10px]"
-                >
-                  Search on YouTube ↗
-                </a>
-              )}
+              <a
+                href={youtubeLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-zinc-500 hover:text-red-400 transition-colors text-[10px]"
+              >
+                {youtubeWatch ? 'Watch on YouTube ↗' : 'Search on YouTube ↗'}
+              </a>
             </div>
           )}
         </div>
