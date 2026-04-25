@@ -1025,6 +1025,14 @@ export default function LogDayPage() {
             </div>
           </div>
 
+          {/* AI Planning Reasoning */}
+          {session?.reasoning && (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-3 space-y-1">
+              <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">Why this session</p>
+              <p className="text-zinc-400 text-sm leading-relaxed italic">{session.reasoning}</p>
+            </div>
+          )}
+
           {/* Notes */}
           <div className="space-y-1.5">
             <label className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
