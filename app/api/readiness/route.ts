@@ -1,18 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { readCurrentWeek, readDailyReadiness, writeDailyReadiness, readAthleteProfile } from '@/lib/data'
+import { readCurrentWeek, readDailyReadiness, writeDailyReadiness, readAthleteProfile, readArchivedWeeks } from '@/lib/data'
 import { DailyReadinessSchema } from '@/lib/schema'
 import { calcRecoveryScore } from '@/lib/recovery-score'
 import { sessionToLoadPoint } from '@/lib/training-load'
-import { format, subDays, parseISO } from 'date-fns'
+import { format, subDays, parseISO, differenceInDays } from 'date-fns'
 
 function calcACWR(loadPoints: NonNullable<ReturnType<typeof sessionToLoadPoint>>[]): number | null {
-  if (loadPoints.length === 0) return null
+  if (loadPoints.length < 3) return null
   const sorted = [...loadPoints].sort((a, b) => a.date.localeCompare(b.date))
-  const latest = sorted[sorted.length - 1].date
-  const acuteStart = format(subDays(parseISO(latest), 6), 'yyyy-MM-dd')
-  const chronicStart = format(subDays(parseISO(latest), 27), 'yyyy-MM-dd')
+  const oldest = parseISO(sorted[0].date)
+  const latest = parseISO(sorted[sorted.length - 1].date)
+  // Need at least 14 days of history for ACWR to be meaningful
+  if (differenceInDays(latest, oldest) < 14) return null
+  const latestStr = format(latest, 'yyyy-MM-dd')
+  const acuteStart = format(subDays(latest, 6), 'yyyy-MM-dd')
+  const chronicStart = format(subDays(latest, 27), 'yyyy-MM-dd')
   const acute = sorted.filter((p) => p.date >= acuteStart).reduce((s, p) => s + p.training_load, 0)
-  const chronicPoints = sorted.filter((p) => p.date >= chronicStart)
+  const chronicPoints = sorted.filter((p) => p.date >= chronicStart && p.date <= latestStr)
   const chronic = chronicPoints.length > 0 ? chronicPoints.reduce((s, p) => s + p.training_load, 0) / 4 : null
   if (!chronic || chronic === 0) return null
   return Math.round((acute / chronic) * 100) / 100
@@ -21,10 +25,11 @@ function calcACWR(loadPoints: NonNullable<ReturnType<typeof sessionToLoadPoint>>
 export async function GET(req: NextRequest) {
   const date = req.nextUrl.searchParams.get('date') ?? format(new Date(), 'yyyy-MM-dd')
 
-  const [week, profile, readiness] = await Promise.all([
+  const [week, profile, readiness, archivedWeeks] = await Promise.all([
     readCurrentWeek(),
     readAthleteProfile(),
     readDailyReadiness(date),
+    readArchivedWeeks(8),
   ])
 
   if (!week || !profile) {
@@ -33,7 +38,12 @@ export async function GET(req: NextRequest) {
 
   const garmin = week.garmin_recovery?.[date] ?? null
 
-  const loadPoints = week.sessions
+  // Build load history from archived weeks + current week for accurate ACWR
+  const allSessions = [
+    ...archivedWeeks.flatMap((w) => w.sessions),
+    ...week.sessions,
+  ]
+  const loadPoints = allSessions
     .filter((s) => s.status === 'completed' && s.date <= date)
     .map(sessionToLoadPoint)
     .filter((p): p is NonNullable<typeof p> => p !== null)
