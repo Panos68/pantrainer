@@ -4,7 +4,9 @@ import { readAllArchivedWeeks, readCurrentWeek, readAthleteProfile } from '@/lib
 import LiftProgressChart from '@/components/LiftProgressChart'
 import ActivityTrendChart from '@/components/ActivityTrendChart'
 import PmcChart from '@/components/PmcChart'
+import OverloadInsights from '@/components/OverloadInsights'
 import { calcPmc } from '@/lib/pmc'
+import { calcOverloadInsights } from '@/lib/overload'
 import { sessionToLoadPoint } from '@/lib/training-load'
 import type { WeekDoc } from '@/lib/schema'
 
@@ -23,6 +25,12 @@ export default async function ProgressPage() {
     .filter((p): p is NonNullable<typeof p> => p !== null)
 
   const pmcData = calcPmc(loadPoints)
+
+  const archivedForOverload = weeks.slice(0, -1)
+  const currentForOverload = weeks[weeks.length - 1]
+  const overloadInsights = currentForOverload
+    ? calcOverloadInsights(currentForOverload, archivedForOverload)
+    : []
 
   const totalSessions = weeks.reduce((sum, w) => sum + w.sessions.filter((s) => s.status === 'completed').length, 0)
   const totalCalories = weeks.reduce((sum, w) => sum + w.week_summary.total_calories, 0)
@@ -71,6 +79,9 @@ export default async function ProgressPage() {
 
         {/* Performance Management Chart */}
         <PmcChart data={pmcData} />
+
+        {/* Strength Progression Insights */}
+        <OverloadInsights insights={overloadInsights} />
 
         {/* Lift Progress Chart */}
         <LiftProgressChart weeks={weeks} />
