@@ -130,6 +130,7 @@ export async function POST() {
     health_flags: healthFlags,
     next_week_plan: {},
     garmin_recovery: {},
+    daily_readiness: {},
   }
 
   await writeCurrentWeek(newWeek)

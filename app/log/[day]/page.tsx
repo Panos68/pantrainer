@@ -219,6 +219,7 @@ export default function LogDayPage() {
   const [avgHr, setAvgHr] = useState('')
   const [calories, setCalories] = useState('')
   const [notes, setNotes] = useState('')
+  const [rpe, setRpe] = useState('')
   const [photos, setPhotos] = useState<string[]>([])
   const [uploadingPhotos, setUploadingPhotos] = useState(false)
   const [photoUploadMsg, setPhotoUploadMsg] = useState<string | null>(null)
@@ -338,6 +339,7 @@ export default function LogDayPage() {
         if (sessionData.duration_min != null) setDuration(String(sessionData.duration_min))
         if (sessionData.avg_hr_bpm != null) setAvgHr(String(sessionData.avg_hr_bpm))
         if (sessionData.total_calories != null) setCalories(String(sessionData.total_calories))
+        if (sessionData.rpe != null) setRpe(String(sessionData.rpe))
         if (sessionData.aerobic_training_effect != null || sessionData.hr_zones != null) {
           setGarminTraining({
             aerobic_training_effect: sessionData.aerobic_training_effect,
@@ -409,6 +411,7 @@ export default function LogDayPage() {
       duration_min: duration ? Number(duration) : null,
       avg_hr_bpm: avgHr ? Number(avgHr) : null,
       total_calories: calories ? Number(calories) : null,
+      rpe: rpe !== '' ? Number(rpe) : null,
       notes,
       photos,
       exercises,
@@ -992,6 +995,29 @@ export default function LogDayPage() {
                   KCAL
                 </span>
               </div>
+            </div>
+          </div>
+
+          {/* RPE */}
+          <div className="space-y-1.5">
+            <label className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
+              Session RPE
+            </label>
+            <div className="flex gap-1.5 flex-wrap">
+              {[1,2,3,4,5,6,7,8,9,10].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setRpe(rpe === String(n) ? '' : String(n))}
+                  className={`w-9 h-9 rounded-lg text-sm font-bold transition-colors ${
+                    rpe === String(n)
+                      ? 'bg-lime-400 text-zinc-950'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
             </div>
           </div>
 
