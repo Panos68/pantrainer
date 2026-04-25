@@ -10,6 +10,7 @@ import HealthFlagsBanner from '@/components/HealthFlagsBanner'
 import WeekBrowser from '@/components/WeekBrowser'
 import HomeQuickPanels from '@/components/HomeQuickPanels'
 import RecoveryScorePanel from '@/components/RecoveryScorePanel'
+import AdaptiveAlertBanner from '@/components/AdaptiveAlertBanner'
 
 export default async function Home() {
   const profile = await readAthleteProfile()
@@ -70,6 +71,8 @@ export default async function Home() {
         </header>
 
         <RecoveryScorePanel />
+
+        <AdaptiveAlertBanner />
 
         <div className="space-y-3">
           {hasActiveFlags && <HealthFlagsBanner flags={week.health_flags} />}

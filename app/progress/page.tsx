@@ -3,11 +3,22 @@ export const dynamic = 'force-dynamic'
 import { readAllArchivedWeeks, readCurrentWeek } from '@/lib/data'
 import LiftProgressChart from '@/components/LiftProgressChart'
 import ActivityTrendChart from '@/components/ActivityTrendChart'
+import PmcChart from '@/components/PmcChart'
+import { calcPmc } from '@/lib/pmc'
+import { sessionToLoadPoint } from '@/lib/training-load'
 import type { WeekDoc } from '@/lib/schema'
 
 export default async function ProgressPage() {
   const [archived, current] = await Promise.all([readAllArchivedWeeks(), readCurrentWeek()])
   const weeks: WeekDoc[] = current ? [...archived, current] : archived
+
+  const loadPoints = weeks
+    .flatMap((w) => w.sessions)
+    .filter((s) => s.status === 'completed')
+    .map(sessionToLoadPoint)
+    .filter((p): p is NonNullable<typeof p> => p !== null)
+
+  const pmcData = calcPmc(loadPoints)
 
   const totalSessions = weeks.reduce((sum, w) => sum + w.sessions.filter((s) => s.status === 'completed').length, 0)
   const totalCalories = weeks.reduce((sum, w) => sum + w.week_summary.total_calories, 0)
@@ -53,6 +64,9 @@ export default async function ProgressPage() {
             <p className="text-xs font-mono text-zinc-500 uppercase tracking-widest mt-1">Total Calories</p>
           </div>
         </section>
+
+        {/* Performance Management Chart */}
+        <PmcChart data={pmcData} />
 
         {/* Lift Progress Chart */}
         <LiftProgressChart weeks={weeks} />
