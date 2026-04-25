@@ -36,6 +36,15 @@ async function enrichSessionWithGarmin(session: { date: string; type: string }) 
   }
 }
 
+async function fetchDetailForKnownActivity(activityId: number) {
+  try {
+    const detail = await fetchActivityDetail(activityId)
+    return { hr_zones: detail.hrZones ?? null }
+  } catch {
+    return null
+  }
+}
+
 export async function POST(request: Request) {
   const currentWeek = await readCurrentWeek()
   if (!currentWeek) {
@@ -48,6 +57,7 @@ export async function POST(request: Request) {
 
   // Enrich completed sessions missing Garmin data — read-only, doesn't modify stored data
   if (process.env.GARMIN_EMAIL && process.env.GARMIN_PASSWORD) {
+    // Sessions with no activity ID: do full match + detail fetch
     const enrichments = await Promise.allSettled(
       payload.sessions
         .filter((s) => s.status === 'completed' && !s.garmin_activity_id)
@@ -63,6 +73,21 @@ export async function POST(request: Request) {
       if (session.aerobic_training_effect == null) session.aerobic_training_effect = data.aerobic_training_effect
       if (session.anaerobic_training_effect == null) session.anaerobic_training_effect = data.anaerobic_training_effect
       if (session.training_stress_score == null) session.training_stress_score = data.training_stress_score
+      if (session.hr_zones == null) session.hr_zones = data.hr_zones
+    }
+
+    // Sessions with an activity ID but missing detail fields: fetch detail only
+    const detailEnrichments = await Promise.allSettled(
+      payload.sessions
+        .filter((s) => s.status === 'completed' && s.garmin_activity_id != null && s.hr_zones == null)
+        .map(async (s) => ({ date: s.date, data: await fetchDetailForKnownActivity(s.garmin_activity_id!) }))
+    )
+
+    for (const result of detailEnrichments) {
+      if (result.status !== 'fulfilled' || !result.value.data) continue
+      const { date, data } = result.value
+      const session = payload.sessions.find((s) => s.date === date)
+      if (!session) continue
       if (session.hr_zones == null) session.hr_zones = data.hr_zones
     }
   }
