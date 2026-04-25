@@ -43,9 +43,10 @@ export async function GET(req: NextRequest) {
     ...archivedWeeks.flatMap((w) => w.sessions),
     ...week.sessions,
   ]
+  const athlete = { rhr: profile.rhr_bpm, maxHr: 220 - profile.age }
   const loadPoints = allSessions
     .filter((s) => s.status === 'completed' && s.date <= date)
-    .map(sessionToLoadPoint)
+    .map((s) => sessionToLoadPoint(s, athlete))
     .filter((p): p is NonNullable<typeof p> => p !== null)
 
   const acwr = calcACWR(loadPoints)
