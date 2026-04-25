@@ -121,15 +121,15 @@ export default function RecoveryScorePanel() {
   const c = COLOR[score.color]
 
   return (
-    <div className={`bg-zinc-900 border ${c.border} rounded-xl p-4 space-y-3`}>
+    <div className={`bg-zinc-900 border ${c.border} rounded-xl p-3 space-y-2.5`}>
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-zinc-500 text-[11px] uppercase tracking-widest mb-1">Recovery Score</p>
+          <p className="text-zinc-500 text-[11px] uppercase tracking-widest mb-0.5">Recovery Score</p>
           <div className="flex items-baseline gap-1">
-            <span className={`text-5xl font-black ${c.score}`}>{score.total}</span>
+            <span className={`text-4xl font-black ${c.score}`}>{score.total}</span>
             <span className="text-zinc-600 text-sm">/100</span>
           </div>
-          <p className={`text-sm ${c.label} mt-0.5`}>{score.label}</p>
+          <p className={`text-xs ${c.label} mt-0.5`}>{score.label}</p>
         </div>
         {!data.readiness && !checkinOpen && (
           <button
