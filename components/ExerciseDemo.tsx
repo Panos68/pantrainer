@@ -48,6 +48,7 @@ export default function ExerciseDemo({ name }: { name: string }) {
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
+  const videoUrl = match?.videoURL?.[0] ?? null
   const youtubeWatch = match?.youtubeURL
     ? match.youtubeURL.replace('/embed/', '/watch?v=')
     : null
@@ -70,13 +71,25 @@ export default function ExerciseDemo({ name }: { name: string }) {
             <div className="p-3 text-zinc-500 text-[10px] font-mono">Loading…</div>
           )}
 
+          {!loading && videoUrl && (
+            <video
+              src={videoUrl}
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="w-full"
+              onError={(e) => { (e.target as HTMLVideoElement).style.display = 'none' }}
+            />
+          )}
+
           {!loading && (
             <div className="px-3 py-2 flex flex-col gap-1.5">
               <p className="text-zinc-300 text-[11px] font-mono font-bold truncate">
                 {match ? match.exercise_name : name}
               </p>
               {!match && (
-                <p className="text-zinc-600 text-[10px]">Not in database — searching YouTube</p>
+                <p className="text-zinc-600 text-[10px]">Not in database</p>
               )}
               <a
                 href={youtubeLink}
@@ -84,7 +97,7 @@ export default function ExerciseDemo({ name }: { name: string }) {
                 rel="noopener noreferrer"
                 className="text-zinc-500 hover:text-red-400 transition-colors text-[10px]"
               >
-                {youtubeWatch ? 'Watch on YouTube ↗' : 'Search on YouTube ↗'}
+                {youtubeWatch ? 'Open on YouTube ↗' : 'Search on YouTube ↗'}
               </a>
             </div>
           )}
