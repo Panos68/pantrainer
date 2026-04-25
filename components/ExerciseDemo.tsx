@@ -9,27 +9,15 @@ interface WorkoutExercise {
   youtubeURL: string
 }
 
-let exerciseCache: WorkoutExercise[] | null = null
+const localCache = new Map<string, WorkoutExercise | null>()
 
-async function getExercises(): Promise<WorkoutExercise[]> {
-  if (exerciseCache) return exerciseCache
-  const res = await fetch('https://workoutapi.vercel.app/exercises')
-  if (!res.ok) return []
-  exerciseCache = await res.json()
-  return exerciseCache!
-}
-
-function findMatch(exercises: WorkoutExercise[], name: string): WorkoutExercise | null {
-  const needle = name.toLowerCase()
-  // Exact match first
-  const exact = exercises.find((e) => e.exercise_name.toLowerCase() === needle)
-  if (exact) return exact
-  // Partial match — exercise name contains all words from the query
-  const words = needle.split(/\s+/)
-  return exercises.find((e) => {
-    const hay = e.exercise_name.toLowerCase()
-    return words.every((w) => hay.includes(w))
-  }) ?? null
+async function lookupExercise(name: string): Promise<WorkoutExercise | null> {
+  if (localCache.has(name)) return localCache.get(name)!
+  const res = await fetch(`/api/exercise-demo?name=${encodeURIComponent(name)}`)
+  if (!res.ok) return null
+  const data = await res.json()
+  localCache.set(name, data)
+  return data
 }
 
 function youtubeSearchUrl(name: string) {
@@ -45,8 +33,8 @@ export default function ExerciseDemo({ name }: { name: string }) {
   useEffect(() => {
     if (!open || match !== undefined) return
     setLoading(true)
-    getExercises().then((exercises) => {
-      setMatch(findMatch(exercises, name))
+    lookupExercise(name).then((result) => {
+      setMatch(result)
       setLoading(false)
     })
   }, [open, name, match])
