@@ -1,11 +1,31 @@
-const cache = new Map<string, string>()
-
-function slugify(name: string) {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+interface WorkoutExercise {
+  id: number
+  exercise_name: string
+  videoURL: string[]
+  youtubeURL: string
 }
 
-function youtubeUrl(name: string) {
-  return `https://www.youtube.com/results?search_query=${encodeURIComponent(`how to ${name}`)}`
+let cache: WorkoutExercise[] | null = null
+
+async function getExercises(): Promise<WorkoutExercise[]> {
+  if (cache) return cache
+  const res = await fetch('https://workoutapi.vercel.app/exercises', {
+    next: { revalidate: 86400 },
+  })
+  if (!res.ok) return []
+  cache = await res.json()
+  return cache!
+}
+
+function findMatch(exercises: WorkoutExercise[], name: string): WorkoutExercise | null {
+  const needle = name.toLowerCase()
+  const exact = exercises.find((e) => e.exercise_name.toLowerCase() === needle)
+  if (exact) return exact
+  const words = needle.split(/\s+/)
+  return exercises.find((e) => {
+    const hay = e.exercise_name.toLowerCase()
+    return words.every((w) => hay.includes(w))
+  }) ?? null
 }
 
 export async function GET(req: Request) {
@@ -13,27 +33,8 @@ export async function GET(req: Request) {
   const name = searchParams.get('name')?.trim()
   if (!name) return Response.json({ error: 'Missing name' }, { status: 400 })
 
-  if (cache.has(name)) {
-    return Response.json({ url: cache.get(name) })
-  }
+  const exercises = await getExercises()
+  const match = findMatch(exercises, name)
 
-  const musclewikiUrl = `https://musclewiki.com/exercise/${slugify(name)}`
-
-  try {
-    const res = await fetch(musclewikiUrl, {
-      method: 'GET',
-      redirect: 'follow',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-      },
-    })
-    console.log(`[exercise-demo] ${musclewikiUrl} → ${res.status}`)
-    const url = res.ok ? musclewikiUrl : youtubeUrl(name)
-    cache.set(name, url)
-    return Response.json({ url })
-  } catch {
-    const url = youtubeUrl(name)
-    cache.set(name, url)
-    return Response.json({ url })
-  }
+  return Response.json(match ?? null)
 }
