@@ -235,13 +235,6 @@ async function dispatch(req: McpRequest): Promise<Response> {
 // ---------------------------------------------------------------------------
 
 export async function POST(request: Request) {
-  const tokenCheck = requireAutomationToken()
-  if (!tokenCheck.ok) return tokenCheck.response
-
-  if (!isAutomationAuthorized(request)) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
   let body: unknown
   try {
     body = await request.json()
@@ -249,11 +242,29 @@ export async function POST(request: Request) {
     return mcpError(null, -32700, 'Parse error')
   }
 
+  const req = Array.isArray(body) ? body[0] : body
+  const method = (req as McpRequest)?.method
+
+  // initialize and tools/list are public — Claude.ai calls these before OAuth completes
+  const requiresAuth = method !== 'initialize' && method !== 'tools/list'
+
+  if (requiresAuth) {
+    const tokenCheck = requireAutomationToken()
+    if (!tokenCheck.ok) return tokenCheck.response
+
+    if (!isAutomationAuthorized(request)) {
+      return Response.json(
+        { jsonrpc: '2.0', id: (req as McpRequest)?.id ?? null, error: { code: -32001, message: 'Unauthorized' } },
+        { status: 401, headers: CORS_HEADERS },
+      )
+    }
+  }
+
   // Batch support
   if (Array.isArray(body)) {
-    const responses = await Promise.all(body.map((req) => dispatch(req as McpRequest)))
+    const responses = await Promise.all(body.map((r) => dispatch(r as McpRequest)))
     const results = await Promise.all(responses.map((r) => r.json()))
-    return Response.json(results)
+    return Response.json(results, { headers: CORS_HEADERS })
   }
 
   return dispatch(body as McpRequest)
