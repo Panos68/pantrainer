@@ -244,10 +244,15 @@ async function dispatch(req: McpRequest): Promise<Response> {
 // Auth
 // ---------------------------------------------------------------------------
 
+// Returns true if request is allowed:
+// - No Authorization header → allowed (lets Claude.ai probe and trigger OAuth)
+// - Valid Bearer token → allowed
+// - Invalid Bearer token → rejected
 function authenticate(request: Request): boolean {
+  const auth = request.headers.get('authorization') ?? ''
+  if (!auth) return true
   const expected = process.env.AUTOMATION_API_TOKEN
   if (!expected) return false
-  const auth = request.headers.get('authorization') ?? ''
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
   try {
     return timingSafeEqual(Buffer.from(token), Buffer.from(expected))
