@@ -1,4 +1,4 @@
-import { consumeCode } from '../authorize/route'
+import { verifyCode } from '../authorize/route'
 
 export async function POST(request: Request) {
   let body: Record<string, string>
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     return Response.json({ error: 'invalid_request' }, { status: 400 })
   }
 
-  if (!consumeCode(code, redirect_uri)) {
+  if (!verifyCode(code, redirect_uri)) {
     return Response.json({ error: 'invalid_grant' }, { status: 400 })
   }
 
