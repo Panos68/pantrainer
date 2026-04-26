@@ -1,14 +1,17 @@
 import { format, parseISO } from 'date-fns'
 import { readCurrentWeek } from '@/lib/data'
 import { buildExport } from '@/lib/export'
+import { buildExportBundleResponse } from '@/lib/export-bundle'
 
-export async function POST() {
+export async function POST(request: Request) {
   const currentWeek = await readCurrentWeek()
   if (!currentWeek) {
     return Response.json({ error: 'No current week found' }, { status: 404 })
   }
 
-  const payload = await buildExport(currentWeek)
+  const { searchParams } = new URL(request.url)
+  const includeDeload = searchParams.get('includeDeload') === '1'
+  const payload = await buildExport(currentWeek, { includeDeload })
 
   let filename: string
   if (currentWeek.sessions && currentWeek.sessions.length > 0) {
@@ -16,6 +19,11 @@ export async function POST() {
     filename = `week-${format(parseISO(sorted[0].date), 'yyyy-ww')}.json`
   } else {
     filename = `week-${format(new Date(), 'yyyy-ww')}.json`
+  }
+
+  const includePhotos = searchParams.get('includePhotos') === '1'
+  if (includePhotos) {
+    return buildExportBundleResponse(payload, filename)
   }
 
   const json = JSON.stringify(payload, null, 2)

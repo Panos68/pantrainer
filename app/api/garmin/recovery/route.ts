@@ -23,6 +23,22 @@ function sanitizeRecovery(recovery: {
   }
 }
 
+function hasAnyRecoveryMetric(recovery: {
+  sleep_hours: number | null
+  deep_sleep_hours: number | null
+  rem_sleep_hours: number | null
+  resting_hr_bpm: number | null
+  max_hr_bpm: number | null
+}) {
+  return (
+    recovery.sleep_hours != null ||
+    recovery.deep_sleep_hours != null ||
+    recovery.rem_sleep_hours != null ||
+    recovery.resting_hr_bpm != null ||
+    recovery.max_hr_bpm != null
+  )
+}
+
 export async function POST(req: Request) {
   const body = await req.json() as { date?: string; force?: boolean }
   const { date, force = false } = body
@@ -71,8 +87,9 @@ export async function POST(req: Request) {
       fetched_at: new Date().toISOString(),
     })
 
-    // Only cache if sleep data is present — Garmin sometimes returns 0 before sync completes
-    if (recovery.sleep_hours != null) {
+    // Cache whenever Garmin returns any usable recovery metric.
+    // This avoids "looks fetched in UI but gone on Home" when sleep is missing but HR exists.
+    if (hasAnyRecoveryMetric(recovery)) {
       week.garmin_recovery = { ...week.garmin_recovery, [date]: recovery }
       weekMutated = true
     }

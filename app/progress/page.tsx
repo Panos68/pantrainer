@@ -1,13 +1,36 @@
 export const dynamic = 'force-dynamic'
 
-import { readAllArchivedWeeks, readCurrentWeek } from '@/lib/data'
+import { readAllArchivedWeeks, readCurrentWeek, readAthleteProfile } from '@/lib/data'
 import LiftProgressChart from '@/components/LiftProgressChart'
 import ActivityTrendChart from '@/components/ActivityTrendChart'
+import PmcChart from '@/components/PmcChart'
+import OverloadInsights from '@/components/OverloadInsights'
+import { calcPmc } from '@/lib/pmc'
+import { calcOverloadInsights } from '@/lib/overload'
+import { sessionToLoadPoint } from '@/lib/training-load'
 import type { WeekDoc } from '@/lib/schema'
 
 export default async function ProgressPage() {
-  const [archived, current] = await Promise.all([readAllArchivedWeeks(), readCurrentWeek()])
+  const [archived, current, profile] = await Promise.all([readAllArchivedWeeks(), readCurrentWeek(), readAthleteProfile()])
   const weeks: WeekDoc[] = current ? [...archived, current] : archived
+
+  const athlete = profile
+    ? { rhr: profile.rhr_bpm, maxHr: 220 - profile.age }
+    : undefined
+
+  const loadPoints = weeks
+    .flatMap((w) => w.sessions)
+    .filter((s) => s.status === 'completed')
+    .map((s) => sessionToLoadPoint(s, athlete))
+    .filter((p): p is NonNullable<typeof p> => p !== null)
+
+  const pmcData = calcPmc(loadPoints)
+
+  const archivedForOverload = weeks.slice(0, -1)
+  const currentForOverload = weeks[weeks.length - 1]
+  const overloadInsights = currentForOverload
+    ? calcOverloadInsights(currentForOverload, archivedForOverload)
+    : []
 
   const totalSessions = weeks.reduce((sum, w) => sum + w.sessions.filter((s) => s.status === 'completed').length, 0)
   const totalCalories = weeks.reduce((sum, w) => sum + w.week_summary.total_calories, 0)
@@ -53,6 +76,12 @@ export default async function ProgressPage() {
             <p className="text-xs font-mono text-zinc-500 uppercase tracking-widest mt-1">Total Calories</p>
           </div>
         </section>
+
+        {/* Performance Management Chart */}
+        <PmcChart data={pmcData} />
+
+        {/* Strength Progression Insights */}
+        <OverloadInsights insights={overloadInsights} />
 
         {/* Lift Progress Chart */}
         <LiftProgressChart weeks={weeks} />

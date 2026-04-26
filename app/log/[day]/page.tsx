@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import type { Session, GarminRecoveryDay } from '@/lib/schema'
 import GarminRecoveryCard from '@/components/GarminRecoveryCard'
 import MuscleMap from '@/components/MuscleMap'
+import ExerciseDemo from '@/components/ExerciseDemo'
 
 // ─── Type colors ─────────────────────────────────────────────────────────
 
@@ -35,6 +36,23 @@ type GarminSyncResponse = {
   hr_zones?: Array<{ zone_name: string; secs_in_zone: number; zone_high_boundary: number }> | null
   distance_m?: number | null
   avg_speed_mps?: number | null
+}
+
+function isPreviewablePhotoUrl(value: string): boolean {
+  return value.startsWith('http://') || value.startsWith('https://')
+}
+
+function resolvePhotoHref(value: string): string {
+  if (isPreviewablePhotoUrl(value)) return value
+  return `/api/photos?pathname=${encodeURIComponent(value)}`
+}
+
+function todayIsoLocal(): string {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
 // ─── Read-only view ──────────────────────────────────────────────────────
@@ -150,7 +168,22 @@ function ReadOnlyView({ session }: { session: Session }) {
               <div className="text-zinc-500 text-[10px] font-mono tracking-widest uppercase mb-2">Photos</div>
               <ul className="space-y-1">
                 {session.photos.map((p, i) => (
-                  <li key={i} className="text-zinc-400 text-xs font-mono">{p}</li>
+                  <li key={i} className="flex items-center gap-3">
+                    <a href={resolvePhotoHref(p)} target="_blank" rel="noreferrer" className="shrink-0">
+                      <div
+                        className="h-12 w-12 rounded border border-zinc-700 bg-zinc-800 bg-cover bg-center"
+                        style={{ backgroundImage: `url("${resolvePhotoHref(p)}")` }}
+                      />
+                    </a>
+                    <a
+                      href={resolvePhotoHref(p)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-zinc-400 hover:text-zinc-200 text-xs font-mono break-all"
+                    >
+                      {p}
+                    </a>
+                  </li>
                 ))}
               </ul>
             </div>
@@ -187,8 +220,10 @@ export default function LogDayPage() {
   const [avgHr, setAvgHr] = useState('')
   const [calories, setCalories] = useState('')
   const [notes, setNotes] = useState('')
+  const [rpe, setRpe] = useState('')
   const [photos, setPhotos] = useState<string[]>([])
-  const [photoInput, setPhotoInput] = useState('')
+  const [uploadingPhotos, setUploadingPhotos] = useState(false)
+  const [photoUploadMsg, setPhotoUploadMsg] = useState<string | null>(null)
 
   // Session import state
   const [showImport, setShowImport] = useState(false)
@@ -197,7 +232,7 @@ export default function LogDayPage() {
   const [loadingProposedDay, setLoadingProposedDay] = useState(false)
 
   // Exercise actuals state (indexed to match session.exercises)
-  type ExerciseActual = { sets: string; reps: string; weight_kg: string }
+  type ExerciseActual = { sets: string; reps: string; weight_kg: string; effort: 'easy' | 'perfect' | 'hard' | null }
   const [exerciseActuals, setExerciseActuals] = useState<ExerciseActual[]>([])
   const [swappedExercises, setSwappedExercises] = useState<Record<number, number>>({}) // index → alt index
   const [openSwapMenu, setOpenSwapMenu] = useState<number | null>(null)
@@ -225,6 +260,7 @@ export default function LogDayPage() {
     hr_zones?: Array<{ zone_name: string; secs_in_zone: number; zone_high_boundary: number }> | null
   }>({})
   const [refreshingGarmin, setRefreshingGarmin] = useState(false)
+  const isFutureSession = session != null && session.date > todayIsoLocal()
 
   const refreshFromGarmin = useCallback(async (
     targetSession: Pick<Session, 'date' | 'type'>,
@@ -236,7 +272,7 @@ export default function LogDayPage() {
       fetch('/api/garmin/recovery', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: targetSession.date }),
+        body: JSON.stringify({ date: targetSession.date, force: overwriteMetrics }),
       }).then((r) => (r.ok ? r.json() : null)),
     ])
 
@@ -305,6 +341,7 @@ export default function LogDayPage() {
         if (sessionData.duration_min != null) setDuration(String(sessionData.duration_min))
         if (sessionData.avg_hr_bpm != null) setAvgHr(String(sessionData.avg_hr_bpm))
         if (sessionData.total_calories != null) setCalories(String(sessionData.total_calories))
+        if (sessionData.rpe != null) setRpe(String(sessionData.rpe))
         if (sessionData.aerobic_training_effect != null || sessionData.hr_zones != null) {
           setGarminTraining({
             aerobic_training_effect: sessionData.aerobic_training_effect,
@@ -327,10 +364,12 @@ export default function LogDayPage() {
                 : ex.weight_kg != null
                 ? ex.weight_kg.toString()
                 : '',
+            effort: ex.effort ?? null,
             }))
         )
 
-        if (sessionData.status !== 'completed' && sessionData.status !== 'skipped') {
+        // Auto-fetch if no Garmin match yet — regardless of status
+        if (!sessionData.garmin_activity_id) {
           void refreshFromGarmin({ date: sessionData.date, type: sessionData.type }, false)
         }
       } catch (err) {
@@ -364,6 +403,7 @@ export default function LogDayPage() {
                   : undefined,
               actual_weight_kg:
                 actual?.weight_kg !== '' ? Number(actual?.weight_kg) : undefined,
+              effort: actual?.effort ?? null,
             }
           })
         : session?.exercises ?? []
@@ -374,6 +414,7 @@ export default function LogDayPage() {
       duration_min: duration ? Number(duration) : null,
       avg_hr_bpm: avgHr ? Number(avgHr) : null,
       total_calories: calories ? Number(calories) : null,
+      rpe: rpe !== '' ? Number(rpe) : null,
       notes,
       photos,
       exercises,
@@ -384,7 +425,7 @@ export default function LogDayPage() {
       training_stress_score: garminTraining.training_stress_score ?? null,
       hr_zones: garminTraining.hr_zones ?? null,
     }
-  }, [type, subtype, duration, avgHr, calories, notes, photos, exerciseActuals, session, swappedExercises, garminSynced, garminTraining])
+  }, [type, subtype, duration, avgHr, calories, rpe, notes, photos, exerciseActuals, session, swappedExercises, garminSynced, garminTraining])
 
   const mergeGarminIntoPayload = useCallback((
     payload: ReturnType<typeof buildPayload>,
@@ -411,26 +452,39 @@ export default function LogDayPage() {
     }
   }, [])
 
-  async function handleSaveProgress() {
+  async function saveSession(
+    nextStatus: Session['status'],
+    options?: { redirectHome?: boolean; successMessage?: string; syncGarmin?: boolean },
+  ) {
     setSaving(true)
     setSaveMsg('')
     try {
-      const sync = session ? await refreshFromGarmin({ date: session.date, type: session.type }, false) : null
+      const shouldSyncGarmin = options?.syncGarmin ?? false
+      const sync = shouldSyncGarmin && session
+        ? await refreshFromGarmin({ date: session.date, type: session.type }, false)
+        : null
       const payload = mergeGarminIntoPayload(buildPayload(), sync)
       const res = await fetch(`/api/session/${day}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, status: 'in_progress' }),
+        body: JSON.stringify({ ...payload, status: nextStatus }),
       })
       if (!res.ok) {
-        const err = await res.json()
-        setSaveMsg(err.error ?? 'Save failed')
-      } else {
-        const updated = await res.json() as Session
-        setSession(updated)
-        setSaveMsg('Saved!')
-        setTimeout(() => setSaveMsg(''), 2000)
+        const err = await res.json().catch(() => ({ error: 'Save failed' }))
+        setSaveMsg((err as { error?: string }).error ?? 'Save failed')
+        return
       }
+
+      const updated = await res.json() as Session
+      setSession(updated)
+
+      if (options?.redirectHome) {
+        router.push('/')
+        return
+      }
+
+      setSaveMsg(options?.successMessage ?? 'Saved!')
+      setTimeout(() => setSaveMsg(''), 2000)
     } catch {
       setSaveMsg('Network error')
     } finally {
@@ -438,30 +492,38 @@ export default function LogDayPage() {
     }
   }
 
-  async function handleMarkComplete() {
-    setSaving(true)
-    try {
-      const sync = session ? await refreshFromGarmin({ date: session.date, type: session.type }, false) : null
-      const payload = mergeGarminIntoPayload(buildPayload(), sync)
-      const res = await fetch(`/api/session/${day}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, status: 'completed' }),
+  async function handleSaveProgress() {
+    if (isFutureSession) {
+      await saveSession('planned', {
+        successMessage: 'Plan saved!',
+        syncGarmin: false,
       })
-      if (!res.ok) {
-        const err = await res.json()
-        setSaveMsg(err.error ?? 'Failed to complete session')
-        setSaving(false)
-      } else {
-        router.push('/')
-      }
-    } catch {
-      setSaveMsg('Network error')
-      setSaving(false)
+      return
     }
+    await saveSession('in_progress', { successMessage: 'Saved!', syncGarmin: true })
+  }
+
+  async function handleSaveChanges() {
+    const currentStatus = session?.status ?? 'in_progress'
+    await saveSession(currentStatus, {
+      successMessage: 'Saved!',
+      syncGarmin: currentStatus !== 'completed' && currentStatus !== 'skipped',
+    })
+  }
+
+  async function handleMarkComplete() {
+    if (isFutureSession) {
+      setSaveMsg('Cannot complete a future session')
+      return
+    }
+    await saveSession('completed', { redirectHome: true, syncGarmin: true })
   }
 
   async function handleSkip() {
+    if (isFutureSession) {
+      setSaveMsg('Cannot skip a future session')
+      return
+    }
     setSaving(true)
     try {
       const res = await fetch(`/api/session/${day}`, {
@@ -482,16 +544,52 @@ export default function LogDayPage() {
     }
   }
 
-  function addPhoto() {
-    const trimmed = photoInput.trim()
-    if (trimmed) {
-      setPhotos((prev) => [...prev, trimmed])
-      setPhotoInput('')
-    }
-  }
-
   function removePhoto(index: number) {
     setPhotos((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  async function handlePhotoFilesUpload(fileList: FileList | null) {
+    const files = Array.from(fileList ?? [])
+    if (files.length === 0 || !session) return
+
+    setUploadingPhotos(true)
+    setPhotoUploadMsg(null)
+    try {
+      const uploadedUrls: string[] = []
+      for (const file of files) {
+        const formData = new FormData()
+        formData.set('file', file)
+        formData.set('date', session.date)
+        const res = await fetch('/api/photos', {
+          method: 'POST',
+          body: formData,
+        })
+        const raw = await res.text()
+        let data: { pathname?: string; url?: string; error?: string } = {}
+        if (raw.trim().length > 0) {
+          try {
+            data = JSON.parse(raw) as { pathname?: string; url?: string; error?: string }
+          } catch {
+            throw new Error(
+              `Upload failed for ${file.name} (${res.status}): ${raw.slice(0, 120)}`,
+            )
+          }
+        }
+        const uploadedRef = data.pathname ?? data.url
+        if (!res.ok || !uploadedRef) {
+          throw new Error(data.error ?? `Upload failed for ${file.name} (${res.status})`)
+        }
+        uploadedUrls.push(uploadedRef)
+      }
+
+      setPhotos((prev) => [...prev, ...uploadedUrls])
+      setPhotoUploadMsg(`Uploaded ${uploadedUrls.length} photo${uploadedUrls.length > 1 ? 's' : ''}`)
+      setTimeout(() => setPhotoUploadMsg(null), 2500)
+    } catch (error) {
+      setPhotoUploadMsg(error instanceof Error ? error.message : 'Photo upload failed')
+    } finally {
+      setUploadingPhotos(false)
+    }
   }
 
   async function handleRefreshGarmin() {
@@ -556,7 +654,7 @@ export default function LogDayPage() {
         setNotes(data.session.notes ?? '')
         setImportJson('')
         setShowImport(false)
-        setImportMsg({ ok: true, text: 'Session updated' })
+        setImportMsg({ ok: true, text: 'Session updated and saved' })
         setTimeout(() => setImportMsg(null), 2500)
       }
     } catch {
@@ -625,31 +723,42 @@ export default function LogDayPage() {
           </div>
         )}
 
+        {isFutureSession && (
+          <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3">
+            <p className="text-amber-300 text-xs font-mono tracking-widest uppercase">
+              Future session — logging opens on the session date
+            </p>
+          </div>
+        )}
+
         {/* Muscle map */}
         <MuscleMap muscles={session.muscle_groups ?? []} />
 
-        {/* Exercise table — structured for Strength, read-only list for others */}
-        {type === 'Strength' && session.exercises && session.exercises.length > 0 && (
+        {/* Exercise table — interactive for all session types with exercises */}
+        {session.exercises && session.exercises.length > 0 && (
           <div className="space-y-2">
             <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
               Exercises — Planned → Actual
             </p>
             <div className="rounded-xl border border-zinc-800 overflow-visible">
-              <div className="grid grid-cols-[minmax(0,1fr)_repeat(6,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)] bg-zinc-900 border-b border-zinc-800">
+              <div className={`grid ${type === 'Strength' ? 'grid-cols-[minmax(0,1fr)_repeat(6,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)]' : 'grid-cols-[minmax(0,1fr)_repeat(4,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(4,2.75rem)]'} bg-zinc-900 border-b border-zinc-800`}>
                 <div className="px-3 py-2 text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Exercise</div>
                 <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">S</div>
                 <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">R</div>
-                <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">kg</div>
+                {type === 'Strength' && <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">kg</div>}
                 <div className="py-2 text-violet-400/60 text-[10px] font-mono text-center">S</div>
                 <div className="py-2 text-violet-400/60 text-[10px] font-mono text-center">R</div>
-                <div className="py-2 text-violet-400/60 text-[10px] font-mono text-center">kg</div>
+                {type === 'Strength' && <div className="py-2 text-violet-400/60 text-[10px] font-mono text-center">kg</div>}
               </div>
               {session.exercises.map((ex, i) => {
                 const openUp = i >= session.exercises.length - 2
                 return (
                 <div
                   key={i}
-                  className="grid grid-cols-[minmax(0,1fr)_repeat(6,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)] border-b border-zinc-800/60 last:border-0 relative"
+                  className="border-b border-zinc-800/60 last:border-0"
+                >
+                <div
+                  className={`grid ${type === 'Strength' ? 'grid-cols-[minmax(0,1fr)_repeat(6,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)]' : 'grid-cols-[minmax(0,1fr)_repeat(4,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(4,2.75rem)]'} relative`}
                 >
                   <div className="bg-zinc-950 px-3 py-2.5 text-zinc-300 text-xs font-mono font-bold relative min-w-0">
                     <div className="flex items-center gap-1.5 min-w-0">
@@ -658,6 +767,9 @@ export default function LogDayPage() {
                           ? ex.alternatives[swappedExercises[i]]?.name ?? ex.name
                           : ex.name}
                       </span>
+                      <ExerciseDemo
+                        name={swappedExercises[i] != null ? (ex.alternatives[swappedExercises[i]]?.name ?? ex.name) : ex.name}
+                      />
                       {ex.alternatives && ex.alternatives.length > 0 && (
                         <button
                           type="button"
@@ -698,6 +810,7 @@ export default function LogDayPage() {
                                   sets: alt.sets?.toString() ?? a.sets,
                                   reps: alt.reps?.toString() ?? a.reps,
                                   weight_kg: alt.weight_kg?.toString() ?? '',
+                                  effort: null,
                                 } : a
                               ))
                               setOpenSwapMenu(null)
@@ -713,10 +826,12 @@ export default function LogDayPage() {
                     )}
                   </div>
                   <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">{ex.sets ?? '—'}</div>
-                  <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">{ex.reps ?? '—'}</div>
-                  <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">
-                    {ex.weight_kg != null ? ex.weight_kg : '—'}
-                  </div>
+                  <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center overflow-hidden leading-tight break-words">{ex.reps ?? '—'}</div>
+                  {type === 'Strength' && (
+                    <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">
+                      {ex.weight_kg != null ? ex.weight_kg : '—'}
+                    </div>
+                  )}
                   <input
                     type="number"
                     inputMode="numeric"
@@ -741,46 +856,51 @@ export default function LogDayPage() {
                     className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full"
                     placeholder="—"
                   />
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    value={exerciseActuals[i]?.weight_kg ?? ''}
-                    onChange={(e) =>
-                      setExerciseActuals((prev) =>
-                        prev.map((a, j) => (j === i ? { ...a, weight_kg: e.target.value } : a))
-                      )
+                  {type === 'Strength' && (
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={exerciseActuals[i]?.weight_kg ?? ''}
+                      onChange={(e) =>
+                        setExerciseActuals((prev) =>
+                          prev.map((a, j) => (j === i ? { ...a, weight_kg: e.target.value } : a))
+                        )
+                      }
+                      className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full"
+                      placeholder="—"
+                    />
+                  )}
+                </div>
+                {type !== 'Recovery' && <div className="flex gap-1.5 px-3 py-2 bg-zinc-950 border-t border-zinc-800/40">
+                  {(['easy', 'perfect', 'hard'] as const).map((level) => {
+                    const selected = exerciseActuals[i]?.effort === level
+                    const colors: Record<string, string> = {
+                      easy: selected ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' : 'text-zinc-600 border-zinc-800 hover:border-zinc-700 hover:text-zinc-400',
+                      perfect: selected ? 'bg-blue-500/20 text-blue-400 border-blue-500/40' : 'text-zinc-600 border-zinc-800 hover:border-zinc-700 hover:text-zinc-400',
+                      hard: selected ? 'bg-red-500/20 text-red-400 border-red-500/40' : 'text-zinc-600 border-zinc-800 hover:border-zinc-700 hover:text-zinc-400',
                     }
-                    className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full"
-                    placeholder="—"
-                  />
+                    return (
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() =>
+                          setExerciseActuals((prev) =>
+                            prev.map((a, j) => j === i ? { ...a, effort: a.effort === level ? null : level } : a)
+                          )
+                        }
+                        className={`flex-1 py-1 text-[10px] font-mono tracking-widest uppercase rounded border transition-colors ${colors[level]}`}
+                      >
+                        {level}
+                      </button>
+                    )
+                  })}
+                </div>}
                 </div>
               )})}
             </div>
             <p className="text-zinc-600 text-[10px] font-mono">
               Violet = actual. Pre-filled from plan — edit what changed.
             </p>
-          </div>
-        )}
-
-        {type !== 'Strength' && session.exercises && session.exercises.length > 0 && (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-2">
-            <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase mb-2">
-              Planned
-            </p>
-            <ul className="space-y-1.5">
-              {session.exercises.map((ex, i) => (
-                <li key={i} className="flex items-baseline gap-2 text-sm font-mono">
-                  <span className="text-zinc-300 font-bold">{ex.name}</span>
-                  {ex.sets != null && ex.reps != null && (
-                    <span className="text-zinc-500">{ex.sets}×{ex.reps}</span>
-                  )}
-                  {ex.weight_kg != null && (
-                    <span className="text-violet-400">@ {ex.weight_kg}kg</span>
-                  )}
-                  {ex.notes && <span className="text-zinc-600 text-xs">— {ex.notes}</span>}
-                </li>
-              ))}
-            </ul>
           </div>
         )}
 
@@ -907,6 +1027,41 @@ export default function LogDayPage() {
             </div>
           </div>
 
+          {/* RPE */}
+          <div className="space-y-1.5">
+            <label className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
+              Session RPE
+            </label>
+            <div className="flex gap-1.5 flex-wrap">
+              {[1,2,3,4,5,6,7,8,9,10].map((n) => {
+                const selected = rpe === String(n)
+                const color = n <= 3
+                  ? selected ? 'bg-emerald-500 text-white' : 'bg-zinc-800 text-emerald-600 hover:bg-zinc-700'
+                  : n <= 6
+                  ? selected ? 'bg-amber-400 text-zinc-950' : 'bg-zinc-800 text-amber-600 hover:bg-zinc-700'
+                  : selected ? 'bg-red-500 text-white' : 'bg-zinc-800 text-red-600 hover:bg-zinc-700'
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setRpe(rpe === String(n) ? '' : String(n))}
+                    className={`w-9 h-9 rounded-lg text-sm font-bold transition-colors ${color}`}
+                  >
+                    {n}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* AI Planning Reasoning */}
+          {session?.reasoning && (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-3 space-y-1">
+              <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">Why this session</p>
+              <p className="text-zinc-400 text-sm leading-relaxed italic">{session.reasoning}</p>
+            </div>
+          )}
+
           {/* Notes */}
           <div className="space-y-1.5">
             <label className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
@@ -936,21 +1091,22 @@ export default function LogDayPage() {
                     multiple
                     className="hidden"
                     onChange={(e) => {
-                      const files = Array.from(e.target.files ?? [])
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      files.forEach((f) => setPhotos((prev) => [...prev, (f as any).path ?? f.name]))
+                      void handlePhotoFilesUpload(e.target.files)
                       e.target.value = ''
                     }}
                   />
                 </label>
-                <button
-                  type="button"
-                  onClick={addPhoto}
-                  className="h-11 px-4 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs tracking-widest uppercase transition-colors"
-                >
-                  Add path
-                </button>
               </div>
+              {photoUploadMsg && (
+                <p className={`text-[10px] font-mono ${photoUploadMsg.startsWith('Uploaded') ? 'text-lime-400' : 'text-red-400'}`}>
+                  {photoUploadMsg}
+                </p>
+              )}
+              {uploadingPhotos && (
+                <p className="text-zinc-500 text-[10px] font-mono">
+                  Uploading photos...
+                </p>
+              )}
               {photos.length > 0 && (
                 <ul className="space-y-1.5 mt-2">
                   {photos.map((p, i) => (
@@ -958,7 +1114,22 @@ export default function LogDayPage() {
                       key={i}
                       className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2"
                     >
-                      <span className="text-zinc-400 text-xs font-mono truncate">{p}</span>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <a href={resolvePhotoHref(p)} target="_blank" rel="noreferrer" className="shrink-0">
+                          <div
+                            className="h-12 w-12 rounded border border-zinc-700 bg-zinc-800 bg-cover bg-center"
+                            style={{ backgroundImage: `url("${resolvePhotoHref(p)}")` }}
+                          />
+                        </a>
+                        <a
+                          href={resolvePhotoHref(p)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-zinc-400 hover:text-zinc-200 text-xs font-mono truncate"
+                        >
+                          {p}
+                        </a>
+                      </div>
                       <button
                         type="button"
                         onClick={() => removePhoto(i)}
@@ -1054,7 +1225,7 @@ export default function LogDayPage() {
           <div className="grid grid-cols-1 gap-3 pt-2">
             {session.status === 'completed' || session.status === 'skipped' ? (
               <button
-                onClick={handleMarkComplete}
+                onClick={handleSaveChanges}
                 disabled={saving}
                 className="w-full h-14 rounded-xl bg-lime-400 hover:bg-lime-300 active:bg-lime-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
               >
@@ -1064,7 +1235,7 @@ export default function LogDayPage() {
               <>
                 <button
                   onClick={handleMarkComplete}
-                  disabled={saving}
+                  disabled={saving || isFutureSession}
                   className="w-full h-14 rounded-xl bg-lime-400 hover:bg-lime-300 active:bg-lime-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
                 >
                   {saving ? 'Saving...' : 'Mark Complete'}
@@ -1074,11 +1245,11 @@ export default function LogDayPage() {
                   disabled={saving}
                   className="w-full h-12 rounded-xl border border-zinc-600 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-bold text-xs tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
                 >
-                  {saving ? 'Saving...' : 'Save Progress'}
+                  {saving ? 'Saving...' : isFutureSession ? 'Save Plan' : 'Save Progress'}
                 </button>
                 <button
                   onClick={() => setShowSkip(true)}
-                  disabled={saving}
+                  disabled={saving || isFutureSession}
                   className="w-full h-11 rounded-xl border border-zinc-800 bg-transparent hover:bg-zinc-900 text-zinc-600 hover:text-zinc-400 font-bold text-xs tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
                 >
                   Skip Session

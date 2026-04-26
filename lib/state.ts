@@ -25,9 +25,7 @@ export async function getDeloadCounter(): Promise<number> {
 
 export async function incrementDeloadCounter(): Promise<void> {
   const state = await readAppState()
-  if (state.deloadCounter < 5) {
-    state.deloadCounter += 1
-  }
+  state.deloadCounter += 1
   await writeAppState(state)
 }
 
@@ -57,4 +55,15 @@ export async function updateAppState(updates: Partial<AppState>): Promise<void> 
   const state = await readAppState()
   const updated = { ...state, ...updates }
   await writeAppState(updated)
+}
+
+export async function rollDeloadCounterOnWeekAdvance(): Promise<void> {
+  const state = await readAppState()
+  if (state.isDeloadWeek) {
+    state.deloadCounter = 1
+    state.isDeloadWeek = false
+  } else {
+    state.deloadCounter += 1
+  }
+  await writeAppState(state)
 }

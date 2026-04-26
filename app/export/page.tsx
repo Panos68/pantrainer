@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import type { WeekDoc, NextWeekPlan } from '@/lib/schema'
+import type { WeekDoc, NextWeekPlan, AppState } from '@/lib/schema'
 import type { ImportResult, ImportError } from '@/lib/import'
 import NewWeekButton from '@/components/NewWeekButton'
 
@@ -19,7 +19,8 @@ interface WeekSummaryData {
 interface ExportSuccessData {
   photos_to_attach: string[]
   filename: string
-  version: 'v1' | 'v2'
+  includes_photo_bundle: boolean
+  photos_included_count: number
 }
 
 type ImportState =
@@ -115,27 +116,32 @@ function Spinner() {
 
 function ExportSection() {
   const [weekData, setWeekData] = useState<WeekSummaryData | null>(null)
+  const [appState, setAppState] = useState<AppState | null>(null)
   const [loading, setLoading] = useState(true)
-  const [exportingVersion, setExportingVersion] = useState<'v1' | 'v2' | null>(null)
+  const [exporting, setExporting] = useState(false)
   const [exportSuccess, setExportSuccess] = useState<ExportSuccessData | null>(null)
   const [exportError, setExportError] = useState<string | null>(null)
+  const [includePhotosInBundle, setIncludePhotosInBundle] = useState(false)
+  const [includeDeloadInExport, setIncludeDeloadInExport] = useState(false)
 
   useEffect(() => {
-    fetch('/api/week')
-      .then((r) => r.json())
-      .then((data) => {
-        if (!data.empty) setWeekData(data as WeekSummaryData)
+    Promise.all([fetch('/api/week'), fetch('/api/state')])
+      .then(async ([weekRes, stateRes]) => {
+        const week = (await weekRes.json()) as WeekSummaryData | { empty: true }
+        const state = (await stateRes.json()) as AppState
+        if (!('empty' in week)) setWeekData(week)
+        setAppState(state)
         setLoading(false)
       })
       .catch(() => setLoading(false))
   }, [])
 
-  async function handleExport(version: 'v1' | 'v2') {
-    setExportingVersion(version)
+  async function handleExport() {
+    setExporting(true)
     setExportError(null)
     try {
-      const endpoint = version === 'v2' ? '/api/export/v2' : '/api/export'
-      const res = await fetch(endpoint, { method: 'POST' })
+      const endpointWithParams = `/api/export/v2?includePhotos=${includePhotosInBundle ? '1' : '0'}&includeDeload=${includeDeloadInExport ? '1' : '0'}`
+      const res = await fetch(endpointWithParams, { method: 'POST' })
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Export failed' }))
         setExportError((err as { error?: string }).error ?? 'Export failed')
@@ -158,25 +164,62 @@ function ExportSection() {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
 
-      // Parse the JSON to get photos_to_attach
-      const text = await blob.text()
-      const payload = JSON.parse(text) as { photos_to_attach?: string[] }
+      const isZipBundle = (res.headers.get('Content-Type') ?? '').includes('application/zip')
+      let photosToAttach: string[] = []
+      let photosIncludedCount = Number(res.headers.get('X-Photos-Included') ?? 0)
+
+      if (!isZipBundle) {
+        const text = await blob.text()
+        const payload = JSON.parse(text) as { photos_to_attach?: string[] }
+        photosToAttach = payload.photos_to_attach ?? []
+      } else if (!Number.isFinite(photosIncludedCount)) {
+        photosIncludedCount = 0
+      }
+
+      if (includeDeloadInExport && weekData) {
+        const stateRes = await fetch('/api/state', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            deloadCounter: 0,
+            lastDeloadWeek: weekData.week,
+            isDeloadWeek: false,
+          }),
+        })
+        if (!stateRes.ok) {
+          const err = await stateRes.json().catch(() => ({ error: 'Failed to update deload state' }))
+          setExportError((err as { error?: string }).error ?? 'Failed to update deload state')
+          return
+        }
+        const updatedState = (await stateRes.json()) as AppState
+        setAppState(updatedState)
+      }
 
       setExportSuccess({
-        photos_to_attach: payload.photos_to_attach ?? [],
+        photos_to_attach: photosToAttach,
         filename,
-        version,
+        includes_photo_bundle: isZipBundle,
+        photos_included_count: photosIncludedCount,
       })
     } catch (e) {
       setExportError(e instanceof Error ? e.message : 'Unexpected error')
     } finally {
-      setExportingVersion(null)
+      setExporting(false)
     }
   }
 
   const completedSessions = weekData?.sessions.filter((s) => s.status === 'completed').length ?? 0
   const totalCalories = weekData?.week_summary.total_calories ?? 0
   const activeFlags = (weekData?.health_flags ?? []).filter((f) => !f.cleared).length
+  const deloadCounter = appState?.deloadCounter ?? 0
+  const deloadWindowLabel =
+    deloadCounter === 0
+      ? 'Deload tagged this week'
+      : deloadCounter < 8
+        ? `${8 - deloadCounter} week${8 - deloadCounter === 1 ? '' : 's'} to deload window`
+        : deloadCounter <= 10
+          ? 'In deload window (8–10 weeks)'
+          : `${deloadCounter - 10} week${deloadCounter - 10 === 1 ? '' : 's'} overdue`
 
   return (
     <section className="space-y-5">
@@ -231,34 +274,49 @@ function ExportSection() {
 
       {/* Export buttons */}
       {!exportSuccess && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="space-y-3">
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+            <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase mb-1">
+              Deload Counter
+            </p>
+            <p className="text-zinc-300 text-xs font-mono">
+              Week {deloadCounter} since last deload • {deloadWindowLabel}
+            </p>
+          </div>
+          <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+            <input
+              type="checkbox"
+              checked={includePhotosInBundle}
+              onChange={(e) => setIncludePhotosInBundle(e.target.checked)}
+              className="h-4 w-4 accent-lime-400"
+            />
+            <span className="text-zinc-300 text-xs font-mono">
+              Include photos in one ZIP bundle
+            </span>
+          </label>
+          <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+            <input
+              type="checkbox"
+              checked={includeDeloadInExport}
+              onChange={(e) => setIncludeDeloadInExport(e.target.checked)}
+              className="h-4 w-4 accent-lime-400"
+            />
+            <span className="text-zinc-300 text-xs font-mono">
+              Mark this export as a deload week
+            </span>
+          </label>
           <button
-            onClick={() => handleExport('v1')}
-            disabled={exportingVersion !== null || !weekData}
+            onClick={() => handleExport()}
+            disabled={exporting || !weekData}
             className="w-full h-14 bg-lime-400 hover:bg-lime-300 active:bg-lime-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase rounded-xl transition-colors flex items-center justify-center gap-3"
           >
-            {exportingVersion === 'v1' ? (
+            {exporting ? (
               <>
                 <div className="w-4 h-4 border-2 border-zinc-700 border-t-zinc-950 rounded-full animate-spin" />
                 Exporting…
               </>
             ) : (
-              'Export Week (v1)'
-            )}
-          </button>
-
-          <button
-            onClick={() => handleExport('v2')}
-            disabled={exportingVersion !== null || !weekData}
-            className="w-full h-14 bg-sky-400 hover:bg-sky-300 active:bg-sky-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase rounded-xl transition-colors flex items-center justify-center gap-3"
-          >
-            {exportingVersion === 'v2' ? (
-              <>
-                <div className="w-4 h-4 border-2 border-zinc-700 border-t-zinc-950 rounded-full animate-spin" />
-                Exporting…
-              </>
-            ) : (
-              'Export Week (v2)'
+              'Export Week'
             )}
           </button>
         </div>
@@ -279,14 +337,25 @@ function ExportSection() {
             <span className="text-emerald-400 text-xl" aria-hidden="true">✓</span>
             <div>
               <p className="text-emerald-400 text-xs font-mono font-bold tracking-widest uppercase">
-                Export {exportSuccess.version.toUpperCase()} Saved to Downloads
+                Export Saved to Downloads
               </p>
               <p className="text-zinc-500 text-xs font-mono mt-0.5">{exportSuccess.filename}</p>
             </div>
           </div>
 
-          {/* Photos to attach */}
-          {exportSuccess.photos_to_attach.length > 0 && (
+          {exportSuccess.includes_photo_bundle && (
+            <div className="bg-sky-400/10 border border-sky-400/30 rounded-xl px-5 py-4">
+              <p className="text-sky-400 text-xs font-mono font-bold tracking-widest uppercase mb-1">
+                Bundle Includes Photos
+              </p>
+              <p className="text-sky-200 text-xs font-mono">
+                ZIP contains JSON and {exportSuccess.photos_included_count} photo{exportSuccess.photos_included_count === 1 ? '' : 's'}.
+              </p>
+            </div>
+          )}
+
+          {/* Photos to attach (JSON-only export) */}
+          {!exportSuccess.includes_photo_bundle && exportSuccess.photos_to_attach.length > 0 && (
             <div className="bg-amber-400/10 border border-amber-400/30 rounded-xl px-5 py-4">
               <p className="text-amber-400 text-xs font-mono font-bold tracking-widest uppercase mb-3">
                 📎 Attach These Photos to Your Claude Message
@@ -307,7 +376,9 @@ function ExportSection() {
               Next Steps
             </p>
             <p className="text-zinc-300 text-sm leading-relaxed">
-              Paste the exported JSON into your Claude project chat. Attach any listed photos.
+              {exportSuccess.includes_photo_bundle
+                ? 'Upload the ZIP to Claude. It already includes your JSON and photos.'
+                : 'Paste the exported JSON into your Claude project chat. Attach any listed photos.'}
               Claude will return a new training plan JSON.
             </p>
           </div>
