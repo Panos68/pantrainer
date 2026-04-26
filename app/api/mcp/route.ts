@@ -245,8 +245,8 @@ export async function POST(request: Request) {
   const id = (req as McpRequest)?.id ?? null
   const method = (req as McpRequest)?.method
 
-  // initialize and tools/list must stay public so Claude can bootstrap and then run OAuth.
-  const requiresAuth = method !== 'initialize' && method !== 'tools/list'
+  // Keep handshake/introspection methods public; protect only tool execution.
+  const requiresAuth = method === 'tools/call'
 
   if (requiresAuth) {
     const tokenCheck = requireAutomationToken()
@@ -254,9 +254,8 @@ export async function POST(request: Request) {
 
     if (!isAutomationAuthorized(request)) {
       const base = new URL(request.url).origin
-      const authHeader = request.headers.get('authorization') ?? '(none)'
       return Response.json(
-        { jsonrpc: '2.0', id, error: { code: -32001, message: 'Unauthorized' }, debug_method: method, debug_auth: authHeader.slice(0, 20) },
+        { jsonrpc: '2.0', id, error: { code: -32001, message: 'Unauthorized' } },
         { status: 401, headers: { ...CORS_HEADERS, 'WWW-Authenticate': `Bearer realm="${base}", resource_metadata="${base}/.well-known/oauth-protected-resource"` } },
       )
     }
