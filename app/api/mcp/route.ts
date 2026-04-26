@@ -264,19 +264,13 @@ export function OPTIONS() {
   return new Response(null, { status: 204, headers: CORS_HEADERS })
 }
 
-// MCP discovery — Claude.ai checks GET to confirm this is an MCP endpoint
-export function GET(request: Request) {
-  const tokenCheck = requireAutomationToken()
-  if (!tokenCheck.ok) return tokenCheck.response
-
-  if (!isAutomationAuthorized(request)) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
+// Public discovery endpoint — Claude.ai probes this to confirm the server exists before OAuth.
+// No auth required; returns only static metadata, no user data.
+export function GET() {
   return Response.json({
     name: 'pantrainer',
     version: '1.0.0',
     description: 'PanTrainer training data access and plan submission',
     tools: TOOLS.map((t) => t.name),
-  })
+  }, { headers: CORS_HEADERS })
 }
