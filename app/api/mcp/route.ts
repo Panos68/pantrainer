@@ -13,6 +13,10 @@ import { SessionSchema, ProposedPlanRunTypeSchema } from '@/lib/schema'
 // MCP tool definitions
 // ---------------------------------------------------------------------------
 
+const API_KEY_SCHEMA = {
+  api_key: { type: 'string', description: 'Required API key.' },
+}
+
 const TOOLS = [
   {
     name: 'get_current_week',
@@ -20,8 +24,8 @@ const TOOLS = [
       'Fetch the current training week export (v2 coach context) plus any automation notes/rules you should follow when proposing plans.',
     inputSchema: {
       type: 'object',
-      properties: {},
-      required: [],
+      properties: { ...API_KEY_SCHEMA },
+      required: ['api_key'],
     },
   },
   {
@@ -31,6 +35,7 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...API_KEY_SCHEMA,
         json: {
           type: 'string',
           description: 'Full week_doc JSON string — same format as exported by get_current_week.',
@@ -42,7 +47,7 @@ const TOOLS = [
           description: 'Type of planning run.',
         },
       },
-      required: ['json'],
+      required: ['api_key', 'json'],
     },
   },
   {
@@ -52,6 +57,7 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
+        ...API_KEY_SCHEMA,
         session: {
           type: 'object',
           description: 'Session object matching the SessionSchema.',
@@ -63,7 +69,7 @@ const TOOLS = [
         source: { type: 'string' },
         run_type: { type: 'string', enum: ['manual', 'daily', 'weekly'] },
       },
-      required: ['session'],
+      required: ['api_key', 'session'],
     },
   },
 ]
@@ -72,7 +78,16 @@ const TOOLS = [
 // Tool handlers
 // ---------------------------------------------------------------------------
 
-async function handleGetCurrentWeek() {
+function validateApiKey(args: Record<string, unknown>): { ok: true } | { ok: false; error: string } {
+  const expected = process.env.MCP_API_KEY
+  if (!expected) return { ok: false, error: 'Server misconfigured' }
+  if (args.api_key !== expected) return { ok: false, error: 'Invalid api_key' }
+  return { ok: true }
+}
+
+async function handleGetCurrentWeek(args: Record<string, unknown>) {
+  const auth = validateApiKey(args)
+  if (!auth.ok) return { error: auth.error }
   const currentWeek = await readCurrentWeek()
   if (!currentWeek) {
     return { error: 'No current week found' }
@@ -85,6 +100,9 @@ async function handleGetCurrentWeek() {
 }
 
 async function handleSubmitProposedPlan(args: Record<string, unknown>) {
+  const auth = validateApiKey(args)
+  if (!auth.ok) return { ok: false, error: auth.error }
+
   const json = args.json
   if (typeof json !== 'string' || json.trim().length === 0) {
     return { ok: false, error: 'Missing json' }
@@ -113,6 +131,9 @@ async function handleSubmitProposedPlan(args: Record<string, unknown>) {
 }
 
 async function handleSubmitTodaySession(args: Record<string, unknown>) {
+  const auth = validateApiKey(args)
+  if (!auth.ok) return { ok: false, error: auth.error }
+
   const sessionParsed = SessionSchema.safeParse(args.session)
   if (!sessionParsed.success) {
     return {
@@ -224,7 +245,7 @@ async function dispatch(req: McpRequest): Promise<Response> {
 
     let data: unknown
     try {
-      if (name === 'get_current_week') data = await handleGetCurrentWeek()
+      if (name === 'get_current_week') data = await handleGetCurrentWeek(args)
       else if (name === 'submit_proposed_plan') data = await handleSubmitProposedPlan(args)
       else if (name === 'submit_today_session') data = await handleSubmitTodaySession(args)
       else return mcpError(id, -32601, `Unknown tool: ${name}`)
