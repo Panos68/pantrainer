@@ -253,9 +253,10 @@ export async function POST(request: Request) {
     if (!tokenCheck.ok) return tokenCheck.response
 
     if (!isAutomationAuthorized(request)) {
+      const base = new URL(request.url).origin
       return Response.json(
         { jsonrpc: '2.0', id: (req as McpRequest)?.id ?? null, error: { code: -32001, message: 'Unauthorized' } },
-        { status: 401, headers: CORS_HEADERS },
+        { status: 401, headers: { ...CORS_HEADERS, 'WWW-Authenticate': `Bearer realm="${base}"` } },
       )
     }
   }
