@@ -10,5 +10,7 @@ export async function GET(request: Request) {
   return Response.json({
     resource: resource || `${base}/api/mcp`,
     authorization_servers: [base],
+    bearer_methods_supported: ['header'],
+    scopes_supported: [],
   })
 }
