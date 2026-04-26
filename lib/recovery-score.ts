@@ -14,10 +14,12 @@ export interface RecoveryScoreBreakdown {
 //   Hours component (0–30): linear scale, 8h = 30pts, <4h = 0pts
 //   Deep sleep component (0–10): deepRatio / 0.20 * 10, capped at 10
 function calcSleepScore(garmin: GarminRecoveryDay): number {
-  const hours = garmin.sleep_hours ?? 0
+  if (garmin.sleep_hours == null) return 20
+
+  const hours = garmin.sleep_hours
   const hoursScore = hours < 4 ? 0 : Math.min(30, (hours / 8) * 30)
 
-  if (!garmin.deep_sleep_hours || !garmin.sleep_hours || garmin.sleep_hours === 0) {
+  if (!garmin.deep_sleep_hours || hours === 0) {
     return Math.round(hoursScore)
   }
   const deepRatio = garmin.deep_sleep_hours / garmin.sleep_hours
