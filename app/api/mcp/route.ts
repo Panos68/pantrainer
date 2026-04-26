@@ -8,7 +8,6 @@ import {
 import { buildExportV2 } from '@/lib/export'
 import { validateImport } from '@/lib/import'
 import { SessionSchema, ProposedPlanRunTypeSchema } from '@/lib/schema'
-import { z } from 'zod'
 
 // ---------------------------------------------------------------------------
 // MCP tool definitions
@@ -244,16 +243,22 @@ export async function POST(request: Request) {
 
   const req = Array.isArray(body) ? body[0] : body
   const id = (req as McpRequest)?.id ?? null
+  const method = (req as McpRequest)?.method
 
-  const tokenCheck = requireAutomationToken()
-  if (!tokenCheck.ok) return tokenCheck.response
+  // initialize and tools/list must stay public so Claude can bootstrap and then run OAuth.
+  const requiresAuth = method !== 'initialize' && method !== 'tools/list'
 
-  if (!isAutomationAuthorized(request)) {
-    const base = new URL(request.url).origin
-    return Response.json(
-      { jsonrpc: '2.0', id, error: { code: -32001, message: 'Unauthorized' } },
-      { status: 401, headers: { ...CORS_HEADERS, 'WWW-Authenticate': `Bearer realm="${base}", resource_metadata="${base}/.well-known/oauth-protected-resource"` } },
-    )
+  if (requiresAuth) {
+    const tokenCheck = requireAutomationToken()
+    if (!tokenCheck.ok) return tokenCheck.response
+
+    if (!isAutomationAuthorized(request)) {
+      const base = new URL(request.url).origin
+      return Response.json(
+        { jsonrpc: '2.0', id, error: { code: -32001, message: 'Unauthorized' } },
+        { status: 401, headers: { ...CORS_HEADERS, 'WWW-Authenticate': `Bearer realm="${base}", resource_metadata="${base}/.well-known/oauth-protected-resource"` } },
+      )
+    }
   }
 
   // Batch support
