@@ -31,6 +31,49 @@ function parseWeight(val: string | number | null | undefined): number | null {
   return isNaN(n) ? null : n
 }
 
+function isBarbellBenchExercise(name: string): boolean {
+  const lower = name.toLowerCase()
+  const isDumbbellBench =
+    lower.includes('bench') &&
+    (lower.includes('dumbbell') || lower.includes('dumbell') || /\bdb\b/.test(lower))
+  if (isDumbbellBench) return false
+  return lower.includes('barbell bench') || lower.includes('bench press')
+}
+
+function weeklyBarbellBenchWeight(week: WeekDoc): number | null {
+  let best: number | null = null
+  for (const session of week.sessions) {
+    if (session.status !== 'completed' || session.type !== 'Strength') continue
+    for (const ex of session.exercises) {
+      if (ex.actual_weight_kg == null) continue
+      if (!isBarbellBenchExercise(ex.name)) continue
+      if (best == null || ex.actual_weight_kg > best) {
+        best = ex.actual_weight_kg
+      }
+    }
+  }
+  return best
+}
+
+function weeklyDumbbellBenchWeight(week: WeekDoc): number | null {
+  let best: number | null = null
+  for (const session of week.sessions) {
+    if (session.status !== 'completed' || session.type !== 'Strength') continue
+    for (const ex of session.exercises) {
+      if (ex.actual_weight_kg == null) continue
+      const lower = ex.name.toLowerCase()
+      const isDumbbellBench =
+        lower.includes('bench') &&
+        (lower.includes('dumbbell') || lower.includes('dumbell') || /\bdb\b/.test(lower))
+      if (!isDumbbellBench) continue
+      if (best == null || ex.actual_weight_kg > best) {
+        best = ex.actual_weight_kg
+      }
+    }
+  }
+  return best
+}
+
 function shortWeekLabel(weekStr: string): string {
   // "Apr 14–20, 2026" → "Apr 14–20"
   const match = weekStr.match(/^(\w+ \d+[–-]\d+)/)
@@ -43,6 +86,11 @@ interface ChartPoint {
   deadlift_kg?: number | null
   push_press_kg?: number | null
   weighted_pullups_added_kg?: number | null
+}
+
+function weekStartDate(week: WeekDoc): string {
+  const dates = week.sessions.map((s) => s.date).filter(Boolean)
+  return dates.length > 0 ? dates.sort()[0] : ''
 }
 
 export default function LiftProgressChart({ weeks }: LiftProgressChartProps) {
@@ -62,13 +110,54 @@ export default function LiftProgressChart({ weeks }: LiftProgressChartProps) {
     })
   }
 
-  const data: ChartPoint[] = weeks.map((w) => ({
-    label: shortWeekLabel(w.week),
-    bench_press_kg: parseWeight(w.lift_progression['bench_press_kg']),
-    deadlift_kg: parseWeight(w.lift_progression['deadlift_kg']),
-    push_press_kg: parseWeight(w.lift_progression['push_press_kg']),
-    weighted_pullups_added_kg: parseWeight(w.lift_progression['weighted_pullups_added_kg']),
-  }))
+  const sortedWeeks = [...weeks].sort((a, b) => weekStartDate(a).localeCompare(weekStartDate(b)))
+
+  const data = sortedWeeks.reduce<{ points: ChartPoint[]; lastKnownBarbellBench: number | null }>(
+    (acc, w) => {
+      const benchFromSessions = weeklyBarbellBenchWeight(w)
+      const dumbbellFromSessions = weeklyDumbbellBenchWeight(w)
+      const benchFromProgression = parseWeight(w.lift_progression['bench_press_kg'])
+      const dumbbellFromProgression = parseWeight(w.lift_progression['sunday_db_bench_kg'])
+      const suspiciousDropWithoutBarbell =
+        benchFromSessions == null &&
+        benchFromProgression != null &&
+        acc.lastKnownBarbellBench != null &&
+        benchFromProgression < acc.lastKnownBarbellBench &&
+        (acc.lastKnownBarbellBench - benchFromProgression >= 20 ||
+          benchFromProgression <= acc.lastKnownBarbellBench * 0.7)
+      const looksLikeOverwrite =
+        suspiciousDropWithoutBarbell ||
+        (
+          benchFromSessions == null &&
+          benchFromProgression != null &&
+          ((dumbbellFromSessions != null && dumbbellFromSessions === benchFromProgression) ||
+            (dumbbellFromProgression != null && dumbbellFromProgression === benchFromProgression))
+        )
+      const benchValue =
+        benchFromSessions ??
+        (looksLikeOverwrite && acc.lastKnownBarbellBench != null
+          ? acc.lastKnownBarbellBench
+          : benchFromProgression)
+      const nextLastKnown =
+        benchFromSessions ??
+        (!looksLikeOverwrite && benchFromProgression != null ? benchFromProgression : acc.lastKnownBarbellBench)
+
+      return {
+        points: [
+          ...acc.points,
+          {
+            label: shortWeekLabel(w.week),
+            bench_press_kg: benchValue,
+            deadlift_kg: parseWeight(w.lift_progression['deadlift_kg']),
+            push_press_kg: parseWeight(w.lift_progression['push_press_kg']),
+            weighted_pullups_added_kg: parseWeight(w.lift_progression['weighted_pullups_added_kg']),
+          },
+        ],
+        lastKnownBarbellBench: nextLastKnown,
+      }
+    },
+    { points: [], lastKnownBarbellBench: null },
+  ).points
 
   return (
     <div className="bg-zinc-900 rounded-xl p-5 space-y-4">
