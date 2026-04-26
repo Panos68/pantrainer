@@ -1,3 +1,4 @@
+import { head } from '@vercel/blob'
 import { format } from 'date-fns'
 import {
   readCurrentWeek,
@@ -71,9 +72,14 @@ const TOOLS = [
 // Tool handlers
 // ---------------------------------------------------------------------------
 
-async function fetchPhotoAsBase64(url: string): Promise<{ data: string; mimeType: string } | null> {
+async function fetchPhotoAsBase64(pathname: string): Promise<{ data: string; mimeType: string } | null> {
   try {
-    const res = await fetch(url)
+    const token = process.env.BLOB_READ_WRITE_TOKEN
+    if (!token) return null
+    const blob = await head(pathname, { token })
+    const res = await fetch(blob.url, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
     if (!res.ok) return null
     const contentType = res.headers.get('content-type') ?? 'image/jpeg'
     const mimeType = contentType.split(';')[0].trim()
