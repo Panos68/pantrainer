@@ -254,8 +254,9 @@ export async function POST(request: Request) {
 
     if (!isAutomationAuthorized(request)) {
       const base = new URL(request.url).origin
+      const authHeader = request.headers.get('authorization') ?? '(none)'
       return Response.json(
-        { jsonrpc: '2.0', id, error: { code: -32001, message: 'Unauthorized' } },
+        { jsonrpc: '2.0', id, error: { code: -32001, message: 'Unauthorized' }, debug_method: method, debug_auth: authHeader.slice(0, 20) },
         { status: 401, headers: { ...CORS_HEADERS, 'WWW-Authenticate': `Bearer realm="${base}", resource_metadata="${base}/.well-known/oauth-protected-resource"` } },
       )
     }
