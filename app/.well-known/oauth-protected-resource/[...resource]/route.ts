@@ -2,10 +2,13 @@ function resolveResourceFromPath(resourcePath: string[], fallback: string): stri
   if (resourcePath.length === 0) return fallback
 
   const joined = resourcePath.join('/')
+  const normalizedJoined =
+    /^https?:\/[^/]/.test(joined) ? joined.replace(/^([a-z]+):\//i, '$1://') : joined
+
   try {
-    return decodeURIComponent(joined)
+    return decodeURIComponent(normalizedJoined)
   } catch {
-    return joined
+    return normalizedJoined
   }
 }
 
