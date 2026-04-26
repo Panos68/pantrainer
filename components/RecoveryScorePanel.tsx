@@ -19,12 +19,18 @@ interface ReadinessData {
   mood: number
 }
 
+interface GarminData {
+  sleep_hours: number | null
+  resting_hr_bpm: number | null
+}
+
 interface ApiResponse {
   date: string
   score: ScoreBreakdown
   readiness: ReadinessData | null
   sleep_avg_7d: number | null
   has_garmin_sleep: boolean
+  garmin: GarminData | null
 }
 
 const EMOJI_SCALE = ['😴', '😕', '😐', '🙂', '⚡']
@@ -35,17 +41,26 @@ const COLOR = {
   red:   { score: 'text-red-400',   label: 'text-red-400',   border: 'border-red-900'   },
 }
 
-function BreakdownBar({ label, value, max }: { label: string; value: number; max: number }) {
+function BreakdownBar({ label, value, max, unavailable }: { label: string; value: number; max: number; unavailable?: boolean }) {
   return (
     <div className="flex items-center gap-2">
       <span className="text-zinc-500 text-[11px] w-14">{label}</span>
-      <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
-        <div
-          className="h-full bg-zinc-400 rounded-full transition-all duration-500"
-          style={{ width: `${Math.round((value / max) * 100)}%` }}
-        />
-      </div>
-      <span className="text-zinc-500 text-[11px] w-10 text-right">{value}/{max}</span>
+      {unavailable ? (
+        <>
+          <div className="flex-1 h-1 bg-zinc-800 rounded-full" />
+          <span className="text-zinc-600 text-[11px] w-10 text-right">—</span>
+        </>
+      ) : (
+        <>
+          <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-zinc-400 rounded-full transition-all duration-500"
+              style={{ width: `${Math.round((value / max) * 100)}%` }}
+            />
+          </div>
+          <span className="text-zinc-500 text-[11px] w-10 text-right">{value}/{max}</span>
+        </>
+      )}
     </div>
   )
 }
@@ -135,7 +150,9 @@ export default function RecoveryScorePanel() {
 
   if (!data) return null
 
-  const { score } = data
+  const { score, garmin } = data
+  const noSleep = !garmin || garmin.sleep_hours == null
+  const noRhr = !garmin || garmin.resting_hr_bpm == null
   const c = COLOR[score.color]
 
   return (
@@ -160,11 +177,11 @@ export default function RecoveryScorePanel() {
       </div>
 
       <div className="space-y-1.5">
-        <BreakdownBar label="Sleep" value={score.sleep} max={40} />
+        <BreakdownBar label="Sleep" value={score.sleep} max={40} unavailable={noSleep} />
         {data.sleep_avg_7d != null && (
           <p className="text-[10px] text-zinc-600 pl-16 -mt-1">7d avg {data.sleep_avg_7d}h</p>
         )}
-        <BreakdownBar label="RHR" value={score.rhr} max={30} />
+        <BreakdownBar label="RHR" value={score.rhr} max={30} unavailable={noRhr} />
         <BreakdownBar label="Load" value={score.load} max={20} />
         <BreakdownBar label="Feeling" value={score.subjective} max={10} />
       </div>
