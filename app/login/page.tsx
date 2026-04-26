@@ -1,13 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 
-export default function LoginPage() {
+function LoginForm() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const returnTo = searchParams.get('returnTo')
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -22,7 +25,7 @@ export default function LoginPage() {
 
     if (res.ok) {
       localStorage.setItem('auth_token', password)
-      router.push('/')
+      router.push(returnTo ?? '/')
       router.refresh()
     } else {
       setError('Wrong password')
@@ -64,5 +67,13 @@ export default function LoginPage() {
         </form>
       </div>
     </main>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   )
 }
