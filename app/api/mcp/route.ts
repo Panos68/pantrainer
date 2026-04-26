@@ -71,6 +71,20 @@ const TOOLS = [
 // Tool handlers
 // ---------------------------------------------------------------------------
 
+async function fetchPhotoAsBase64(url: string): Promise<{ data: string; mimeType: string } | null> {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const contentType = res.headers.get('content-type') ?? 'image/jpeg'
+    const mimeType = contentType.split(';')[0].trim()
+    const buffer = await res.arrayBuffer()
+    const data = Buffer.from(buffer).toString('base64')
+    return { data, mimeType }
+  } catch {
+    return null
+  }
+}
+
 async function handleGetCurrentWeek() {
   const currentWeek = await readCurrentWeek()
   if (!currentWeek) {
@@ -80,7 +94,11 @@ async function handleGetCurrentWeek() {
     buildExportV2(currentWeek),
     readAutomationNotes(),
   ])
-  return { export_v2: payload, automation_notes: notes }
+
+  const photoUrls: string[] = payload.photos_to_attach ?? []
+  const photos = (await Promise.all(photoUrls.map(fetchPhotoAsBase64))).filter(Boolean) as { data: string; mimeType: string }[]
+
+  return { export_v2: payload, automation_notes: notes, photos }
 }
 
 async function handleSubmitProposedPlan(args: Record<string, unknown>) {
@@ -221,19 +239,28 @@ async function dispatch(req: McpRequest): Promise<Response> {
   if (method === 'tools/call') {
     const { name, arguments: args = {} } = (req as Extract<McpRequest, { method: 'tools/call' }>).params
 
-    let data: unknown
     try {
-      if (name === 'get_current_week') data = await handleGetCurrentWeek()
-      else if (name === 'submit_proposed_plan') data = await handleSubmitProposedPlan(args)
+      if (name === 'get_current_week') {
+        const result = await handleGetCurrentWeek()
+        if ('error' in result) {
+          return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] })
+        }
+        const { photos, ...rest } = result
+        const content: unknown[] = [{ type: 'text', text: JSON.stringify(rest, null, 2) }]
+        for (const photo of photos) {
+          content.push({ type: 'image', data: photo.data, mimeType: photo.mimeType })
+        }
+        return mcpResult(id, { content })
+      }
+
+      let data: unknown
+      if (name === 'submit_proposed_plan') data = await handleSubmitProposedPlan(args)
       else if (name === 'submit_today_session') data = await handleSubmitTodaySession(args)
       else return mcpError(id, -32601, `Unknown tool: ${name}`)
+      return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] })
     } catch (err) {
       return mcpError(id, -32603, err instanceof Error ? err.message : 'Internal error')
     }
-
-    return mcpResult(id, {
-      content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
-    })
   }
 
   return mcpError(id, -32601, `Method not found: ${method}`)
