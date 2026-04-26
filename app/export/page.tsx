@@ -581,6 +581,7 @@ function ImportSection() {
       const data = (await res.json()) as {
         ok?: boolean
         data?: WeekDoc
+        activation?: 'immediate' | 'scheduled'
         errors?: string[]
         error?: string
       }
@@ -608,7 +609,11 @@ function ImportSection() {
           },
         },
       })
-      setProposedMsg('Final plan submitted and applied')
+      setProposedMsg(
+        data.activation === 'scheduled'
+          ? 'Final plan scheduled — it will auto-activate on Monday'
+          : 'Final plan submitted and applied',
+      )
       await refreshProposed()
     } catch (error) {
       setImportState({

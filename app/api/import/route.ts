@@ -1,4 +1,10 @@
 import { validateImport, applyImport, isApplyImportError } from '@/lib/import'
+import { readCurrentWeek } from '@/lib/data'
+
+function weekStartIso(week: { sessions: Array<{ day: string; date: string }> }): string | null {
+  const monday = week.sessions.find((s) => s.day === 'Monday')?.date
+  return monday ?? null
+}
 
 // POST /api/import
 // Body: { json: string }  — Claude response text:
@@ -38,5 +44,9 @@ export async function POST(request: Request) {
     ...result,
     data: applied,
     analysis_text: result.analysis_text,
+    activation:
+      weekStartIso((await readCurrentWeek()) ?? { sessions: [] }) === weekStartIso(applied)
+        ? 'immediate'
+        : 'scheduled',
   })
 }

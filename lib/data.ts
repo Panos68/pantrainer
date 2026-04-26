@@ -15,6 +15,7 @@ const STATE_KEY = 'data/state.json'
 const AUTOMATION_NOTES_KEY = 'data/automation-notes.json'
 const PROPOSED_LATEST_KEY = 'data/proposed/latest.json'
 const PROPOSED_HISTORY_PREFIX = 'data/proposed/history/'
+const PENDING_WEEK_KEY = 'data/pending-week.json'
 const WEEKS_PREFIX = 'data/weeks/'
 
 async function readBlobAsJson<T>(pathname: string): Promise<T | null> {
@@ -118,6 +119,20 @@ export async function writeProposedPlan(plan: ProposedPlan): Promise<void> {
 
 export async function clearProposedPlan(): Promise<void> {
   await deleteBlobIfExists(PROPOSED_LATEST_KEY)
+}
+
+export async function readPendingWeek(): Promise<WeekDoc | null> {
+  const raw = await readBlobAsJson<unknown>(PENDING_WEEK_KEY)
+  if (!raw) return null
+  return WeekDocSchema.parse(raw)
+}
+
+export async function writePendingWeek(week: WeekDoc): Promise<void> {
+  await writeBlobAsJson(PENDING_WEEK_KEY, week)
+}
+
+export async function clearPendingWeek(): Promise<void> {
+  await deleteBlobIfExists(PENDING_WEEK_KEY)
 }
 
 function getWeekFilename(week: WeekDoc): string {

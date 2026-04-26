@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { format } from 'date-fns'
 import Link from 'next/link'
 import { readAthleteProfile, readCurrentWeek, readAppState, readAllArchivedWeeks } from '@/lib/data'
+import { activatePendingWeekIfDue } from '@/lib/week-activation'
 import GymWeekBadge from '@/components/GymWeekBadge'
 import NewWeekButton from '@/components/NewWeekButton'
 import HealthFlagsBanner from '@/components/HealthFlagsBanner'
@@ -13,6 +14,7 @@ import RecoveryScorePanel from '@/components/RecoveryScorePanel'
 import AdaptiveAlertBanner from '@/components/AdaptiveAlertBanner'
 
 export default async function Home() {
+  await activatePendingWeekIfDue()
   const profile = await readAthleteProfile()
   if (!profile) redirect('/setup')
 
