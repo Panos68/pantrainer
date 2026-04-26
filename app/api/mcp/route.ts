@@ -243,22 +243,17 @@ export async function POST(request: Request) {
   }
 
   const req = Array.isArray(body) ? body[0] : body
-  const method = (req as McpRequest)?.method
+  const id = (req as McpRequest)?.id ?? null
 
-  // initialize and tools/list are public — Claude.ai calls these before OAuth completes
-  const requiresAuth = method !== 'initialize' && method !== 'tools/list'
+  const tokenCheck = requireAutomationToken()
+  if (!tokenCheck.ok) return tokenCheck.response
 
-  if (requiresAuth) {
-    const tokenCheck = requireAutomationToken()
-    if (!tokenCheck.ok) return tokenCheck.response
-
-    if (!isAutomationAuthorized(request)) {
-      const base = new URL(request.url).origin
-      return Response.json(
-        { jsonrpc: '2.0', id: (req as McpRequest)?.id ?? null, error: { code: -32001, message: 'Unauthorized' } },
-        { status: 401, headers: { ...CORS_HEADERS, 'WWW-Authenticate': `Bearer realm="${base}"` } },
-      )
-    }
+  if (!isAutomationAuthorized(request)) {
+    const base = new URL(request.url).origin
+    return Response.json(
+      { jsonrpc: '2.0', id, error: { code: -32001, message: 'Unauthorized' } },
+      { status: 401, headers: { ...CORS_HEADERS, 'WWW-Authenticate': `Bearer realm="${base}", resource_metadata="${base}/.well-known/oauth-protected-resource"` } },
+    )
   }
 
   // Batch support
