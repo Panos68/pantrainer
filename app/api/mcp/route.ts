@@ -180,12 +180,18 @@ type McpRequest =
   | { jsonrpc: '2.0'; id: string | number; method: 'tools/call'; params: { name: string; arguments?: Record<string, unknown> } }
   | { jsonrpc: '2.0'; id: string | number; method: string; params?: unknown }
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+}
+
 function mcpResult(id: string | number, result: unknown) {
-  return Response.json({ jsonrpc: '2.0', id, result })
+  return Response.json({ jsonrpc: '2.0', id, result }, { headers: CORS_HEADERS })
 }
 
 function mcpError(id: string | number | null, code: number, message: string) {
-  return Response.json({ jsonrpc: '2.0', id, error: { code, message } })
+  return Response.json({ jsonrpc: '2.0', id, error: { code, message } }, { headers: CORS_HEADERS })
 }
 
 async function dispatch(req: McpRequest): Promise<Response> {
@@ -251,6 +257,11 @@ export async function POST(request: Request) {
   }
 
   return dispatch(body as McpRequest)
+}
+
+// CORS preflight
+export function OPTIONS() {
+  return new Response(null, { status: 204, headers: CORS_HEADERS })
 }
 
 // MCP discovery — Claude.ai checks GET to confirm this is an MCP endpoint
