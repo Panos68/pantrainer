@@ -4,7 +4,10 @@ const STRENGTH_TYPES = new Set([
   'strength_training', 'weight_training', 'gym_and_fitness_equipment', 'fitness_equipment',
 ])
 const CONDITIONING_TYPES = new Set([
-  'cardio', 'hiit', 'running', 'cycling', 'swimming', 'workout', 'training',
+  'cardio', 'hiit', 'running', 'cycling', 'swimming', 'workout', 'training', 'indoor_cardio',
+])
+const RECOVERY_TYPES = new Set([
+  'yoga', 'flexibility', 'stretching', 'breathing', 'mindfulness',
 ])
 
 function pickBestActivity(
@@ -19,6 +22,9 @@ function pickBestActivity(
     if (filtered.length) candidates = filtered
   } else if (sessionType === 'Conditioning') {
     const filtered = activities.filter((a) => CONDITIONING_TYPES.has(a.activityType?.typeKey))
+    if (filtered.length) candidates = filtered
+  } else if (sessionType === 'Recovery') {
+    const filtered = activities.filter((a) => RECOVERY_TYPES.has(a.activityType?.typeKey))
     if (filtered.length) candidates = filtered
   }
 

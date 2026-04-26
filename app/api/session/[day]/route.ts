@@ -2,6 +2,14 @@ import { readCurrentWeek, writeCurrentWeek } from '@/lib/data'
 import { updateLiftProgression } from '@/lib/progression'
 import type { Session, WeekSummary } from '@/lib/schema'
 
+function todayIsoLocal(): string {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 function recalculateWeekSummary(sessions: Session[]): WeekSummary {
   const completed = sessions.filter((s) => s.status === 'completed')
   return {
@@ -50,6 +58,17 @@ export async function PATCH(
   const session = week.sessions[sessionIndex]
 
   const body = await req.json() as Partial<Session>
+  const nextStatus = body.status ?? session.status
+  const sessionIsFuture = session.date > todayIsoLocal()
+  const isLoggingAction =
+    nextStatus === 'in_progress' || nextStatus === 'completed' || nextStatus === 'skipped'
+  if (sessionIsFuture && isLoggingAction) {
+    return Response.json(
+      { error: 'Cannot log progress for a future session date' },
+      { status: 409 },
+    )
+  }
+
   const updatedSession: Session = { ...session, ...body }
   week.sessions[sessionIndex] = updatedSession
 

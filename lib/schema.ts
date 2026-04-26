@@ -13,6 +13,7 @@ export const ExerciseSchema = z.object({
   actual_sets: z.number().nullable().optional(),
   actual_reps: z.union([z.number(), z.string()]).nullable().optional(),
   actual_weight_kg: z.number().nullable().optional(),
+  effort: z.enum(['easy', 'perfect', 'hard']).nullable().optional(),
   alternatives: z.array(z.object({
     name: z.string(),
     sets: z.number().nullable().optional(),
@@ -46,6 +47,8 @@ export const SessionSchema = z.object({
     zone_high_boundary: z.number(),
   })).nullable().optional(),
   muscle_groups: z.array(z.string()).default([]),
+  rpe: z.number().min(1).max(10).nullable().optional(),
+  reasoning: z.string().nullable().optional(),
 })
 
 // Week summary
@@ -70,6 +73,16 @@ export const GarminRecoveryDaySchema = z.object({
   max_hr_bpm: z.number().nullable().optional(),
   fetched_at: z.string().optional(),
 })
+
+// Daily subjective check-in
+export const DailyReadinessSchema = z.object({
+  date: z.string(),             // YYYY-MM-DD
+  energy_level: z.number().min(1).max(5),
+  sleep_quality: z.number().min(1).max(5),
+  mood: z.number().min(1).max(5),
+  logged_at: z.string(),        // ISO timestamp
+})
+export type DailyReadiness = z.infer<typeof DailyReadinessSchema>
 
 // Health flag
 export const HealthFlagSchema = z.object({
@@ -118,6 +131,7 @@ export const WeekDocSchema = z.object({
   health_flags: z.array(HealthFlagSchema).default([]),
   next_week_plan: NextWeekPlanSchema.default({}),
   garmin_recovery: z.record(z.string(), GarminRecoveryDaySchema).default({}),
+  daily_readiness: z.record(z.string(), DailyReadinessSchema).default({}),
 })
 
 // Athlete profile (stored separately in data/athlete.json)

@@ -1,6 +1,8 @@
 import type { WeekDoc } from './schema'
+import { calcRecoveryScore } from './recovery-score'
 import { readArchivedWeeks, readAppState } from './data'
 import { sessionToLoadPoint, type TrainingLoadPoint } from './training-load'
+import { calcOverloadInsights } from './overload'
 import { format, parseISO, subDays } from 'date-fns'
 
 export interface ExportPayload {
@@ -43,6 +45,11 @@ export interface CoachContext {
     current_lifts: Record<string, number>
     pr_lifts: string[]
     plateau_lifts: string[]
+    effort_summary: {
+      easy: number
+      perfect: number
+      hard: number
+    }
   }
   constraints: {
     active_flags: WeekDoc['health_flags']
@@ -56,6 +63,18 @@ export interface CoachContext {
     recovery_days_logged: number
     confidence_score: number
   }
+  readiness_summary: {
+    today_score: number | null
+    today_label: string | null
+    recent_rpe: Array<{ date: string; rpe: number }>
+    avg_rpe_7d: number | null
+  }
+  overload_signals: Array<{
+    exercise: string
+    signal: string
+    weeksAtCurrentWeight: number
+    suggestion: string
+  }>
 }
 
 export interface ExportPayloadV2 extends ExportPayload {
@@ -214,6 +233,22 @@ function buildCoachContext(
     (confidenceComponents.reduce((sum, value) => sum + value, 0) / confidenceComponents.length) * 100,
   )
 
+  // Recovery score for today
+  const todayDate = format(new Date(), 'yyyy-MM-dd')
+  const todayGarmin = currentWeek.garmin_recovery?.[todayDate] ?? null
+  const todayReadiness = currentWeek.daily_readiness?.[todayDate] ?? null
+  const todayScore = calcRecoveryScore(todayGarmin, currentWeek.athlete.rhr_bpm, acwr, todayReadiness)
+
+  // RPE from completed sessions this week
+  const recentRpe = currentWeek.sessions
+    .filter((s) => s.status === 'completed' && s.rpe != null)
+    .map((s) => ({ date: s.date, rpe: s.rpe! }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+  const avg_rpe_7d =
+    recentRpe.length > 0
+      ? Math.round((recentRpe.reduce((sum, r) => sum + r.rpe, 0) / recentRpe.length) * 10) / 10
+      : null
+
   return {
     adherence: {
       completed,
@@ -240,6 +275,18 @@ function buildCoachContext(
       current_lifts: currentLifts,
       pr_lifts,
       plateau_lifts,
+      effort_summary: currentWeek.sessions
+        .filter((s) => s.status === 'completed' && s.type === 'Strength')
+        .flatMap((s) => s.exercises)
+        .reduce(
+          (acc, ex) => {
+            if (ex.effort === 'easy') acc.easy++
+            else if (ex.effort === 'perfect') acc.perfect++
+            else if (ex.effort === 'hard') acc.hard++
+            return acc
+          },
+          { easy: 0, perfect: 0, hard: 0 },
+        ),
     },
     constraints: {
       active_flags,
@@ -253,10 +300,21 @@ function buildCoachContext(
       recovery_days_logged: uniqueRecoveryDates,
       confidence_score,
     },
+    readiness_summary: {
+      today_score: todayScore.total,
+      today_label: todayScore.label,
+      recent_rpe: recentRpe,
+      avg_rpe_7d,
+    },
+    overload_signals: calcOverloadInsights(currentWeek, archivedWeeks)
+      .filter((i) => i.signal !== 'ok')
+      .map(({ exercise, signal, weeksAtCurrentWeight, suggestion }) => ({
+        exercise, signal, weeksAtCurrentWeight, suggestion,
+      })),
   }
 }
 
-export async function buildExport(currentWeek: WeekDoc): Promise<ExportPayload> {
+export async function buildExport(currentWeek: WeekDoc, options?: { includeDeload?: boolean }): Promise<ExportPayload> {
   const state = await readAppState()
 
   const photos_to_attach = currentWeek.sessions
@@ -277,23 +335,27 @@ export async function buildExport(currentWeek: WeekDoc): Promise<ExportPayload> 
     ),
   }))
 
+  const exportAthlete = { rhr: currentWeek.athlete.rhr_bpm, maxHr: 220 - currentWeek.athlete.age }
   const training_load_history: TrainingLoadPoint[] = [...archivedWeeks, currentWeek]
     .flatMap((w) => w.sessions)
-    .map(sessionToLoadPoint)
+    .map((s) => sessionToLoadPoint(s, exportAthlete))
     .filter((p): p is TrainingLoadPoint => p !== null)
     .sort((a, b) => a.date.localeCompare(b.date))
 
   return {
     ...currentWeek,
-    is_deload_week: state.isDeloadWeek,
+    is_deload_week: options?.includeDeload ?? state.isDeloadWeek,
     photos_to_attach,
     history,
     training_load_history,
   }
 }
 
-export async function buildExportV2(currentWeek: WeekDoc): Promise<ExportPayloadV2> {
-  const base = await buildExport(currentWeek)
+export async function buildExportV2(
+  currentWeek: WeekDoc,
+  options?: { includeDeload?: boolean },
+): Promise<ExportPayloadV2> {
+  const base = await buildExport(currentWeek, options)
   const archivedWeeks = await readArchivedWeeks(8)
 
   return {
