@@ -1,4 +1,5 @@
 import { put, head, del, list } from '@vercel/blob'
+import { unstable_cache, revalidateTag } from 'next/cache'
 import {
   WeekDocSchema,
   AthleteProfileSchema,
@@ -33,6 +34,13 @@ async function readBlobAsJson<T>(pathname: string): Promise<T | null> {
   }
 }
 
+function cachedBlobRead<T>(pathname: string, tag: string): () => Promise<T | null> {
+  return unstable_cache(() => readBlobAsJson<T>(pathname), [pathname], {
+    tags: [tag],
+    revalidate: 3600,
+  })
+}
+
 async function writeBlobAsJson(pathname: string, data: unknown): Promise<void> {
   await put(pathname, JSON.stringify(data, null, 2), {
     access: 'private',
@@ -51,31 +59,37 @@ async function deleteBlobIfExists(pathname: string): Promise<void> {
   }
 }
 
+const _readCurrentWeekCached = cachedBlobRead<unknown>(CURRENT_WEEK_KEY, 'current-week')
 export async function readCurrentWeek(): Promise<WeekDoc | null> {
-  const raw = await readBlobAsJson<unknown>(CURRENT_WEEK_KEY)
+  const raw = await _readCurrentWeekCached()
   if (!raw) return null
   return WeekDocSchema.parse(raw)
 }
 
 export async function writeCurrentWeek(week: WeekDoc): Promise<void> {
   await writeBlobAsJson(CURRENT_WEEK_KEY, week)
+  revalidateTag('current-week', 'max')
 }
 
+const _readAthleteProfileCached = cachedBlobRead<unknown>(ATHLETE_KEY, 'athlete-profile')
 export async function readAthleteProfile(): Promise<AthleteProfile | null> {
-  const raw = await readBlobAsJson<unknown>(ATHLETE_KEY)
+  const raw = await _readAthleteProfileCached()
   if (!raw) return null
   return AthleteProfileSchema.parse(raw)
 }
 
 export async function writeAthleteProfile(profile: AthleteProfile): Promise<void> {
   await writeBlobAsJson(ATHLETE_KEY, profile)
+  revalidateTag('athlete-profile', 'max')
 }
 
+const _readAppStateCached = cachedBlobRead<unknown>(STATE_KEY, 'app-state')
 export async function readAppState(): Promise<AppState> {
-  const raw = await readBlobAsJson<unknown>(STATE_KEY)
+  const raw = await _readAppStateCached()
   if (!raw) {
     const defaults = AppStateSchema.parse({})
     await writeBlobAsJson(STATE_KEY, defaults)
+    revalidateTag('app-state', 'max')
     return defaults
   }
   return AppStateSchema.parse(raw)
@@ -83,6 +97,7 @@ export async function readAppState(): Promise<AppState> {
 
 export async function writeAppState(state: AppState): Promise<void> {
   await writeBlobAsJson(STATE_KEY, state)
+  revalidateTag('app-state', 'max')
 }
 
 function toProposalSnapshotKey(createdAt: string): string {
@@ -90,11 +105,13 @@ function toProposalSnapshotKey(createdAt: string): string {
   return `${PROPOSED_HISTORY_PREFIX}${safeStamp}.json`
 }
 
+const _readAutomationNotesCached = cachedBlobRead<unknown>(AUTOMATION_NOTES_KEY, 'automation-notes')
 export async function readAutomationNotes(): Promise<AutomationNotes> {
-  const raw = await readBlobAsJson<unknown>(AUTOMATION_NOTES_KEY)
+  const raw = await _readAutomationNotesCached()
   if (!raw) {
     const defaults = AutomationNotesSchema.parse({})
     await writeBlobAsJson(AUTOMATION_NOTES_KEY, defaults)
+    revalidateTag('automation-notes', 'max')
     return defaults
   }
   return AutomationNotesSchema.parse(raw)
@@ -102,10 +119,12 @@ export async function readAutomationNotes(): Promise<AutomationNotes> {
 
 export async function writeAutomationNotes(notes: AutomationNotes): Promise<void> {
   await writeBlobAsJson(AUTOMATION_NOTES_KEY, notes)
+  revalidateTag('automation-notes', 'max')
 }
 
+const _readProposedPlanCached = cachedBlobRead<unknown>(PROPOSED_LATEST_KEY, 'proposed-plan')
 export async function readProposedPlan(): Promise<ProposedPlan | null> {
-  const raw = await readBlobAsJson<unknown>(PROPOSED_LATEST_KEY)
+  const raw = await _readProposedPlanCached()
   if (!raw) return null
   return ProposedPlanSchema.parse(raw)
 }
@@ -115,24 +134,29 @@ export async function writeProposedPlan(plan: ProposedPlan): Promise<void> {
     writeBlobAsJson(PROPOSED_LATEST_KEY, plan),
     writeBlobAsJson(toProposalSnapshotKey(plan.created_at), plan),
   ])
+  revalidateTag('proposed-plan', 'max')
 }
 
 export async function clearProposedPlan(): Promise<void> {
   await deleteBlobIfExists(PROPOSED_LATEST_KEY)
+  revalidateTag('proposed-plan', 'max')
 }
 
+const _readPendingWeekCached = cachedBlobRead<unknown>(PENDING_WEEK_KEY, 'pending-week')
 export async function readPendingWeek(): Promise<WeekDoc | null> {
-  const raw = await readBlobAsJson<unknown>(PENDING_WEEK_KEY)
+  const raw = await _readPendingWeekCached()
   if (!raw) return null
   return WeekDocSchema.parse(raw)
 }
 
 export async function writePendingWeek(week: WeekDoc): Promise<void> {
   await writeBlobAsJson(PENDING_WEEK_KEY, week)
+  revalidateTag('pending-week', 'max')
 }
 
 export async function clearPendingWeek(): Promise<void> {
   await deleteBlobIfExists(PENDING_WEEK_KEY)
+  revalidateTag('pending-week', 'max')
 }
 
 function getWeekFilename(week: WeekDoc): string {
@@ -147,6 +171,8 @@ export async function archiveWeek(week: WeekDoc): Promise<void> {
   const filename = getWeekFilename(week)
   await writeBlobAsJson(`${WEEKS_PREFIX}${filename}`, week)
   await deleteBlobIfExists(CURRENT_WEEK_KEY)
+  revalidateTag('archived-weeks', 'max')
+  revalidateTag('current-week', 'max')
 }
 
 async function fetchBlobUrl(url: string): Promise<Response> {
@@ -157,23 +183,29 @@ async function fetchBlobUrl(url: string): Promise<Response> {
   })
 }
 
+const _listArchivedWeekBlobs = unstable_cache(
+  async () => {
+    const result = await list({ prefix: WEEKS_PREFIX })
+    return result.blobs.sort((a, b) => a.pathname.localeCompare(b.pathname))
+  },
+  ['archived-week-blobs'],
+  { tags: ['archived-weeks'], revalidate: 86400 }
+)
+
 export async function readArchivedWeeks(n: number): Promise<WeekDoc[]> {
-  const result = await list({ prefix: WEEKS_PREFIX })
-  const sorted = result.blobs
-    .sort((a, b) => b.pathname.localeCompare(a.pathname))
-    .slice(0, n)
+  const sorted = await _listArchivedWeekBlobs()
+  const slice = sorted.slice(-n)
   const weeks = await Promise.all(
-    sorted.map(async (blob) => {
+    slice.map(async (blob) => {
       const res = await fetchBlobUrl(blob.url)
       return WeekDocSchema.parse(await res.json())
     })
   )
-  return weeks.reverse()
+  return weeks
 }
 
 export async function readAllArchivedWeeks(): Promise<WeekDoc[]> {
-  const result = await list({ prefix: WEEKS_PREFIX })
-  const sorted = result.blobs.sort((a, b) => a.pathname.localeCompare(b.pathname))
+  const sorted = await _listArchivedWeekBlobs()
   return Promise.all(
     sorted.map(async (blob) => {
       const res = await fetchBlobUrl(blob.url)

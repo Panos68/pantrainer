@@ -24,7 +24,7 @@ interface GarminData {
   resting_hr_bpm: number | null
 }
 
-interface ApiResponse {
+export interface ReadinessApiResponse {
   date: string
   score: ScoreBreakdown
   readiness: ReadinessData | null
@@ -39,6 +39,23 @@ const COLOR = {
   green: { score: 'text-green-400', label: 'text-green-400', border: 'border-green-900' },
   amber: { score: 'text-amber-400', label: 'text-amber-400', border: 'border-amber-900' },
   red:   { score: 'text-red-400',   label: 'text-red-400',   border: 'border-red-900'   },
+}
+
+function cacheKey(date: string) { return `readiness-cache-${date}` }
+
+export function getReadinessCache(date: string): ReadinessApiResponse | null {
+  try {
+    const raw = localStorage.getItem(cacheKey(date))
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+function setReadinessCache(date: string, data: ReadinessApiResponse) {
+  try { localStorage.setItem(cacheKey(date), JSON.stringify(data)) } catch { /* noop */ }
+}
+
+function clearReadinessCache(date: string) {
+  try { localStorage.removeItem(cacheKey(date)) } catch { /* noop */ }
 }
 
 function BreakdownBar({ label, value, max, unavailable }: { label: string; value: number; max: number; unavailable?: boolean }) {
@@ -88,7 +105,7 @@ function EmojiPicker({ label, value, onChange }: { label: string; value: number;
 
 export default function RecoveryScorePanel() {
   const today = format(new Date(), 'yyyy-MM-dd')
-  const [data, setData] = useState<ApiResponse | null>(null)
+  const [data, setData] = useState<ReadinessApiResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [checkinOpen, setCheckinOpen] = useState(false)
   const [energy, setEnergy] = useState(3)
@@ -99,21 +116,25 @@ export default function RecoveryScorePanel() {
   useEffect(() => {
     async function load() {
       try {
-        const d: ApiResponse = await fetch(`/api/readiness?date=${today}`).then((r) => r.json())
+        const cached = getReadinessCache(today)
+        if (cached) {
+          setData(cached)
+          if (!cached.readiness) setCheckinOpen(true)
+          return
+        }
+
+        let d: ReadinessApiResponse = await fetch(`/api/readiness?date=${today}`).then((r) => r.json())
         if (!d.has_garmin_sleep) {
-          // Auto-fetch Garmin sleep for today if not yet saved
           await fetch('/api/garmin/recovery', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ date: today }),
           }).catch(() => {})
-          const refreshed: ApiResponse = await fetch(`/api/readiness?date=${today}`).then((r) => r.json())
-          setData(refreshed)
-          if (!refreshed.readiness) setCheckinOpen(true)
-        } else {
-          setData(d)
-          if (!d.readiness) setCheckinOpen(true)
+          d = await fetch(`/api/readiness?date=${today}`).then((r) => r.json())
         }
+        setReadinessCache(today, d)
+        setData(d)
+        if (!d.readiness) setCheckinOpen(true)
       } catch (e) {
         console.error(e)
       } finally {
@@ -131,7 +152,9 @@ export default function RecoveryScorePanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ date: today, energy_level: energy, sleep_quality: sleepQ, mood }),
       })
-      const updated: ApiResponse = await fetch(`/api/readiness?date=${today}`).then((r) => r.json())
+      clearReadinessCache(today)
+      const updated: ReadinessApiResponse = await fetch(`/api/readiness?date=${today}`).then((r) => r.json())
+      setReadinessCache(today, updated)
       setData(updated)
       setCheckinOpen(false)
     } finally {
