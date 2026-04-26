@@ -1,4 +1,3 @@
-import { timingSafeEqual } from 'crypto'
 import { format } from 'date-fns'
 import {
   readCurrentWeek,
@@ -241,34 +240,10 @@ async function dispatch(req: McpRequest): Promise<Response> {
 }
 
 // ---------------------------------------------------------------------------
-// Auth — validated via ?key= query param in the connector URL
-// ---------------------------------------------------------------------------
-
-function authenticate(request: Request): boolean {
-  const expected = process.env.MCP_API_KEY
-  if (!expected) return true // no key configured → open (dev mode)
-  const key = new URL(request.url).searchParams.get('key') ?? ''
-  if (!key) return false
-  try {
-    return timingSafeEqual(Buffer.from(key), Buffer.from(expected))
-  } catch {
-    return false
-  }
-}
-
-function forbidden() {
-  return new Response(JSON.stringify({ error: 'forbidden' }), {
-    status: 403,
-    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-  })
-}
-
-// ---------------------------------------------------------------------------
 // HTTP handler
 // ---------------------------------------------------------------------------
 
 export async function POST(request: Request) {
-  if (!authenticate(request)) return forbidden()
 
   let body: unknown
   try {
@@ -294,8 +269,7 @@ export function OPTIONS() {
 
 // SSE endpoint for server-to-client streaming (MCP 2025-03-26 streamable HTTP transport).
 // Vercel serverless can't maintain long-lived connections; we send heartbeats until timeout.
-export function GET(request: Request) {
-  if (!authenticate(request)) return forbidden()
+export function GET(_request: Request) {
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
     start(controller) {
