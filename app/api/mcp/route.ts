@@ -240,10 +240,42 @@ async function dispatch(req: McpRequest): Promise<Response> {
 }
 
 // ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
+function authenticate(request: Request): boolean {
+  const expected = process.env.AUTOMATION_API_TOKEN
+  if (!expected) return false
+  const auth = request.headers.get('authorization') ?? ''
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  try {
+    return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected))
+  } catch {
+    return false
+  }
+}
+
+function unauthorized() {
+  return new Response(
+    JSON.stringify({ error: 'unauthorized' }),
+    {
+      status: 401,
+      headers: {
+        ...CORS_HEADERS,
+        'WWW-Authenticate': 'Bearer',
+        'Content-Type': 'application/json',
+      },
+    },
+  )
+}
+
+// ---------------------------------------------------------------------------
 // HTTP handler
 // ---------------------------------------------------------------------------
 
 export async function POST(request: Request) {
+  if (!authenticate(request)) return unauthorized()
+
   let body: unknown
   try {
     body = await request.json()
@@ -268,7 +300,8 @@ export function OPTIONS() {
 
 // SSE endpoint for server-to-client streaming (MCP 2025-03-26 streamable HTTP transport).
 // Vercel serverless can't maintain long-lived connections; we send heartbeats until timeout.
-export function GET() {
+export function GET(request: Request) {
+  if (!authenticate(request)) return unauthorized()
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
     start(controller) {
