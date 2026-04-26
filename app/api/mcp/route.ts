@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'crypto'
 import { format } from 'date-fns'
 import {
   readCurrentWeek,
@@ -249,7 +250,7 @@ function authenticate(request: Request): boolean {
   const auth = request.headers.get('authorization') ?? ''
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
   try {
-    return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected))
+    return timingSafeEqual(Buffer.from(token), Buffer.from(expected))
   } catch {
     return false
   }
