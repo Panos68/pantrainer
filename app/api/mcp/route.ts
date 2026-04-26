@@ -180,8 +180,9 @@ type McpRequest =
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, Mcp-Session-Id',
+  'Access-Control-Expose-Headers': 'Mcp-Session-Id',
 }
 
 function mcpResult(id: string | number, result: unknown) {
@@ -193,14 +194,24 @@ function mcpError(id: string | number | null, code: number, message: string) {
 }
 
 async function dispatch(req: McpRequest): Promise<Response> {
+  // Notifications have no id — return 202 Accepted with no body
+  if (!('id' in req) || req.id === undefined || req.id === null) {
+    return new Response(null, { status: 202, headers: CORS_HEADERS })
+  }
+
   const { id, method } = req
 
   if (method === 'initialize') {
-    return mcpResult(id, {
-      protocolVersion: '2024-11-05',
+    const sessionId = crypto.randomUUID()
+    const body = {
+      protocolVersion: '2025-03-26',
       capabilities: { tools: {} },
       serverInfo: { name: 'pantrainer', version: '1.0.0' },
-    })
+    }
+    return Response.json(
+      { jsonrpc: '2.0', id, result: body },
+      { headers: { ...CORS_HEADERS, 'Mcp-Session-Id': sessionId } },
+    )
   }
 
   if (method === 'tools/list') {
@@ -255,13 +266,10 @@ export function OPTIONS() {
   return new Response(null, { status: 204, headers: CORS_HEADERS })
 }
 
-// Public discovery endpoint — Claude.ai probes this to confirm the server exists before OAuth.
-// No auth required; returns only static metadata, no user data.
+// MCP endpoint only accepts POST. Return 405 for GET so Claude.ai knows it's an MCP server.
 export function GET() {
-  return Response.json({
-    name: 'pantrainer',
-    version: '1.0.0',
-    description: 'PanTrainer training data access and plan submission',
-    tools: TOOLS.map((t) => t.name),
-  }, { headers: CORS_HEADERS })
+  return new Response(null, {
+    status: 405,
+    headers: { ...CORS_HEADERS, Allow: 'POST, OPTIONS' },
+  })
 }
