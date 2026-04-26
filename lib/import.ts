@@ -23,6 +23,25 @@ export interface ImportError {
   errors: string[]
 }
 
+function normalizeSessionType(type: string): string {
+  const normalized = type.trim().toLowerCase()
+  if (normalized === 'strength') return 'Strength'
+  if (normalized === 'conditioning') return 'Conditioning'
+  if (normalized === 'recovery') return 'Recovery'
+  if (normalized === 'rest') return 'Rest'
+  return type
+}
+
+export function normalizeWeekDocSessionTypes(weekDoc: WeekDoc): WeekDoc {
+  return {
+    ...weekDoc,
+    sessions: weekDoc.sessions.map((session) => ({
+      ...session,
+      type: normalizeSessionType(session.type),
+    })),
+  }
+}
+
 // Validate Claude's JSON response
 export function validateImport(raw: string): ImportResult | ImportError {
   try {
@@ -33,7 +52,7 @@ export function validateImport(raw: string): ImportResult | ImportError {
     })
     const envelopeResult = envelopeSchema.safeParse(parsed)
     if (envelopeResult.success) {
-      const weekDoc = envelopeResult.data.week_doc
+      const weekDoc = normalizeWeekDocSessionTypes(envelopeResult.data.week_doc)
       return {
         ok: true,
         data: weekDoc,
@@ -56,7 +75,7 @@ export function validateImport(raw: string): ImportResult | ImportError {
     }
     return {
       ok: true,
-      data: weekDocResult.data,
+      data: normalizeWeekDocSessionTypes(weekDocResult.data),
       analysis_text: null,
       nextWeek: {
         week: weekDocResult.data.week,
@@ -187,11 +206,12 @@ function validateAndDecideMode(
 // - next-week import archives current week first
 // - always returns exactly 7 sessions with canonical day/date mapping
 export async function applyImport(importedDoc: WeekDoc): Promise<WeekDoc> {
+  const normalizedImport = normalizeWeekDocSessionTypes(importedDoc)
   const currentWeek = await readCurrentWeek()
-  const { importedMonday, mode } = validateAndDecideMode(currentWeek, importedDoc)
+  const { importedMonday, mode } = validateAndDecideMode(currentWeek, normalizedImport)
 
   const importedByDay: Record<string, WeekDoc['sessions'][number]> = {}
-  for (const s of importedDoc.sessions) {
+  for (const s of normalizedImport.sessions) {
     importedByDay[s.day] = s
   }
 
@@ -223,7 +243,7 @@ export async function applyImport(importedDoc: WeekDoc): Promise<WeekDoc> {
   })
 
   const merged: WeekDoc = {
-    ...importedDoc,
+    ...normalizedImport,
     sessions: mergedSessions,
   }
 
