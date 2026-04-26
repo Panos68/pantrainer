@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server'
 const PUBLIC_PATHS = [
   '/login',
   '/api/auth/login',
-  '/.well-known/oauth-authorization-server',
+  '/.well-known/',
   '/api/oauth/authorize',
   '/api/oauth/token',
   '/api/mcp',
