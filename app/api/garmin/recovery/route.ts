@@ -64,8 +64,9 @@ export async function POST(req: Request) {
     weekMutated = true
   }
 
-  // Return cached data if available and not forcing refresh
-  if (existing && !force) {
+  // Return cached data if available, not forcing refresh, and sleep is present.
+  // If sleep is missing from cache, fall through to re-fetch so it gets another chance.
+  if (existing && existing.sleep_hours != null && !force) {
     if (weekMutated) {
       await writeCurrentWeek(week)
     }
