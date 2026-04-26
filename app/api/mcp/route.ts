@@ -33,13 +33,17 @@ const TOOLS = [
       properties: {
         json: {
           type: 'string',
-          description: 'Full week_doc JSON string — same format as exported by get_current_week.',
+          description: 'Either full week_doc JSON or { "week_doc": ..., "analysis_text": "..." }.',
         },
         source: { type: 'string', description: 'Label for the source (default: cowork).' },
         run_type: {
           type: 'string',
           enum: ['manual', 'daily', 'weekly'],
           description: 'Type of planning run.',
+        },
+        analysis_text: {
+          type: 'string',
+          description: 'Optional plain-text week analysis written by Claude for the athlete.',
         },
       },
       required: ['json'],
@@ -62,6 +66,7 @@ const TOOLS = [
         },
         source: { type: 'string' },
         run_type: { type: 'string', enum: ['manual', 'daily', 'weekly'] },
+        analysis_text: { type: 'string' },
       },
       required: ['session'],
     },
@@ -122,17 +127,22 @@ async function handleSubmitProposedPlan(args: Record<string, unknown>) {
   const source = typeof args.source === 'string' ? args.source : 'cowork'
   const runTypeParsed = ProposedPlanRunTypeSchema.safeParse(args.run_type)
   const run_type = runTypeParsed.success ? runTypeParsed.data : 'manual'
+  const analysis_text =
+    typeof args.analysis_text === 'string'
+      ? args.analysis_text
+      : result.analysis_text
 
   await writeProposedPlan({
     created_at: new Date().toISOString(),
     source,
     run_type,
     notes_version: notes.updated_at,
+    analysis_text,
     raw_json: json,
     week_doc: result.data,
   })
 
-  return { ok: true, source, run_type }
+  return { ok: true, source, run_type, analysis_text }
 }
 
 async function handleSubmitTodaySession(args: Record<string, unknown>) {
@@ -179,17 +189,26 @@ async function handleSubmitTodaySession(args: Record<string, unknown>) {
   const source = typeof args.source === 'string' ? args.source : 'cowork'
   const runTypeParsed = ProposedPlanRunTypeSchema.safeParse(args.run_type)
   const run_type = runTypeParsed.success ? runTypeParsed.data : 'daily'
+  const analysis_text = typeof args.analysis_text === 'string' ? args.analysis_text : null
 
   await writeProposedPlan({
     created_at: new Date().toISOString(),
     source,
     run_type,
     notes_version: notes.updated_at,
+    analysis_text,
     raw_json: JSON.stringify(proposedWeek, null, 2),
     week_doc: proposedWeek,
   })
 
-  return { ok: true, target_day: existing.day, target_date: existing.date, source, run_type }
+  return {
+    ok: true,
+    target_day: existing.day,
+    target_date: existing.date,
+    source,
+    run_type,
+    analysis_text,
+  }
 }
 
 // ---------------------------------------------------------------------------

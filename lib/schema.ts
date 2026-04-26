@@ -171,6 +171,7 @@ export const ProposedPlanSchema = z.object({
   source: z.string().default('manual'),
   run_type: ProposedPlanRunTypeSchema.default('manual'),
   notes_version: z.string().nullable().default(null),
+  analysis_text: z.string().nullable().default(null),
   raw_json: z.string(),
   week_doc: WeekDocSchema,
 })

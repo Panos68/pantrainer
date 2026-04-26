@@ -12,6 +12,7 @@ const AutomationProposedTodayRequestSchema = z.object({
   target_date: z.string().regex(ISO_DATE_REGEX).optional(),
   source: z.string().optional(),
   run_type: ProposedPlanRunTypeSchema.optional(),
+  analysis_text: z.string().nullable().optional(),
   notes_version: z.string().nullable().optional(),
 })
 
@@ -113,6 +114,7 @@ export async function POST(request: Request) {
     source: parsedBody.data.source ?? 'cowork',
     run_type: parsedBody.data.run_type ?? 'daily',
     notes_version: parsedBody.data.notes_version ?? notes.updated_at,
+    analysis_text: parsedBody.data.analysis_text ?? null,
     raw_json: JSON.stringify(proposedWeek, null, 2),
     week_doc: proposedWeek,
   }
@@ -125,5 +127,6 @@ export async function POST(request: Request) {
     target_date: existing.date,
     created_at: proposed.created_at,
     run_type: proposed.run_type,
+    analysis_text: proposed.analysis_text,
   })
 }

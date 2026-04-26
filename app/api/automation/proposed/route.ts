@@ -8,6 +8,7 @@ import type { WeekDoc } from '@/lib/schema'
 const AutomationProposedRequestSchema = z.object({
   json: z.string().optional(),
   week_doc: WeekDocSchema.optional(),
+  analysis_text: z.string().nullable().optional(),
   source: z.string().optional(),
   run_type: ProposedPlanRunTypeSchema.optional(),
   notes_version: z.string().nullable().optional(),
@@ -16,6 +17,7 @@ const AutomationProposedRequestSchema = z.object({
 function parseWeekDoc(body: z.infer<typeof AutomationProposedRequestSchema>): {
   weekDoc: WeekDoc
   rawJson: string
+  analysisText: string | null
 } | {
   error: string
   errors?: string[]
@@ -28,6 +30,7 @@ function parseWeekDoc(body: z.infer<typeof AutomationProposedRequestSchema>): {
     return {
       weekDoc: result.data,
       rawJson: body.json,
+      analysisText: body.analysis_text ?? result.analysis_text,
     }
   }
 
@@ -35,6 +38,7 @@ function parseWeekDoc(body: z.infer<typeof AutomationProposedRequestSchema>): {
     return {
       weekDoc: body.week_doc,
       rawJson: JSON.stringify(body.week_doc, null, 2),
+      analysisText: body.analysis_text ?? null,
     }
   }
 
@@ -78,6 +82,7 @@ export async function POST(request: Request) {
     source: parsedBody.data.source ?? 'cowork',
     run_type: parsedBody.data.run_type ?? 'daily',
     notes_version: parsedBody.data.notes_version ?? notes.updated_at,
+    analysis_text: parsedWeek.analysisText,
     raw_json: parsedWeek.rawJson,
     week_doc: parsedWeek.weekDoc,
   }
@@ -90,5 +95,6 @@ export async function POST(request: Request) {
     source: proposed.source,
     run_type: proposed.run_type,
     notes_version: proposed.notes_version,
+    analysis_text: proposed.analysis_text,
   })
 }
