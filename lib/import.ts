@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { WeekDocSchema } from './schema'
 import type { WeekDoc } from './schema'
-import { archiveWeek, readCurrentWeek, writeCurrentWeek } from './data'
+import { archiveWeek, clearPendingWeek, readCurrentWeek, writeCurrentWeek, writePendingWeek } from './data'
 import { rollDeloadCounterOnWeekAdvance } from './state'
 import { addDays, format, parseISO } from 'date-fns'
 
@@ -21,6 +21,11 @@ export interface ImportError {
   ok: false
   raw: string
   errors: string[]
+}
+
+export interface ApplyImportResult {
+  week: WeekDoc
+  activation: 'immediate' | 'scheduled'
 }
 
 function normalizeSessionType(type: string): string {
@@ -209,6 +214,13 @@ export async function applyImport(importedDoc: WeekDoc): Promise<WeekDoc> {
   const normalizedImport = normalizeWeekDocSessionTypes(importedDoc)
   const currentWeek = await readCurrentWeek()
   const { importedMonday, mode } = validateAndDecideMode(currentWeek, normalizedImport)
+  const importedWeekStartIso = importedMonday.toISOString().slice(0, 10)
+  const todayIso = new Intl.DateTimeFormat('en-CA', {
+    timeZone: process.env.APP_TIMEZONE ?? 'Europe/Athens',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
 
   const importedByDay: Record<string, WeekDoc['sessions'][number]> = {}
   for (const s of normalizedImport.sessions) {
@@ -247,10 +259,16 @@ export async function applyImport(importedDoc: WeekDoc): Promise<WeekDoc> {
     sessions: mergedSessions,
   }
 
+  if (mode === 'advance_next' && currentWeek && todayIso < importedWeekStartIso) {
+    await writePendingWeek(merged)
+    return merged
+  }
+
   if (mode === 'advance_next' && currentWeek) {
     await archiveWeek(currentWeek)
     await rollDeloadCounterOnWeekAdvance()
   }
+  await clearPendingWeek()
   await writeCurrentWeek(merged)
   return merged
 }
