@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
     ? Math.round((sleepValues.reduce((a, b) => a + b, 0) / sleepValues.length) * 10) / 10
     : null
 
-  return NextResponse.json({ date, score, readiness, garmin, sleep_avg_7d })
+  return NextResponse.json({ date, score, readiness, garmin, sleep_avg_7d, has_garmin_sleep: garmin?.sleep_hours != null })
 }
 
 export async function POST(req: NextRequest) {
