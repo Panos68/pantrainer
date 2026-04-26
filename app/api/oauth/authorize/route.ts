@@ -28,22 +28,7 @@ export function verifyCode(code: string, redirectUri: string): boolean {
   }
 }
 
-function isAppAuthenticated(request: Request): boolean {
-  const cookieHeader = request.headers.get('cookie') ?? ''
-  const match = cookieHeader.match(/(?:^|;\s*)auth=([^;]*)/)
-  const cookieValue = match ? decodeURIComponent(match[1]) : null
-  return cookieValue === process.env.AUTH_PASSWORD
-}
-
-function loginRedirect(request: Request): Response {
-  const returnTo = encodeURIComponent(request.url)
-  const base = new URL(request.url).origin
-  return Response.redirect(`${base}/login?returnTo=${returnTo}`, 302)
-}
-
 export function GET(request: Request) {
-  if (!isAppAuthenticated(request)) return loginRedirect(request)
-
   const { searchParams } = new URL(request.url)
   const redirectUri = searchParams.get('redirect_uri') ?? ''
   const state = searchParams.get('state') ?? ''
@@ -87,8 +72,6 @@ export function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!isAppAuthenticated(request)) return loginRedirect(request)
-
   const form = await request.formData()
   const redirectUri = (form.get('redirect_uri') as string) ?? ''
   const state = (form.get('state') as string) ?? ''
