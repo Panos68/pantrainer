@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { redirect } from 'next/navigation'
 import { format } from 'date-fns'
 import Link from 'next/link'
-import { readAthleteProfile, readCurrentWeek, readAppState, readAllArchivedWeeks } from '@/lib/data'
+import { readAthleteProfile, readCurrentWeek, readAppState, readArchivedWeeks } from '@/lib/data'
 import { activatePendingWeekIfDue } from '@/lib/week-activation'
 import GymWeekBadge from '@/components/GymWeekBadge'
 import NewWeekButton from '@/components/NewWeekButton'
@@ -21,7 +21,7 @@ export default async function Home() {
   const [week, appState, archivedWeeks] = await Promise.all([
     readCurrentWeek(),
     readAppState(),
-    readAllArchivedWeeks(),
+    readArchivedWeeks(12),
   ])
   const todayISO = format(new Date(), 'yyyy-MM-dd')
 

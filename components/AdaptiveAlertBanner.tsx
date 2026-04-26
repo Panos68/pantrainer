@@ -3,10 +3,7 @@
 import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
 import { calcAdaptiveAlert, type AdaptiveAlert } from '@/lib/adaptive-alert'
-
-interface RecoveryApiResponse {
-  score: { total: number }
-}
+import { getReadinessCache } from './RecoveryScorePanel'
 
 interface SessionApiResponse {
   type: string
@@ -28,7 +25,7 @@ export default function AdaptiveAlertBanner() {
     }
 
     Promise.all([
-      fetch(`/api/readiness?date=${today}`).then((r) => r.json() as Promise<RecoveryApiResponse>),
+      Promise.resolve(getReadinessCache(today) ?? fetch(`/api/readiness?date=${today}`).then((r) => r.json())),
       fetch(`/api/session/${dayName}`).then((r) => r.json() as Promise<SessionApiResponse>),
     ])
       .then(([recovery, session]) => {
