@@ -24,6 +24,7 @@ interface ApiResponse {
   score: ScoreBreakdown
   readiness: ReadinessData | null
   sleep_avg_7d: number | null
+  has_garmin_sleep: boolean
 }
 
 const EMOJI_SCALE = ['😴', '😕', '😐', '🙂', '⚡']
@@ -81,14 +82,30 @@ export default function RecoveryScorePanel() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    fetch(`/api/readiness?date=${today}`)
-      .then((r) => r.json())
-      .then((d: ApiResponse) => {
-        setData(d)
-        if (!d.readiness) setCheckinOpen(true)
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false))
+    async function load() {
+      try {
+        const d: ApiResponse = await fetch(`/api/readiness?date=${today}`).then((r) => r.json())
+        if (!d.has_garmin_sleep) {
+          // Auto-fetch Garmin sleep for today if not yet saved
+          await fetch('/api/garmin/recovery', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: today }),
+          }).catch(() => {})
+          const refreshed: ApiResponse = await fetch(`/api/readiness?date=${today}`).then((r) => r.json())
+          setData(refreshed)
+          if (!refreshed.readiness) setCheckinOpen(true)
+        } else {
+          setData(d)
+          if (!d.readiness) setCheckinOpen(true)
+        }
+      } catch (e) {
+        console.error(e)
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
   }, [today])
 
   async function submitCheckin() {
