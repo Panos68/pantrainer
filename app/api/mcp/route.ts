@@ -266,10 +266,30 @@ export function OPTIONS() {
   return new Response(null, { status: 204, headers: CORS_HEADERS })
 }
 
-// MCP endpoint only accepts POST. Return 405 for GET so Claude.ai knows it's an MCP server.
+// SSE endpoint for server-to-client streaming (MCP 2025-03-26 streamable HTTP transport).
+// Vercel serverless can't maintain long-lived connections; we send heartbeats until timeout.
 export function GET() {
-  return new Response(null, {
-    status: 405,
-    headers: { ...CORS_HEADERS, Allow: 'POST, OPTIONS' },
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(': heartbeat\n\n'))
+      const interval = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(': heartbeat\n\n'))
+        } catch {
+          clearInterval(interval)
+        }
+      }, 15000)
+    },
+  })
+
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      ...CORS_HEADERS,
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    },
   })
 }
