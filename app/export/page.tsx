@@ -45,6 +45,7 @@ interface ProposedPlanData {
   run_type?: 'manual' | 'daily' | 'weekly'
   notes_version?: string | null
   analysis_text?: string | null
+  week_doc?: WeekDoc
   raw_json?: string
 }
 
@@ -90,6 +91,10 @@ function typeColor(type: string): string {
     case 'REST': return 'text-zinc-500'
     default: return 'text-zinc-400'
   }
+}
+
+function inferGymWeekFromWeekDoc(week: WeekDoc): string {
+  return week.next_week_plan?.wednesday?.toLowerCase().includes('pull') ? 'week_a' : 'week_b'
 }
 
 function AnalysisTextPanel({ analysisText }: { analysisText: string }) {
@@ -428,6 +433,9 @@ function ImportSection() {
   const [notesMsg, setNotesMsg] = useState<string | null>(null)
   const [proposed, setProposed] = useState<ProposedPlanData>({ empty: true })
   const [proposedLoading, setProposedLoading] = useState(true)
+  const [proposedSubmitting, setProposedSubmitting] = useState(false)
+  const [draftWeek, setDraftWeek] = useState<WeekDoc | null>(null)
+  const [draftSaving, setDraftSaving] = useState(false)
   const [proposedMsg, setProposedMsg] = useState<string | null>(null)
 
   async function refreshProposed() {
@@ -436,6 +444,11 @@ function ImportSection() {
       const res = await fetch('/api/proposed', { cache: 'no-store' })
       const data = (await res.json()) as ProposedPlanData
       setProposed(data)
+      if (!data.empty && data.week_doc) {
+        setDraftWeek(data.week_doc)
+      } else {
+        setDraftWeek(null)
+      }
     } finally {
       setProposedLoading(false)
     }
@@ -497,7 +510,114 @@ function ImportSection() {
       return
     }
     setProposed({ empty: true })
+    setDraftWeek(null)
     setProposedMsg('Cleared proposed JSON')
+  }
+
+  function updateDraftSession(index: number, updates: Partial<WeekDoc['sessions'][number]>) {
+    setDraftWeek((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        sessions: prev.sessions.map((session, i) => (i === index ? { ...session, ...updates } : session)),
+      }
+    })
+  }
+
+  async function handleSaveDraftAdjustments() {
+    if (!draftWeek || proposed.empty) return
+    setProposedMsg(null)
+    setDraftSaving(true)
+    try {
+      const res = await fetch('/api/proposed', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          week_doc: draftWeek,
+          analysis_text: proposed.analysis_text ?? null,
+          source: 'athlete-review',
+          run_type: proposed.run_type ?? 'manual',
+        }),
+      })
+      const data = (await res.json()) as ProposedPlanData | { error?: string }
+      if (!res.ok) {
+        setProposedMsg((data as { error?: string }).error ?? 'Failed to save adjustments')
+        return
+      }
+      const next = data as ProposedPlanData
+      setProposed(next)
+      setDraftWeek(next.week_doc ?? draftWeek)
+      setProposedMsg('Saved your adjustments for Claude re-evaluation')
+    } catch {
+      setProposedMsg('Failed to save adjustments')
+    } finally {
+      setDraftSaving(false)
+    }
+  }
+
+  async function handleSubmitProposedFinal() {
+    setProposedMsg(null)
+    setImportState({ status: 'validating' })
+    setProposedSubmitting(true)
+    try {
+      if (draftWeek && !proposed.empty) {
+        const saveRes = await fetch('/api/proposed', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            week_doc: draftWeek,
+            analysis_text: proposed.analysis_text ?? null,
+            source: 'athlete-review',
+            run_type: proposed.run_type ?? 'manual',
+          }),
+        })
+        if (!saveRes.ok) {
+          setImportState({ status: 'error', errors: ['Save adjustments before final submit failed'] })
+          return
+        }
+      }
+
+      const res = await fetch('/api/proposed/apply', { method: 'POST' })
+      const data = (await res.json()) as {
+        ok?: boolean
+        data?: WeekDoc
+        errors?: string[]
+        error?: string
+      }
+
+      if (!res.ok || !data.ok || !data.data) {
+        const errors =
+          data.errors && data.errors.length > 0
+            ? data.errors
+            : [data.error ?? 'Failed to apply proposed plan']
+        setImportState({ status: 'error', errors })
+        return
+      }
+
+      const applied = data.data
+      setImportState({
+        status: 'success',
+        result: {
+          ok: true,
+          data: applied,
+          analysis_text: proposed.analysis_text ?? null,
+          nextWeek: {
+            week: applied.week,
+            gymWeek: inferGymWeekFromWeekDoc(applied),
+            sessionsCount: Object.keys(applied.next_week_plan ?? {}).filter((key) => key !== 'notes').length,
+          },
+        },
+      })
+      setProposedMsg('Final plan submitted and applied')
+      await refreshProposed()
+    } catch (error) {
+      setImportState({
+        status: 'error',
+        errors: [error instanceof Error ? error.message : 'Failed to apply proposed plan'],
+      })
+    } finally {
+      setProposedSubmitting(false)
+    }
   }
 
   async function handleImport() {
@@ -629,15 +749,71 @@ function ImportSection() {
               <p>Run: {proposed.run_type ?? 'manual'}</p>
               <p>Created: {proposed.created_at ? new Date(proposed.created_at).toLocaleString() : 'unknown'}</p>
             </div>
+            {draftWeek && (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 overflow-hidden">
+                <div className="px-3 py-2 border-b border-zinc-800 flex items-center justify-between">
+                  <p className="text-zinc-400 text-[10px] font-mono tracking-[0.15em] uppercase">
+                    Review proposed week
+                  </p>
+                  <p className="text-zinc-500 text-[10px] font-mono">
+                    {draftWeek.week}
+                  </p>
+                </div>
+                <div className="divide-y divide-zinc-800">
+                  {draftWeek.sessions.map((session, index) => (
+                    <div key={`${session.date}-${session.day}`} className="px-3 py-3 space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-zinc-300 text-xs font-mono font-bold tracking-widest uppercase">
+                          {session.day}
+                        </p>
+                        <div className="text-right">
+                          <p className="text-zinc-600 text-[10px] font-mono">{session.date}</p>
+                          <p className="text-zinc-500 text-[10px] font-mono">
+                          {session.exercises.length} exercise{session.exercises.length === 1 ? '' : 's'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2">
+                        <input
+                          value={session.type}
+                          onChange={(e) => updateDraftSession(index, { type: e.target.value })}
+                          className="w-full h-9 bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-lg px-3 text-zinc-200 text-xs font-mono outline-none transition-colors"
+                        />
+                        <textarea
+                          value={session.notes ?? ''}
+                          onChange={(e) => updateDraftSession(index, { notes: e.target.value })}
+                          rows={2}
+                          placeholder="Adjustment notes for this day"
+                          className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-lg px-3 py-2 text-zinc-300 text-xs font-mono placeholder:text-zinc-600 resize-y outline-none transition-colors"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="px-3 py-3 border-t border-zinc-800 flex flex-wrap gap-2">
+                  <button
+                    onClick={handleSaveDraftAdjustments}
+                    disabled={draftSaving}
+                    className="h-9 px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-200 font-bold text-[10px] tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
+                  >
+                    {draftSaving ? 'Saving…' : 'Save Adjustments'}
+                  </button>
+                  <p className="text-zinc-600 text-[10px] font-mono self-center">
+                    Saved edits become the latest proposed plan Claude can re-evaluate.
+                  </p>
+                </div>
+              </div>
+            )}
             {typeof proposed.analysis_text === 'string' && proposed.analysis_text.trim().length > 0 && (
               <AnalysisTextPanel analysisText={proposed.analysis_text} />
             )}
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={handleLoadProposedJson}
-                className="h-10 px-4 rounded-lg bg-lime-400 hover:bg-lime-300 active:bg-lime-500 text-zinc-950 font-black text-[10px] tracking-[0.15em] uppercase transition-colors"
+                onClick={handleSubmitProposedFinal}
+                disabled={proposedSubmitting}
+                className="h-10 px-4 rounded-lg bg-lime-400 hover:bg-lime-300 active:bg-lime-500 text-zinc-950 font-black text-[10px] tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
               >
-                Load proposed JSON
+                {proposedSubmitting ? 'Submitting…' : 'Submit Final Plan'}
               </button>
               <button
                 onClick={handleClearProposed}
@@ -648,7 +824,11 @@ function ImportSection() {
             </div>
           </>
         )}
-        {proposedMsg && <p className="text-lime-400 text-[10px] font-mono">{proposedMsg}</p>}
+        {proposedMsg && (
+          <p className={`text-[10px] font-mono ${proposedMsg.toLowerCase().includes('failed') ? 'text-red-400' : 'text-lime-400'}`}>
+            {proposedMsg}
+          </p>
+        )}
       </div>
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
@@ -664,16 +844,6 @@ function ImportSection() {
       {/* Idle */}
       {(importState.status === 'idle' || importState.status === 'error') && (
         <div className="space-y-4">
-          <textarea
-            ref={textareaRef}
-            value={rawText}
-            onChange={(e) => setRawText(e.target.value)}
-            placeholder="Paste Claude's JSON response here..."
-            rows={10}
-            className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-xl px-4 py-3 text-zinc-200 text-sm font-mono placeholder:text-zinc-600 resize-y outline-none transition-colors"
-          />
-
-          {/* Error state */}
           {importState.status === 'error' && (
             <div className="bg-red-400/10 border border-red-400/30 rounded-xl px-5 py-4 space-y-2">
               <p className="text-red-400 text-xs font-mono font-bold tracking-widest uppercase">
@@ -695,13 +865,38 @@ function ImportSection() {
             </div>
           )}
 
-          <button
-            onClick={handleImport}
-            disabled={!rawText.trim()}
-            className="w-full h-14 bg-lime-400 hover:bg-lime-300 active:bg-lime-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase rounded-xl transition-colors"
-          >
-            Import Plan
-          </button>
+          <details className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 space-y-3">
+            <summary className="cursor-pointer list-none text-zinc-400 hover:text-zinc-200 text-xs font-mono font-bold tracking-widest uppercase">
+              Advanced: Import raw JSON manually
+            </summary>
+            <div className="mt-3 space-y-3">
+              <textarea
+                ref={textareaRef}
+                value={rawText}
+                onChange={(e) => setRawText(e.target.value)}
+                placeholder="Paste Claude's JSON response here..."
+                rows={10}
+                className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-xl px-4 py-3 text-zinc-200 text-sm font-mono placeholder:text-zinc-600 resize-y outline-none transition-colors"
+              />
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={handleImport}
+                  disabled={!rawText.trim()}
+                  className="h-10 px-4 bg-lime-400 hover:bg-lime-300 active:bg-lime-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-zinc-950 font-black text-[10px] tracking-[0.15em] uppercase rounded-lg transition-colors"
+                >
+                  Import JSON
+                </button>
+                {!proposed.empty && proposed.raw_json && (
+                  <button
+                    onClick={handleLoadProposedJson}
+                    className="h-10 px-4 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-200 font-bold text-[10px] tracking-[0.15em] uppercase transition-colors"
+                  >
+                    Load proposed JSON
+                  </button>
+                )}
+              </div>
+            </div>
+          </details>
         </div>
       )}
 

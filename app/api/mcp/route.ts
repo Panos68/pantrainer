@@ -3,6 +3,7 @@ import { format } from 'date-fns'
 import {
   readCurrentWeek,
   readAutomationNotes,
+  readProposedPlan,
   writeProposedPlan,
 } from '@/lib/data'
 import { buildExportV2 } from '@/lib/export'
@@ -17,7 +18,7 @@ const TOOLS = [
   {
     name: 'get_current_week',
     description:
-      'Fetch the current training week export (v2 coach context) plus any automation notes/rules you should follow when proposing plans.',
+      'Fetch the current training week export (v2 coach context), automation notes/rules, and the latest proposed plan draft (if any).',
     inputSchema: {
       type: 'object',
       properties: {},
@@ -101,15 +102,30 @@ async function handleGetCurrentWeek() {
   if (!currentWeek) {
     return { error: 'No current week found' }
   }
-  const [payload, notes] = await Promise.all([
+  const [payload, notes, proposed] = await Promise.all([
     buildExportV2(currentWeek),
     readAutomationNotes(),
+    readProposedPlan(),
   ])
 
   const photoUrls: string[] = payload.photos_to_attach ?? []
   const photos = (await Promise.all(photoUrls.map(fetchPhotoAsBase64))).filter(Boolean) as { data: string; mimeType: string }[]
 
-  return { export_v2: payload, automation_notes: notes, photos }
+  return {
+    export_v2: payload,
+    automation_notes: notes,
+    proposed_plan: proposed
+      ? {
+          created_at: proposed.created_at,
+          source: proposed.source,
+          run_type: proposed.run_type,
+          notes_version: proposed.notes_version,
+          analysis_text: proposed.analysis_text,
+          week_doc: proposed.week_doc,
+        }
+      : null,
+    photos,
+  }
 }
 
 async function handleSubmitProposedPlan(args: Record<string, unknown>) {
