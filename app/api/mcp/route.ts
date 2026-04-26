@@ -13,10 +13,6 @@ import { SessionSchema, ProposedPlanRunTypeSchema } from '@/lib/schema'
 // MCP tool definitions
 // ---------------------------------------------------------------------------
 
-const API_KEY_SCHEMA = {
-  api_key: { type: 'string', description: 'Required API key.' },
-}
-
 const TOOLS = [
   {
     name: 'get_current_week',
@@ -24,8 +20,8 @@ const TOOLS = [
       'Fetch the current training week export (v2 coach context) plus any automation notes/rules you should follow when proposing plans.',
     inputSchema: {
       type: 'object',
-      properties: { ...API_KEY_SCHEMA },
-      required: ['api_key'],
+      properties: {},
+      required: [],
     },
   },
   {
@@ -35,7 +31,6 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        ...API_KEY_SCHEMA,
         json: {
           type: 'string',
           description: 'Full week_doc JSON string — same format as exported by get_current_week.',
@@ -47,7 +42,7 @@ const TOOLS = [
           description: 'Type of planning run.',
         },
       },
-      required: ['api_key', 'json'],
+      required: ['json'],
     },
   },
   {
@@ -57,7 +52,6 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        ...API_KEY_SCHEMA,
         session: {
           type: 'object',
           description: 'Session object matching the SessionSchema.',
@@ -69,7 +63,7 @@ const TOOLS = [
         source: { type: 'string' },
         run_type: { type: 'string', enum: ['manual', 'daily', 'weekly'] },
       },
-      required: ['api_key', 'session'],
+      required: ['session'],
     },
   },
 ]
@@ -78,16 +72,7 @@ const TOOLS = [
 // Tool handlers
 // ---------------------------------------------------------------------------
 
-function validateApiKey(args: Record<string, unknown>): { ok: true } | { ok: false; error: string } {
-  const expected = process.env.MCP_API_KEY
-  if (!expected) return { ok: false, error: 'Server misconfigured' }
-  if (args.api_key !== expected) return { ok: false, error: 'Invalid api_key' }
-  return { ok: true }
-}
-
-async function handleGetCurrentWeek(args: Record<string, unknown>) {
-  const auth = validateApiKey(args)
-  if (!auth.ok) return { error: auth.error }
+async function handleGetCurrentWeek() {
   const currentWeek = await readCurrentWeek()
   if (!currentWeek) {
     return { error: 'No current week found' }
@@ -100,9 +85,6 @@ async function handleGetCurrentWeek(args: Record<string, unknown>) {
 }
 
 async function handleSubmitProposedPlan(args: Record<string, unknown>) {
-  const auth = validateApiKey(args)
-  if (!auth.ok) return { ok: false, error: auth.error }
-
   const json = args.json
   if (typeof json !== 'string' || json.trim().length === 0) {
     return { ok: false, error: 'Missing json' }
@@ -131,9 +113,6 @@ async function handleSubmitProposedPlan(args: Record<string, unknown>) {
 }
 
 async function handleSubmitTodaySession(args: Record<string, unknown>) {
-  const auth = validateApiKey(args)
-  if (!auth.ok) return { ok: false, error: auth.error }
-
   const sessionParsed = SessionSchema.safeParse(args.session)
   if (!sessionParsed.success) {
     return {
@@ -245,7 +224,7 @@ async function dispatch(req: McpRequest): Promise<Response> {
 
     let data: unknown
     try {
-      if (name === 'get_current_week') data = await handleGetCurrentWeek(args)
+      if (name === 'get_current_week') data = await handleGetCurrentWeek()
       else if (name === 'submit_proposed_plan') data = await handleSubmitProposedPlan(args)
       else if (name === 'submit_today_session') data = await handleSubmitTodaySession(args)
       else return mcpError(id, -32601, `Unknown tool: ${name}`)
@@ -262,39 +241,26 @@ async function dispatch(req: McpRequest): Promise<Response> {
 }
 
 // ---------------------------------------------------------------------------
-// Auth
+// Auth — validated via ?key= query param in the connector URL
 // ---------------------------------------------------------------------------
 
-// Returns true if request is allowed:
-// - No Authorization header → allowed (lets Claude.ai probe and trigger OAuth)
-// - Valid Bearer token → allowed
-// - Invalid Bearer token → rejected
 function authenticate(request: Request): boolean {
-  const auth = request.headers.get('authorization') ?? ''
-  if (!auth) return true
-  const expected = process.env.AUTOMATION_API_TOKEN
-  if (!expected) return false
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  const expected = process.env.MCP_API_KEY
+  if (!expected) return true // no key configured → open (dev mode)
+  const key = new URL(request.url).searchParams.get('key') ?? ''
+  if (!key) return false
   try {
-    return timingSafeEqual(Buffer.from(token), Buffer.from(expected))
+    return timingSafeEqual(Buffer.from(key), Buffer.from(expected))
   } catch {
     return false
   }
 }
 
-function unauthorized(request: Request) {
-  const base = new URL(request.url).origin
-  return new Response(
-    JSON.stringify({ error: 'unauthorized' }),
-    {
-      status: 401,
-      headers: {
-        ...CORS_HEADERS,
-        'WWW-Authenticate': `Bearer realm="pantrainer", resource_metadata="${base}/.well-known/oauth-protected-resource"`,
-        'Content-Type': 'application/json',
-      },
-    },
-  )
+function forbidden() {
+  return new Response(JSON.stringify({ error: 'forbidden' }), {
+    status: 403,
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -302,7 +268,7 @@ function unauthorized(request: Request) {
 // ---------------------------------------------------------------------------
 
 export async function POST(request: Request) {
-  if (!authenticate(request)) return unauthorized(request)
+  if (!authenticate(request)) return forbidden()
 
   let body: unknown
   try {
@@ -329,7 +295,7 @@ export function OPTIONS() {
 // SSE endpoint for server-to-client streaming (MCP 2025-03-26 streamable HTTP transport).
 // Vercel serverless can't maintain long-lived connections; we send heartbeats until timeout.
 export function GET(request: Request) {
-  if (!authenticate(request)) return unauthorized(request)
+  if (!authenticate(request)) return forbidden()
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
     start(controller) {
