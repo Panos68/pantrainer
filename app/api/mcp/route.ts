@@ -256,14 +256,15 @@ function authenticate(request: Request): boolean {
   }
 }
 
-function unauthorized() {
+function unauthorized(request: Request) {
+  const base = new URL(request.url).origin
   return new Response(
     JSON.stringify({ error: 'unauthorized' }),
     {
       status: 401,
       headers: {
         ...CORS_HEADERS,
-        'WWW-Authenticate': 'Bearer',
+        'WWW-Authenticate': `Bearer realm="pantrainer", resource_metadata="${base}/.well-known/oauth-protected-resource"`,
         'Content-Type': 'application/json',
       },
     },
@@ -275,7 +276,7 @@ function unauthorized() {
 // ---------------------------------------------------------------------------
 
 export async function POST(request: Request) {
-  if (!authenticate(request)) return unauthorized()
+  if (!authenticate(request)) return unauthorized(request)
 
   let body: unknown
   try {
@@ -302,7 +303,7 @@ export function OPTIONS() {
 // SSE endpoint for server-to-client streaming (MCP 2025-03-26 streamable HTTP transport).
 // Vercel serverless can't maintain long-lived connections; we send heartbeats until timeout.
 export function GET(request: Request) {
-  if (!authenticate(request)) return unauthorized()
+  if (!authenticate(request)) return unauthorized(request)
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
     start(controller) {
