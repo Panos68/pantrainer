@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { readAutomationNotes, writeProposedPlan } from '@/lib/data'
-import { validateImport } from '@/lib/import'
+import { normalizeWeekDocSessionTypes, validateImport } from '@/lib/import'
 import { ProposedPlanRunTypeSchema, WeekDocSchema } from '@/lib/schema'
 import { isAutomationAuthorized, requireAutomationToken } from '@/lib/automation-auth'
 import type { WeekDoc } from '@/lib/schema'
@@ -35,9 +35,10 @@ function parseWeekDoc(body: z.infer<typeof AutomationProposedRequestSchema>): {
   }
 
   if (body.week_doc) {
+    const normalizedWeekDoc = normalizeWeekDocSessionTypes(body.week_doc)
     return {
-      weekDoc: body.week_doc,
-      rawJson: JSON.stringify(body.week_doc, null, 2),
+      weekDoc: normalizedWeekDoc,
+      rawJson: JSON.stringify(normalizedWeekDoc, null, 2),
       analysisText: body.analysis_text ?? null,
     }
   }

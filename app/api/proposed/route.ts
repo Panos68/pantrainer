@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { clearProposedPlan, readAutomationNotes, readProposedPlan, writeProposedPlan } from '@/lib/data'
+import { normalizeWeekDocSessionTypes } from '@/lib/import'
 import { ProposedPlanRunTypeSchema, WeekDocSchema } from '@/lib/schema'
 
 export async function GET() {
@@ -49,14 +50,15 @@ export async function PATCH(request: Request) {
   }
 
   const notes = await readAutomationNotes()
+  const normalizedWeekDoc = normalizeWeekDocSessionTypes(parsed.data.week_doc)
   const proposed = {
     created_at: new Date().toISOString(),
     source: parsed.data.source ?? 'athlete-review',
     run_type: parsed.data.run_type ?? 'manual',
     notes_version: notes.updated_at,
     analysis_text: parsed.data.analysis_text ?? null,
-    raw_json: JSON.stringify(parsed.data.week_doc, null, 2),
-    week_doc: parsed.data.week_doc,
+    raw_json: JSON.stringify(normalizedWeekDoc, null, 2),
+    week_doc: normalizedWeekDoc,
   }
 
   await writeProposedPlan(proposed)
