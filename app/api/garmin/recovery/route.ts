@@ -99,7 +99,16 @@ export async function POST(req: Request) {
       await writeCurrentWeek(week)
     }
 
-    return Response.json({ recovery, cached: false })
+    return Response.json({
+      recovery,
+      cached: false,
+      debug: {
+        sleep_status: sleep.status,
+        sleep_raw: sleep.status === 'fulfilled' ? sleep.value : String((sleep as PromiseRejectedResult).reason),
+        hr_status: hr.status,
+        hr_raw: hr.status === 'fulfilled' ? hr.value : String((hr as PromiseRejectedResult).reason),
+      },
+    })
   } catch (err) {
     console.error('Garmin recovery error:', err)
     return Response.json({ error: 'Failed to fetch recovery data from Garmin' }, { status: 502 })
