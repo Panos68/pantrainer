@@ -1,5 +1,4 @@
 import { format } from 'date-fns'
-import { isAutomationAuthorized, requireAutomationToken } from '@/lib/automation-auth'
 import {
   readCurrentWeek,
   readAutomationNotes,
@@ -239,26 +238,6 @@ export async function POST(request: Request) {
     body = await request.json()
   } catch {
     return mcpError(null, -32700, 'Parse error')
-  }
-
-  const req = Array.isArray(body) ? body[0] : body
-  const id = (req as McpRequest)?.id ?? null
-  const method = (req as McpRequest)?.method
-
-  // Keep handshake/introspection methods public; protect only tool execution.
-  const requiresAuth = method === 'tools/call'
-
-  if (requiresAuth) {
-    const tokenCheck = requireAutomationToken()
-    if (!tokenCheck.ok) return tokenCheck.response
-
-    if (!isAutomationAuthorized(request)) {
-      const base = new URL(request.url).origin
-      return Response.json(
-        { jsonrpc: '2.0', id, error: { code: -32001, message: 'Unauthorized' } },
-        { status: 401, headers: { ...CORS_HEADERS, 'WWW-Authenticate': `Bearer realm="${base}", resource_metadata="${base}/.well-known/oauth-protected-resource"` } },
-      )
-    }
   }
 
   // Batch support
