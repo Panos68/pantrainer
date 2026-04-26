@@ -12,6 +12,7 @@ export async function GET() {
     source: proposed.source,
     run_type: proposed.run_type,
     notes_version: proposed.notes_version,
+    analysis_text: proposed.analysis_text,
     raw_json: proposed.raw_json,
   })
 }

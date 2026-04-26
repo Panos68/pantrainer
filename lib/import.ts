@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { WeekDocSchema } from './schema'
 import type { WeekDoc } from './schema'
 import { archiveWeek, readCurrentWeek, writeCurrentWeek } from './data'
@@ -8,6 +9,7 @@ import { addDays, format, parseISO } from 'date-fns'
 export interface ImportResult {
   ok: true
   data: WeekDoc
+  analysis_text: string | null
   nextWeek: {
     week: string
     gymWeek: string
@@ -25,21 +27,41 @@ export interface ImportError {
 export function validateImport(raw: string): ImportResult | ImportError {
   try {
     const parsed = JSON.parse(raw)
-    const result = WeekDocSchema.safeParse(parsed)
-    if (!result.success) {
+    const envelopeSchema = z.object({
+      week_doc: WeekDocSchema,
+      analysis_text: z.string().nullable().optional(),
+    })
+    const envelopeResult = envelopeSchema.safeParse(parsed)
+    if (envelopeResult.success) {
+      const weekDoc = envelopeResult.data.week_doc
+      return {
+        ok: true,
+        data: weekDoc,
+        analysis_text: envelopeResult.data.analysis_text ?? null,
+        nextWeek: {
+          week: weekDoc.week,
+          gymWeek: weekDoc.next_week_plan?.wednesday?.toLowerCase().includes('pull') ? 'week_a' : 'week_b',
+          sessionsCount: Object.keys(weekDoc.next_week_plan ?? {}).filter(k => k !== 'notes').length,
+        }
+      }
+    }
+
+    const weekDocResult = WeekDocSchema.safeParse(parsed)
+    if (!weekDocResult.success) {
       return {
         ok: false,
         raw,
-        errors: result.error.issues.map(e => `${e.path.join('.')}: ${e.message}`)
+        errors: weekDocResult.error.issues.map(e => `${e.path.join('.')}: ${e.message}`)
       }
     }
     return {
       ok: true,
-      data: result.data,
+      data: weekDocResult.data,
+      analysis_text: null,
       nextWeek: {
-        week: result.data.week,
-        gymWeek: result.data.next_week_plan?.wednesday?.toLowerCase().includes('pull') ? 'week_a' : 'week_b',
-        sessionsCount: Object.keys(result.data.next_week_plan ?? {}).filter(k => k !== 'notes').length,
+        week: weekDocResult.data.week,
+        gymWeek: weekDocResult.data.next_week_plan?.wednesday?.toLowerCase().includes('pull') ? 'week_a' : 'week_b',
+        sessionsCount: Object.keys(weekDocResult.data.next_week_plan ?? {}).filter(k => k !== 'notes').length,
       }
     }
   } catch (e) {

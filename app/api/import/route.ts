@@ -1,7 +1,9 @@
 import { validateImport, applyImport, isApplyImportError } from '@/lib/import'
 
 // POST /api/import
-// Body: { json: string }  — the raw Claude response text
+// Body: { json: string }  — Claude response text:
+//   - week_doc JSON, or
+//   - { week_doc, analysis_text }
 // Returns: ImportResult | ImportError
 // On success: also calls applyImport
 export async function POST(request: Request) {
@@ -35,5 +37,6 @@ export async function POST(request: Request) {
   return Response.json({
     ...result,
     data: applied,
+    analysis_text: result.analysis_text,
   })
 }

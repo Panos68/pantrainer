@@ -44,6 +44,7 @@ interface ProposedPlanData {
   source?: string
   run_type?: 'manual' | 'daily' | 'weekly'
   notes_version?: string | null
+  analysis_text?: string | null
   raw_json?: string
 }
 
@@ -89,6 +90,15 @@ function typeColor(type: string): string {
     case 'REST': return 'text-zinc-500'
     default: return 'text-zinc-400'
   }
+}
+
+function AnalysisTextPanel({ analysisText }: { analysisText: string }) {
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-3 space-y-2">
+      <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">Week Analysis</p>
+      <p className="text-xs font-mono text-zinc-300 whitespace-pre-wrap">{analysisText}</p>
+    </div>
+  )
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -619,6 +629,9 @@ function ImportSection() {
               <p>Run: {proposed.run_type ?? 'manual'}</p>
               <p>Created: {proposed.created_at ? new Date(proposed.created_at).toLocaleString() : 'unknown'}</p>
             </div>
+            {typeof proposed.analysis_text === 'string' && proposed.analysis_text.trim().length > 0 && (
+              <AnalysisTextPanel analysisText={proposed.analysis_text} />
+            )}
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={handleLoadProposedJson}
@@ -746,6 +759,10 @@ function ImportSection() {
               </div>
             )}
           </div>
+
+          {typeof importState.result.analysis_text === 'string' && importState.result.analysis_text.trim().length > 0 && (
+            <AnalysisTextPanel analysisText={importState.result.analysis_text} />
+          )}
 
           {/* Confirm button */}
           <button
