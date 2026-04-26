@@ -1,8 +1,32 @@
 import crypto from 'crypto'
 
-// In-memory store for auth codes (short-lived, single-server OK for personal use)
-// Codes expire after 5 minutes
-const pendingCodes = new Map<string, { state: string; redirectUri: string; expiresAt: number }>()
+// Stateless signed auth codes — no in-memory store, works across serverless instances.
+// Code: <timestamp_hex>.<hmac_hex>  HMAC key: AUTOMATION_API_TOKEN
+function signCode(timestamp: number, redirectUri: string): string {
+  const token = process.env.AUTOMATION_API_TOKEN ?? ''
+  const payload = `${timestamp}:${redirectUri}`
+  const hmac = crypto.createHmac('sha256', token).update(payload).digest('hex')
+  return `${timestamp.toString(16)}.${hmac}`
+}
+
+export function verifyCode(code: string, redirectUri: string): boolean {
+  const dot = code.indexOf('.')
+  if (dot === -1) return false
+  const tsHex = code.slice(0, dot)
+  const hmac = code.slice(dot + 1)
+  const timestamp = parseInt(tsHex, 16)
+  if (isNaN(timestamp)) return false
+  if (Date.now() - timestamp > 5 * 60 * 1000) return false
+
+  const token = process.env.AUTOMATION_API_TOKEN ?? ''
+  const payload = `${timestamp}:${redirectUri}`
+  const expected = crypto.createHmac('sha256', token).update(payload).digest('hex')
+  try {
+    return crypto.timingSafeEqual(Buffer.from(hmac, 'hex'), Buffer.from(expected, 'hex'))
+  } catch {
+    return false
+  }
+}
 
 function isAppAuthenticated(request: Request): boolean {
   const cookieHeader = request.headers.get('cookie') ?? ''
@@ -73,30 +97,13 @@ export async function POST(request: Request) {
     return new Response('Missing redirect_uri or state', { status: 400 })
   }
 
-  const code = crypto.randomBytes(24).toString('hex')
-  pendingCodes.set(code, {
-    state,
-    redirectUri,
-    expiresAt: Date.now() + 5 * 60 * 1000,
-  })
+  const code = signCode(Date.now(), redirectUri)
 
   const redirect = new URL(redirectUri)
   redirect.searchParams.set('code', code)
   redirect.searchParams.set('state', state)
 
   return Response.redirect(redirect.toString(), 302)
-}
-
-export function consumeCode(code: string, redirectUri: string): boolean {
-  const entry = pendingCodes.get(code)
-  if (!entry) return false
-  if (Date.now() > entry.expiresAt) {
-    pendingCodes.delete(code)
-    return false
-  }
-  if (entry.redirectUri !== redirectUri) return false
-  pendingCodes.delete(code)
-  return true
 }
 
 function escapeHtml(str: string): string {
