@@ -26,7 +26,7 @@ export default function HomeQuickPanels({ week, todayISO }: HomeQuickPanelsProps
   return (
     <section>
       <div className="rounded-xl border border-lime-400/30 bg-gradient-to-r from-zinc-900 via-zinc-900 to-lime-400/10 p-4 shadow-[0_0_32px_rgba(163,230,53,0.10)]">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div className="min-w-0 space-y-1.5">
             <p className="text-lime-400/70 text-[10px] font-mono tracking-[0.25em] uppercase">Today</p>
             {sessionType ? (
