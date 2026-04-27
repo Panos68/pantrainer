@@ -68,7 +68,7 @@ export async function readCurrentWeek(): Promise<WeekDoc | null> {
 
 export async function writeCurrentWeek(week: WeekDoc): Promise<void> {
   await writeBlobAsJson(CURRENT_WEEK_KEY, week)
-  revalidateTag('current-week', 'max')
+  revalidateTag('current-week', { expire: 0 })
 }
 
 const _readAthleteProfileCached = cachedBlobRead<unknown>(ATHLETE_KEY, 'athlete-profile')
@@ -80,7 +80,7 @@ export async function readAthleteProfile(): Promise<AthleteProfile | null> {
 
 export async function writeAthleteProfile(profile: AthleteProfile): Promise<void> {
   await writeBlobAsJson(ATHLETE_KEY, profile)
-  revalidateTag('athlete-profile', 'max')
+  revalidateTag('athlete-profile', { expire: 0 })
 }
 
 const _readAppStateCached = cachedBlobRead<unknown>(STATE_KEY, 'app-state')
@@ -89,7 +89,7 @@ export async function readAppState(): Promise<AppState> {
   if (!raw) {
     const defaults = AppStateSchema.parse({})
     await writeBlobAsJson(STATE_KEY, defaults)
-    revalidateTag('app-state', 'max')
+    revalidateTag('app-state', { expire: 0 })
     return defaults
   }
   return AppStateSchema.parse(raw)
@@ -97,7 +97,7 @@ export async function readAppState(): Promise<AppState> {
 
 export async function writeAppState(state: AppState): Promise<void> {
   await writeBlobAsJson(STATE_KEY, state)
-  revalidateTag('app-state', 'max')
+  revalidateTag('app-state', { expire: 0 })
 }
 
 function toProposalSnapshotKey(createdAt: string): string {
@@ -111,7 +111,7 @@ export async function readAutomationNotes(): Promise<AutomationNotes> {
   if (!raw) {
     const defaults = AutomationNotesSchema.parse({})
     await writeBlobAsJson(AUTOMATION_NOTES_KEY, defaults)
-    revalidateTag('automation-notes', 'max')
+    revalidateTag('automation-notes', { expire: 0 })
     return defaults
   }
   return AutomationNotesSchema.parse(raw)
@@ -119,7 +119,7 @@ export async function readAutomationNotes(): Promise<AutomationNotes> {
 
 export async function writeAutomationNotes(notes: AutomationNotes): Promise<void> {
   await writeBlobAsJson(AUTOMATION_NOTES_KEY, notes)
-  revalidateTag('automation-notes', 'max')
+  revalidateTag('automation-notes', { expire: 0 })
 }
 
 const _readProposedPlanCached = cachedBlobRead<unknown>(PROPOSED_LATEST_KEY, 'proposed-plan')
@@ -134,12 +134,12 @@ export async function writeProposedPlan(plan: ProposedPlan): Promise<void> {
     writeBlobAsJson(PROPOSED_LATEST_KEY, plan),
     writeBlobAsJson(toProposalSnapshotKey(plan.created_at), plan),
   ])
-  revalidateTag('proposed-plan', 'max')
+  revalidateTag('proposed-plan', { expire: 0 })
 }
 
 export async function clearProposedPlan(): Promise<void> {
   await deleteBlobIfExists(PROPOSED_LATEST_KEY)
-  revalidateTag('proposed-plan', 'max')
+  revalidateTag('proposed-plan', { expire: 0 })
 }
 
 const _readPendingWeekCached = cachedBlobRead<unknown>(PENDING_WEEK_KEY, 'pending-week')
@@ -151,12 +151,12 @@ export async function readPendingWeek(): Promise<WeekDoc | null> {
 
 export async function writePendingWeek(week: WeekDoc): Promise<void> {
   await writeBlobAsJson(PENDING_WEEK_KEY, week)
-  revalidateTag('pending-week', 'max')
+  revalidateTag('pending-week', { expire: 0 })
 }
 
 export async function clearPendingWeek(): Promise<void> {
   await deleteBlobIfExists(PENDING_WEEK_KEY)
-  revalidateTag('pending-week', 'max')
+  revalidateTag('pending-week', { expire: 0 })
 }
 
 function getWeekFilename(week: WeekDoc): string {
@@ -171,8 +171,8 @@ export async function archiveWeek(week: WeekDoc): Promise<void> {
   const filename = getWeekFilename(week)
   await writeBlobAsJson(`${WEEKS_PREFIX}${filename}`, week)
   await deleteBlobIfExists(CURRENT_WEEK_KEY)
-  revalidateTag('archived-weeks', 'max')
-  revalidateTag('current-week', 'max')
+  revalidateTag('archived-weeks', { expire: 0 })
+  revalidateTag('current-week', { expire: 0 })
 }
 
 async function fetchBlobUrl(url: string): Promise<Response> {
