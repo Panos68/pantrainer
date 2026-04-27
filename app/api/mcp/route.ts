@@ -343,7 +343,9 @@ export function OPTIONS() {
 }
 
 // SSE endpoint for server-to-client streaming (MCP 2025-03-26 streamable HTTP transport).
-// Vercel serverless can't maintain long-lived connections; we send heartbeats until timeout.
+// We close after MAX_SSE_MS to avoid billing for idle Fluid function time — Claude.ai reconnects.
+const MAX_SSE_MS = 30_000
+
 export function GET(_request: Request) {
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
@@ -356,6 +358,10 @@ export function GET(_request: Request) {
           clearInterval(interval)
         }
       }, 15000)
+      setTimeout(() => {
+        clearInterval(interval)
+        try { controller.close() } catch { /* already closed */ }
+      }, MAX_SSE_MS)
     },
   })
 
