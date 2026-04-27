@@ -73,8 +73,8 @@ export default async function Home() {
         </header>
 
         <div className="grid md:grid-cols-2 gap-4 items-start">
-          <RecoveryScorePanel />
           <HomeQuickPanels week={week} todayISO={todayISO} baselineRhr={profile.rhr_bpm} />
+          <RecoveryScorePanel />
         </div>
 
         <AdaptiveAlertBanner />
