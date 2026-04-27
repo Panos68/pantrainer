@@ -239,22 +239,23 @@ export default function RecoveryScorePanel() {
   return (
     <div
       className={`border ${c.border} rounded-xl p-3 overflow-hidden`}
-      style={{ background: `radial-gradient(ellipse 70% 60% at 5% 50%, ${c.glow} 0%, transparent 60%), #18181b` }}
+      style={{ background: `radial-gradient(ellipse 60% 80% at 95% 50%, ${c.glow} 0%, transparent 60%), #18181b` }}
     >
-      <div className="flex items-start gap-4">
-        {/* Score ring + label */}
+      <div className="flex items-center gap-4">
+        {/* Breakdown bars — fill available space */}
+        <div className="flex-1 min-w-0 space-y-2">
+          <BreakdownBar label="Sleep" value={score.sleep} max={40} unavailable={noSleep} barColor={BAR_COLORS.sleep} />
+          {data.sleep_avg_7d != null && (
+            <p className="text-[10px] text-zinc-600 pl-16 -mt-1">7d avg {data.sleep_avg_7d}h</p>
+          )}
+          <BreakdownBar label="RHR" value={score.rhr} max={30} unavailable={noRhr} barColor={BAR_COLORS.rhr} />
+          <BreakdownBar label="Load" value={score.load} max={20} barColor={BAR_COLORS.load} />
+          <BreakdownBar label="Feeling" value={score.subjective} max={10} barColor={BAR_COLORS.subjective} />
+        </div>
+
+        {/* Score ring + label — anchored right */}
         <div className="flex items-center gap-3 shrink-0">
-          <div
-            className="relative shrink-0 flex items-center justify-center"
-            style={{ width: ringSize, height: ringSize }}
-          >
-            <ScoreRing total={score.total} color={score.color} />
-            <div className="flex flex-col items-center">
-              <span className={`text-4xl font-black leading-none ${c.score}`}>{score.total}</span>
-              <span className="text-zinc-600 text-[10px] font-mono">/100</span>
-            </div>
-          </div>
-          <div>
+          <div className="text-right">
             <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-widest mb-0.5">Recovery</p>
             <p className={`text-xl font-black uppercase tracking-tight ${c.label}`}>{score.label}</p>
             {!data.readiness && !checkinOpen && (
@@ -266,17 +267,16 @@ export default function RecoveryScorePanel() {
               </button>
             )}
           </div>
-        </div>
-
-        {/* Breakdown bars — constrained width */}
-        <div className="flex-1 min-w-0 space-y-2 pt-1 max-w-xs">
-          <BreakdownBar label="Sleep" value={score.sleep} max={40} unavailable={noSleep} barColor={BAR_COLORS.sleep} />
-          {data.sleep_avg_7d != null && (
-            <p className="text-[10px] text-zinc-600 pl-16 -mt-1">7d avg {data.sleep_avg_7d}h</p>
-          )}
-          <BreakdownBar label="RHR" value={score.rhr} max={30} unavailable={noRhr} barColor={BAR_COLORS.rhr} />
-          <BreakdownBar label="Load" value={score.load} max={20} barColor={BAR_COLORS.load} />
-          <BreakdownBar label="Feeling" value={score.subjective} max={10} barColor={BAR_COLORS.subjective} />
+          <div
+            className="relative shrink-0 flex items-center justify-center"
+            style={{ width: ringSize, height: ringSize }}
+          >
+            <ScoreRing total={score.total} color={score.color} />
+            <div className="flex flex-col items-center">
+              <span className={`text-4xl font-black leading-none ${c.score}`}>{score.total}</span>
+              <span className="text-zinc-600 text-[10px] font-mono">/100</span>
+            </div>
+          </div>
         </div>
       </div>
 
