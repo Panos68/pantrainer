@@ -1,4 +1,28 @@
 import { head, put } from '@vercel/blob'
+import { createHmac, timingSafeEqual } from 'crypto'
+
+export function signPhotoUrl(baseUrl: string, pathname: string, ttlSeconds = 3600): string {
+  const exp = Math.floor(Date.now() / 1000) + ttlSeconds
+  const secret = process.env.AUTH_PASSWORD ?? ''
+  const sig = createHmac('sha256', secret).update(`${pathname}:${exp}`).digest('hex')
+  const url = new URL(`${baseUrl}/api/photos`)
+  url.searchParams.set('pathname', pathname)
+  url.searchParams.set('exp', String(exp))
+  url.searchParams.set('sig', sig)
+  return url.toString()
+}
+
+function verifyPhotoSig(pathname: string, exp: string, sig: string): boolean {
+  const expTs = Number(exp)
+  if (!expTs || Date.now() / 1000 > expTs) return false
+  const secret = process.env.AUTH_PASSWORD ?? ''
+  const expected = createHmac('sha256', secret).update(`${pathname}:${expTs}`).digest('hex')
+  try {
+    return timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expected, 'hex'))
+  } catch {
+    return false
+  }
+}
 
 function sanitizeFilename(name: string): string {
   const normalized = name.trim().replace(/\s+/g, '-').toLowerCase()
@@ -54,13 +78,26 @@ export async function GET(request: Request) {
     )
   }
 
-  const { searchParams } = new URL(request.url)
-  const pathname = searchParams.get('pathname')
+  const { searchParams: sp } = new URL(request.url)
+  const pathname = sp.get('pathname')
   if (!pathname) {
     return Response.json({ error: 'Missing pathname' }, { status: 400 })
   }
   if (!pathname.startsWith('data/session-photos/')) {
     return Response.json({ error: 'Invalid pathname' }, { status: 403 })
+  }
+
+  // Cookie-authenticated browser requests skip sig check (middleware already validated auth cookie)
+  const cookie = request.headers.get('cookie') ?? ''
+  const authCookie = cookie.split(';').find((c) => c.trim().startsWith('auth='))?.split('=')[1]?.trim()
+  const isSessionAuthed = authCookie === process.env.AUTH_PASSWORD
+
+  if (!isSessionAuthed) {
+    const exp = sp.get('exp')
+    const sig = sp.get('sig')
+    if (!exp || !sig || !verifyPhotoSig(pathname, exp, sig)) {
+      return Response.json({ error: 'Invalid or expired signature' }, { status: 403 })
+    }
   }
 
   try {

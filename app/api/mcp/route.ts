@@ -1,5 +1,6 @@
-import { head } from '@vercel/blob'
+// import { head } from '@vercel/blob' // needed if reverting to base64 photos — see comment below
 import { format } from 'date-fns'
+import { signPhotoUrl } from '@/app/api/photos/route'
 import {
   readCurrentWeek,
   readAutomationNotes,
@@ -78,24 +79,30 @@ const TOOLS = [
 // Tool handlers
 // ---------------------------------------------------------------------------
 
-async function fetchPhotoAsBase64(pathname: string): Promise<{ data: string; mimeType: string } | null> {
-  try {
-    const token = process.env.BLOB_READ_WRITE_TOKEN
-    if (!token) return null
-    const blob = await head(pathname, { token })
-    const res = await fetch(blob.url, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (!res.ok) return null
-    const contentType = res.headers.get('content-type') ?? 'image/jpeg'
-    const mimeType = contentType.split(';')[0].trim()
-    const buffer = await res.arrayBuffer()
-    const data = Buffer.from(buffer).toString('base64')
-    return { data, mimeType }
-  } catch {
-    return null
-  }
-}
+// REVERTED: base64 photo embedding caused huge Fluid memory/CPU spikes (83 GB-Hrs in 2 days).
+// To revert back to base64: restore the fetchPhotoAsBase64 function below, re-add the
+// `import { head } from '@vercel/blob'` import, and swap handleGetCurrentWeek back.
+//
+// async function fetchPhotoAsBase64(pathname: string): Promise<{ data: string; mimeType: string } | null> {
+//   try {
+//     const token = process.env.BLOB_READ_WRITE_TOKEN
+//     if (!token) return null
+//     const blob = await head(pathname, { token })
+//     const res = await fetch(blob.url, {
+//       headers: { Authorization: `Bearer ${token}` },
+//     })
+//     if (!res.ok) return null
+//     const contentType = res.headers.get('content-type') ?? 'image/jpeg'
+//     const mimeType = contentType.split(';')[0].trim()
+//     const buffer = await res.arrayBuffer()
+//     const data = Buffer.from(buffer).toString('base64')
+//     return { data, mimeType }
+//   } catch {
+//     return null
+//   }
+// }
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://pantrainer.vercel.app'
 
 async function handleGetCurrentWeek() {
   const currentWeek = await readCurrentWeek()
@@ -108,8 +115,8 @@ async function handleGetCurrentWeek() {
     readProposedPlan(),
   ])
 
-  const photoUrls: string[] = payload.photos_to_attach ?? []
-  const photos = (await Promise.all(photoUrls.map(fetchPhotoAsBase64))).filter(Boolean) as { data: string; mimeType: string }[]
+  const photoPathnames: string[] = payload.photos_to_attach ?? []
+  const photoUrls = photoPathnames.map((p) => signPhotoUrl(APP_URL, p))
 
   return {
     export_v2: payload,
@@ -124,7 +131,7 @@ async function handleGetCurrentWeek() {
           week_doc: proposed.week_doc,
         }
       : null,
-    photos,
+    photoUrls,
   }
 }
 
@@ -286,10 +293,10 @@ async function dispatch(req: McpRequest): Promise<Response> {
         if ('error' in result) {
           return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] })
         }
-        const { photos, ...rest } = result
+        const { photoUrls, ...rest } = result
         const content: unknown[] = [{ type: 'text', text: JSON.stringify(rest, null, 2) }]
-        for (const photo of photos) {
-          content.push({ type: 'image', data: photo.data, mimeType: photo.mimeType })
+        for (const url of photoUrls) {
+          content.push({ type: 'image', url })
         }
         return mcpResult(id, { content })
       }
