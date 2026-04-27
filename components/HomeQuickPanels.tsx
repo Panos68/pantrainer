@@ -25,37 +25,35 @@ export default function HomeQuickPanels({ week, todayISO }: HomeQuickPanelsProps
 
   return (
     <section>
-      <div className="rounded-xl border border-lime-400/30 bg-gradient-to-r from-zinc-900 via-zinc-900 to-lime-400/10 p-4 space-y-3 shadow-[0_0_32px_rgba(163,230,53,0.10)]">
-        <p className="text-lime-400/70 text-[10px] font-mono tracking-[0.25em] uppercase">Today</p>
-
-        <div>
-          {sessionType ? (
-            <p className="text-zinc-100 text-3xl font-black uppercase tracking-tight leading-none">
-              {sessionType}
-            </p>
-          ) : (
-            <p className="text-zinc-500 text-lg font-black uppercase tracking-tight">No session today</p>
-          )}
-          {sessionSubtype && (
-            <p className="text-zinc-400 text-xs font-mono mt-1.5 line-clamp-2">{sessionSubtype}</p>
-          )}
-        </div>
-
-        {todaySession && (
-          <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
-            <span className="inline-flex h-6 items-center rounded-md border border-lime-400/30 bg-lime-400/10 px-2 text-[10px] tracking-widest uppercase text-lime-300">
-              {todaySession.status?.replace('_', ' ') ?? 'planned'}
-            </span>
+      <div className="rounded-xl border border-lime-400/30 bg-gradient-to-r from-zinc-900 via-zinc-900 to-lime-400/10 p-4 shadow-[0_0_32px_rgba(163,230,53,0.10)]">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0 space-y-1.5">
+            <p className="text-lime-400/70 text-[10px] font-mono tracking-[0.25em] uppercase">Today</p>
+            {sessionType ? (
+              <p className="text-zinc-100 text-3xl font-black uppercase tracking-tight leading-none">
+                {sessionType}
+              </p>
+            ) : (
+              <p className="text-zinc-500 text-lg font-black uppercase tracking-tight">No session today</p>
+            )}
+            {sessionSubtype && (
+              <p className="text-zinc-400 text-xs font-mono line-clamp-1">{sessionSubtype}</p>
+            )}
+            {todaySession && (
+              <span className="inline-flex h-6 items-center rounded-md border border-lime-400/30 bg-lime-400/10 px-2 text-[10px] font-mono tracking-widest uppercase text-lime-300">
+                {todaySession.status?.replace('_', ' ') ?? 'planned'}
+              </span>
+            )}
           </div>
-        )}
 
-        <Link
-          href={actionHref}
-          className="group inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-lime-400 hover:bg-lime-300 text-zinc-950 px-6 text-sm font-black tracking-[0.12em] uppercase transition-colors"
-        >
-          {actionLabel}
-          <span className="transition-transform duration-150 group-hover:translate-x-1">→</span>
-        </Link>
+          <Link
+            href={actionHref}
+            className="group shrink-0 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-lime-400 hover:bg-lime-300 text-zinc-950 px-5 text-sm font-black tracking-[0.12em] uppercase transition-colors"
+          >
+            {actionLabel}
+            <span className="transition-transform duration-150 group-hover:translate-x-1">→</span>
+          </Link>
+        </div>
       </div>
     </section>
   )
