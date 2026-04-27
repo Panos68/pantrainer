@@ -36,9 +36,16 @@ export interface ReadinessApiResponse {
 const EMOJI_SCALE = ['😴', '😕', '😐', '🙂', '⚡']
 
 const COLOR = {
-  green: { score: 'text-green-400', label: 'text-green-400', border: 'border-green-900' },
-  amber: { score: 'text-amber-400', label: 'text-amber-400', border: 'border-amber-900' },
-  red:   { score: 'text-red-400',   label: 'text-red-400',   border: 'border-red-900'   },
+  green: { score: 'text-emerald-400', label: 'text-emerald-400', border: 'border-emerald-900', ring: '#34d399', glow: 'rgba(52,211,153,0.06)' },
+  amber: { score: 'text-amber-400',   label: 'text-amber-400',   border: 'border-amber-900',   ring: '#fbbf24', glow: 'rgba(251,191,36,0.06)' },
+  red:   { score: 'text-red-400',     label: 'text-red-400',     border: 'border-red-900',     ring: '#f87171', glow: 'rgba(248,113,113,0.06)' },
+}
+
+const BAR_COLORS = {
+  sleep:      'bg-sky-400',
+  rhr:        'bg-violet-400',
+  load:       'bg-amber-400',
+  subjective: 'bg-emerald-400',
 }
 
 function cacheKey(date: string) { return `readiness-cache-${date}` }
@@ -58,24 +65,74 @@ function clearReadinessCache(date: string) {
   try { localStorage.removeItem(cacheKey(date)) } catch { /* noop */ }
 }
 
-function BreakdownBar({ label, value, max, unavailable }: { label: string; value: number; max: number; unavailable?: boolean }) {
+function ScoreRing({ total, color }: { total: number; color: 'green' | 'amber' | 'red' }) {
+  const radius = 44
+  const stroke = 5
+  const size = (radius + stroke) * 2
+  const circumference = 2 * Math.PI * radius
+  const offset = circumference - (total / 100) * circumference
+  const ringColor = COLOR[color].ring
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      className="absolute inset-0 -rotate-90"
+      style={{ transform: 'rotate(-90deg)' }}
+    >
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke="#27272a"
+        strokeWidth={stroke}
+      />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke={ringColor}
+        strokeWidth={stroke}
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+function BreakdownBar({
+  label,
+  value,
+  max,
+  unavailable,
+  barColor,
+}: {
+  label: string
+  value: number
+  max: number
+  unavailable?: boolean
+  barColor: string
+}) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-zinc-500 text-[11px] w-14">{label}</span>
+      <span className="text-zinc-500 text-[11px] w-14 shrink-0">{label}</span>
       {unavailable ? (
         <>
-          <div className="flex-1 h-1 bg-zinc-800 rounded-full" />
-          <span className="text-zinc-600 text-[11px] w-10 text-right">—</span>
+          <div className="flex-1 h-2 bg-zinc-800 rounded-full" />
+          <span className="text-zinc-600 text-[11px] font-mono font-bold w-10 text-right">—</span>
         </>
       ) : (
         <>
-          <div className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden">
+          <div className="flex-1 h-2 bg-zinc-800 rounded-full overflow-hidden">
             <div
-              className="h-full bg-zinc-400 rounded-full transition-all duration-500"
+              className={`h-full rounded-full transition-all duration-500 ${barColor}`}
               style={{ width: `${Math.round((value / max) * 100)}%` }}
             />
           </div>
-          <span className="text-zinc-500 text-[11px] w-10 text-right">{value}/{max}</span>
+          <span className="text-zinc-400 text-[11px] font-mono font-bold w-10 text-right">{value}/{max}</span>
         </>
       )}
     </div>
@@ -177,36 +234,50 @@ export default function RecoveryScorePanel() {
   const noSleep = !garmin || garmin.sleep_hours == null
   const noRhr = !garmin || garmin.resting_hr_bpm == null
   const c = COLOR[score.color]
+  const ringSize = (44 + 5) * 2
 
   return (
-    <div className={`bg-zinc-900 border ${c.border} rounded-xl p-3 space-y-2.5`}>
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-zinc-500 text-[11px] uppercase tracking-widest mb-0.5">Recovery Score</p>
-          <div className="flex items-baseline gap-1">
-            <span className={`text-4xl font-black ${c.score}`}>{score.total}</span>
-            <span className="text-zinc-600 text-sm">/100</span>
-          </div>
-          <p className={`text-xs ${c.label} mt-0.5`}>{score.label}</p>
-        </div>
-        {!data.readiness && !checkinOpen && (
-          <button
-            onClick={() => setCheckinOpen(true)}
-            className="text-xs text-zinc-400 border border-zinc-700 rounded-lg px-2 py-1 hover:border-zinc-500 transition-colors"
+    <div
+      className={`border ${c.border} rounded-xl p-3 overflow-hidden`}
+      style={{ background: `radial-gradient(ellipse 70% 60% at 5% 50%, ${c.glow} 0%, transparent 60%), #18181b` }}
+    >
+      <div className="flex items-start gap-4">
+        {/* Score ring + label */}
+        <div className="flex items-center gap-3 shrink-0">
+          <div
+            className="relative shrink-0 flex items-center justify-center"
+            style={{ width: ringSize, height: ringSize }}
           >
-            Add check-in
-          </button>
-        )}
-      </div>
+            <ScoreRing total={score.total} color={score.color} />
+            <div className="flex flex-col items-center">
+              <span className={`text-4xl font-black leading-none ${c.score}`}>{score.total}</span>
+              <span className="text-zinc-600 text-[10px] font-mono">/100</span>
+            </div>
+          </div>
+          <div>
+            <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-widest mb-0.5">Recovery</p>
+            <p className={`text-xl font-black uppercase tracking-tight ${c.label}`}>{score.label}</p>
+            {!data.readiness && !checkinOpen && (
+              <button
+                onClick={() => setCheckinOpen(true)}
+                className="mt-1.5 text-[10px] text-zinc-400 border border-zinc-700 rounded px-1.5 py-0.5 hover:border-zinc-500 transition-colors"
+              >
+                Add check-in
+              </button>
+            )}
+          </div>
+        </div>
 
-      <div className="space-y-1.5">
-        <BreakdownBar label="Sleep" value={score.sleep} max={40} unavailable={noSleep} />
-        {data.sleep_avg_7d != null && (
-          <p className="text-[10px] text-zinc-600 pl-16 -mt-1">7d avg {data.sleep_avg_7d}h</p>
-        )}
-        <BreakdownBar label="RHR" value={score.rhr} max={30} unavailable={noRhr} />
-        <BreakdownBar label="Load" value={score.load} max={20} />
-        <BreakdownBar label="Feeling" value={score.subjective} max={10} />
+        {/* Breakdown bars — constrained width */}
+        <div className="flex-1 min-w-0 space-y-2 pt-1 max-w-xs">
+          <BreakdownBar label="Sleep" value={score.sleep} max={40} unavailable={noSleep} barColor={BAR_COLORS.sleep} />
+          {data.sleep_avg_7d != null && (
+            <p className="text-[10px] text-zinc-600 pl-16 -mt-1">7d avg {data.sleep_avg_7d}h</p>
+          )}
+          <BreakdownBar label="RHR" value={score.rhr} max={30} unavailable={noRhr} barColor={BAR_COLORS.rhr} />
+          <BreakdownBar label="Load" value={score.load} max={20} barColor={BAR_COLORS.load} />
+          <BreakdownBar label="Feeling" value={score.subjective} max={10} barColor={BAR_COLORS.subjective} />
+        </div>
       </div>
 
       {checkinOpen && (
