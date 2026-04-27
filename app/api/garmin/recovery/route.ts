@@ -58,16 +58,13 @@ export async function POST(req: Request) {
 
   const existingRaw = week.garmin_recovery?.[date]
   const existing = existingRaw ? sanitizeRecovery(existingRaw) : null
-  let weekMutated = false
-  if (existingRaw && existing && JSON.stringify(existingRaw) !== JSON.stringify(existing)) {
-    week.garmin_recovery = { ...week.garmin_recovery, [date]: existing }
-    weekMutated = true
-  }
 
   // Return cached data if available, not forcing refresh, and sleep is present.
   // If sleep is missing from cache, fall through to re-fetch so it gets another chance.
   if (existing && existing.sleep_hours != null && !force) {
-    if (weekMutated) {
+    if (existingRaw && JSON.stringify(existingRaw) !== JSON.stringify(existing)) {
+      // Sanitize stale entry in place — tiny window, no concurrent write concern here
+      week.garmin_recovery = { ...week.garmin_recovery, [date]: existing }
       await writeCurrentWeek(week)
     }
     return Response.json({ recovery: existing, cached: true })
@@ -89,14 +86,14 @@ export async function POST(req: Request) {
     })
 
     // Cache whenever Garmin returns any usable recovery metric.
-    // This avoids "looks fetched in UI but gone on Home" when sleep is missing but HR exists.
+    // Re-read week before writing to avoid clobbering concurrent session writes
+    // (e.g. "Mark Complete" PATCH racing with the initial background garmin fetch).
     if (hasAnyRecoveryMetric(recovery)) {
-      week.garmin_recovery = { ...week.garmin_recovery, [date]: recovery }
-      weekMutated = true
-    }
-
-    if (weekMutated) {
-      await writeCurrentWeek(week)
+      const freshWeek = await readCurrentWeek()
+      if (freshWeek) {
+        freshWeek.garmin_recovery = { ...freshWeek.garmin_recovery, [date]: recovery }
+        await writeCurrentWeek(freshWeek)
+      }
     }
 
     return Response.json({
