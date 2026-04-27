@@ -117,7 +117,7 @@ export default function RecoveryScorePanel() {
     async function load() {
       try {
         const cached = getReadinessCache(today)
-        if (cached) {
+        if (cached?.has_garmin_sleep) {
           setData(cached)
           if (!cached.readiness) setCheckinOpen(true)
           return
