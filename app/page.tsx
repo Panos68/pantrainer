@@ -72,15 +72,16 @@ export default async function Home() {
           </div>
         </header>
 
-        <RecoveryScorePanel />
+        <div className="grid md:grid-cols-2 gap-4 items-start">
+          <RecoveryScorePanel />
+          <HomeQuickPanels week={week} todayISO={todayISO} baselineRhr={profile.rhr_bpm} />
+        </div>
 
         <AdaptiveAlertBanner />
 
         <div className="space-y-3">
           {hasActiveFlags && <HealthFlagsBanner flags={week.health_flags} />}
         </div>
-
-        <HomeQuickPanels week={week} todayISO={todayISO} baselineRhr={profile.rhr_bpm} />
 
         <WeekBrowser weeks={[...archivedWeeks, week]} todayISO={todayISO} />
 
