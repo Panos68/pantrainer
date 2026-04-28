@@ -11,7 +11,7 @@ const PUBLIC_PATHS = [
   '/api/automation',
 ]
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Allow unauthenticated photo reads so previews/open-in-new-tab work on mobile browsers/PWAs.
