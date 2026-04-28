@@ -342,36 +342,8 @@ export function OPTIONS() {
   return new Response(null, { status: 204, headers: CORS_HEADERS })
 }
 
-// SSE endpoint for server-to-client streaming (MCP 2025-03-26 streamable HTTP transport).
-// We close after MAX_SSE_MS to avoid billing for idle Fluid function time — Claude.ai reconnects.
-const MAX_SSE_MS = 30_000
-
-export function GET(_request: Request) {
-  const encoder = new TextEncoder()
-  const stream = new ReadableStream({
-    start(controller) {
-      controller.enqueue(encoder.encode(': heartbeat\n\n'))
-      const interval = setInterval(() => {
-        try {
-          controller.enqueue(encoder.encode(': heartbeat\n\n'))
-        } catch {
-          clearInterval(interval)
-        }
-      }, 15000)
-      setTimeout(() => {
-        clearInterval(interval)
-        try { controller.close() } catch { /* already closed */ }
-      }, MAX_SSE_MS)
-    },
-  })
-
-  return new Response(stream, {
-    status: 200,
-    headers: {
-      ...CORS_HEADERS,
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-    },
-  })
+// GET/SSE not supported — this server never pushes server-initiated messages.
+// Returning 405 tells Claude.ai to use POST-only mode and stops continuous SSE polling.
+export function GET() {
+  return new Response(null, { status: 405, headers: CORS_HEADERS })
 }
