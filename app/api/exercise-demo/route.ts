@@ -19,8 +19,21 @@ async function getExercises(): Promise<WorkoutExercise[]> {
 
 const EQUIPMENT = new Set(['barbell', 'dumbbell', 'dumbbells', 'kettlebell', 'cable', 'band', 'trx', 'plate', 'machine', 'smith'])
 
+const ABBREVIATIONS: Record<string, string> = {
+  db: 'dumbbell',
+  dbs: 'dumbbells',
+  bb: 'barbell',
+  kb: 'kettlebell',
+}
+
 function tokenize(name: string): string[] {
-  return name.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(Boolean)
+  return name
+    .toLowerCase()
+    .replace(/-/g, ' ')
+    .replace(/[^a-z0-9 ]/g, '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((t) => ABBREVIATIONS[t] ?? t)
 }
 
 function coreTokens(tokens: string[]): string[] {
