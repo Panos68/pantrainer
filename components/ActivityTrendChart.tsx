@@ -11,10 +11,11 @@ import {
 } from 'recharts'
 import { format, parseISO } from 'date-fns'
 import type { WeekDoc } from '@/lib/schema'
-import { sessionToLoadPoint, type TrainingLoadPoint } from '@/lib/training-load'
+import { sessionToLoadPoint, type AthleteLoadParams, type TrainingLoadPoint } from '@/lib/training-load'
 
 interface ActivityTrendChartProps {
   weeks: WeekDoc[]
+  athlete?: AthleteLoadParams
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -35,10 +36,10 @@ function TypeDot(props: { cx?: number; cy?: number; payload?: TrainingLoadPoint 
   return <circle cx={cx} cy={cy} r={4} fill={typeDotColor(payload.type)} stroke="none" />
 }
 
-export default function ActivityTrendChart({ weeks }: ActivityTrendChartProps) {
+export default function ActivityTrendChart({ weeks, athlete }: ActivityTrendChartProps) {
   const points: TrainingLoadPoint[] = weeks
     .flatMap((w) => w.sessions)
-    .map((s) => sessionToLoadPoint(s))
+    .map((s) => sessionToLoadPoint(s, athlete))
     .filter((p): p is TrainingLoadPoint => p !== null)
     .sort((a, b) => a.date.localeCompare(b.date))
 
@@ -143,7 +144,7 @@ export default function ActivityTrendChart({ weeks }: ActivityTrendChartProps) {
                       <p style={{ color: '#a3e635', marginTop: 6 }}>
                         Load: {p.training_load.toLocaleString()}
                         <span style={{ color: '#52525b', fontSize: 10, marginLeft: 4 }}>
-                          ({p.load_source === 'garmin_tss' ? 'Garmin TSS' : 'HR×min'})
+                          ({p.load_source === 'garmin_tss' ? 'Garmin TSS' : p.load_source === 'trimp' ? 'TRIMP' : 'HR×min'})
                         </span>
                       </p>
                     </div>

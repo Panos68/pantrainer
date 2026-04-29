@@ -1,4 +1,5 @@
 import type { WeekDoc } from './schema'
+import { progressionFromCompletedStrengthSessions } from './progression'
 
 export type OverloadSignal = 'progress' | 'plateau' | 'pr' | 'ok'
 
@@ -12,8 +13,9 @@ export interface ExerciseInsight {
 }
 
 function numericLifts(week: WeekDoc): Record<string, number> {
+  const derived = progressionFromCompletedStrengthSessions(week.sessions)
   return Object.fromEntries(
-    Object.entries(week.lift_progression)
+    Object.entries(derived)
       .filter(([, v]) => typeof v === 'number' && v > 0)
       .map(([k, v]) => [k, v as number])
   )
