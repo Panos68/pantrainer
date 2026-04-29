@@ -147,6 +147,35 @@ function expectedDateByDay(monday: Date): Record<string, string> {
   )
 }
 
+function sanitizeImportedSession(
+  session: WeekDoc['sessions'][number],
+  date: string,
+  day: string,
+): WeekDoc['sessions'][number] {
+  return {
+    ...session,
+    day,
+    date,
+    status: 'planned',
+    duration_min: null,
+    avg_hr_bpm: null,
+    total_calories: null,
+    garmin_activity_id: null,
+    source: undefined,
+    aerobic_training_effect: null,
+    anaerobic_training_effect: null,
+    training_stress_score: null,
+    hr_zones: null,
+    exercises: (session.exercises ?? []).map((exercise) => ({
+      ...exercise,
+      actual_sets: undefined,
+      actual_reps: undefined,
+      actual_weight_kg: undefined,
+      effort: null,
+    })),
+  }
+}
+
 function validateAndDecideMode(
   currentWeek: WeekDoc | null,
   importedDoc: WeekDoc,
@@ -231,11 +260,7 @@ export async function applyImport(importedDoc: WeekDoc): Promise<WeekDoc> {
 
   const mergedSessions = ALL_DAYS.map((dayName) => {
     if (importedByDay[dayName]) {
-      return {
-        ...importedByDay[dayName],
-        day: dayName,
-        date: expectedDates[dayName],
-      }
+      return sanitizeImportedSession(importedByDay[dayName], expectedDates[dayName], dayName)
     }
 
     return {
