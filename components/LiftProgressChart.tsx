@@ -11,6 +11,7 @@ import {
   CartesianGrid,
 } from 'recharts'
 import type { WeekDoc } from '@/lib/schema'
+import { progressionFromCompletedStrengthSessions } from '@/lib/progression'
 
 interface LiftProgressChartProps {
   weeks: WeekDoc[]
@@ -116,8 +117,9 @@ export default function LiftProgressChart({ weeks }: LiftProgressChartProps) {
     (acc, w) => {
       const benchFromSessions = weeklyBarbellBenchWeight(w)
       const dumbbellFromSessions = weeklyDumbbellBenchWeight(w)
-      const benchFromProgression = parseWeight(w.lift_progression['bench_press_kg'])
-      const dumbbellFromProgression = parseWeight(w.lift_progression['sunday_db_bench_kg'])
+      const derivedProgression = progressionFromCompletedStrengthSessions(w.sessions)
+      const benchFromProgression = parseWeight(derivedProgression['bench_press_kg'])
+      const dumbbellFromProgression = parseWeight(derivedProgression['sunday_db_bench_kg'])
       const suspiciousDropWithoutBarbell =
         benchFromSessions == null &&
         benchFromProgression != null &&
@@ -148,9 +150,9 @@ export default function LiftProgressChart({ weeks }: LiftProgressChartProps) {
           {
             label: shortWeekLabel(w.week),
             bench_press_kg: benchValue,
-            deadlift_kg: parseWeight(w.lift_progression['deadlift_kg']),
-            push_press_kg: parseWeight(w.lift_progression['push_press_kg']),
-            weighted_pullups_added_kg: parseWeight(w.lift_progression['weighted_pullups_added_kg']),
+            deadlift_kg: parseWeight(derivedProgression['deadlift_kg']),
+            push_press_kg: parseWeight(derivedProgression['push_press_kg']),
+            weighted_pullups_added_kg: parseWeight(derivedProgression['weighted_pullups_added_kg']),
           },
         ],
         lastKnownBarbellBench: nextLastKnown,

@@ -1,4 +1,4 @@
-import type { Exercise, LiftProgression } from './schema'
+import type { Exercise, LiftProgression, Session } from './schema'
 
 // Maps exercise names (lowercase, partial) to the canonical lift_progression keys
 // used by the charts. More-specific patterns must come before generic ones.
@@ -54,4 +54,13 @@ export function updateLiftProgression(
     }
   }
   return updated
+}
+
+export function progressionFromCompletedStrengthSessions(sessions: Session[]): LiftProgression {
+  let progression: LiftProgression = {}
+  for (const session of sessions) {
+    if (session.status !== 'completed' || session.type !== 'Strength') continue
+    progression = updateLiftProgression(session.exercises, progression)
+  }
+  return progression
 }

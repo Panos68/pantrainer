@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic'
 
+import Link from 'next/link'
 import { readAllArchivedWeeks, readCurrentWeek, readAthleteProfile } from '@/lib/data'
 import LiftProgressChart from '@/components/LiftProgressChart'
 import ActivityTrendChart from '@/components/ActivityTrendChart'
@@ -14,8 +15,11 @@ export default async function ProgressPage() {
   const [archived, current, profile] = await Promise.all([readAllArchivedWeeks(), readCurrentWeek(), readAthleteProfile()])
   const weeks: WeekDoc[] = current ? [...archived, current] : archived
 
+  const latestWeekAthlete = weeks.length > 0 ? weeks[weeks.length - 1].athlete : null
   const athlete = profile
     ? { rhr: profile.rhr_bpm, maxHr: 220 - profile.age }
+    : latestWeekAthlete
+    ? { rhr: latestWeekAthlete.rhr_bpm, maxHr: 220 - latestWeekAthlete.age }
     : undefined
 
   const loadPoints = weeks
@@ -49,12 +53,12 @@ export default async function ProgressPage() {
               Progress
             </h1>
           </div>
-          <a
+          <Link
             href="/"
             className="text-xs font-mono font-bold tracking-widest uppercase text-zinc-500 hover:text-zinc-300 transition-colors self-start sm:self-auto"
           >
             ← Back
-          </a>
+          </Link>
         </header>
 
         {/* Stats summary */}
@@ -87,7 +91,7 @@ export default async function ProgressPage() {
         <LiftProgressChart weeks={weeks} />
 
         {/* Activity Trend Chart */}
-        <ActivityTrendChart weeks={weeks} />
+        <ActivityTrendChart weeks={weeks} athlete={athlete} />
 
       </div>
     </main>
