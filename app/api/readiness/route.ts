@@ -5,6 +5,10 @@ import { calcRecoveryScore } from '@/lib/recovery-score'
 import { sessionToLoadPoint } from '@/lib/training-load'
 import { format, subDays, parseISO, differenceInDays } from 'date-fns'
 
+export const dynamic = 'force-dynamic'
+
+const NO_STORE_HEADERS = { 'Cache-Control': 'no-store, max-age=0' }
+
 function calcACWR(loadPoints: NonNullable<ReturnType<typeof sessionToLoadPoint>>[]): number | null {
   if (loadPoints.length < 3) return null
   const sorted = [...loadPoints].sort((a, b) => a.date.localeCompare(b.date))
@@ -33,7 +37,10 @@ export async function GET(req: NextRequest) {
   ])
 
   if (!week || !profile) {
-    return NextResponse.json({ error: 'No active week or profile' }, { status: 404 })
+    return NextResponse.json(
+      { error: 'No active week or profile' },
+      { status: 404, headers: NO_STORE_HEADERS },
+    )
   }
 
   const garmin = week.garmin_recovery?.[date] ?? null
@@ -60,7 +67,10 @@ export async function GET(req: NextRequest) {
     ? Math.round((sleepValues.reduce((a, b) => a + b, 0) / sleepValues.length) * 10) / 10
     : null
 
-  return NextResponse.json({ date, score, readiness, garmin, sleep_avg_7d, has_garmin_sleep: garmin?.sleep_hours != null })
+  return NextResponse.json(
+    { date, score, readiness, garmin, sleep_avg_7d, has_garmin_sleep: garmin?.sleep_hours != null },
+    { headers: NO_STORE_HEADERS },
+  )
 }
 
 export async function POST(req: NextRequest) {
@@ -71,9 +81,12 @@ export async function POST(req: NextRequest) {
   })
 
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
+    return NextResponse.json(
+      { error: parsed.error.flatten() },
+      { status: 400, headers: NO_STORE_HEADERS },
+    )
   }
 
   await writeDailyReadiness(parsed.data)
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, readiness: parsed.data }, { headers: NO_STORE_HEADERS })
 }

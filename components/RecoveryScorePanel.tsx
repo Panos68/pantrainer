@@ -65,6 +65,17 @@ function clearReadinessCache(date: string) {
   try { localStorage.removeItem(cacheKey(date)) } catch { /* noop */ }
 }
 
+async function fetchReadiness(date: string, cacheBust = false): Promise<ReadinessApiResponse> {
+  const suffix = cacheBust ? `&_ts=${Date.now()}` : ''
+  const res = await fetch(`/api/readiness?date=${date}${suffix}`, { cache: 'no-store' })
+  if (!res.ok) throw new Error(`Readiness fetch failed (${res.status})`)
+  return res.json() as Promise<ReadinessApiResponse>
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 function ScoreRing({ total, color }: { total: number; color: 'green' | 'amber' | 'red' }) {
   const radius = 44
   const stroke = 5
@@ -169,6 +180,7 @@ export default function RecoveryScorePanel() {
   const [sleepQ, setSleepQ] = useState(3)
   const [mood, setMood] = useState(3)
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -180,14 +192,15 @@ export default function RecoveryScorePanel() {
           return
         }
 
-        let d: ReadinessApiResponse = await fetch(`/api/readiness?date=${today}`).then((r) => r.json())
+        let d = await fetchReadiness(today)
         if (!d.has_garmin_sleep) {
           await fetch('/api/garmin/recovery', {
             method: 'POST',
+            cache: 'no-store',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ date: today }),
           }).catch(() => {})
-          d = await fetch(`/api/readiness?date=${today}`).then((r) => r.json())
+          d = await fetchReadiness(today, true)
         }
         setReadinessCache(today, d)
         setData(d)
@@ -203,17 +216,35 @@ export default function RecoveryScorePanel() {
 
   async function submitCheckin() {
     setSaving(true)
+    setSaveError(null)
     try {
-      await fetch('/api/readiness', {
+      const saveRes = await fetch('/api/readiness', {
         method: 'POST',
+        cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ date: today, energy_level: energy, sleep_quality: sleepQ, mood }),
       })
+      if (!saveRes.ok) {
+        throw new Error(`Check-in save failed (${saveRes.status})`)
+      }
       clearReadinessCache(today)
-      const updated: ReadinessApiResponse = await fetch(`/api/readiness?date=${today}`).then((r) => r.json())
+      let updated: ReadinessApiResponse | null = null
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const fresh = await fetchReadiness(today, true)
+        if (fresh.readiness) {
+          updated = fresh
+          break
+        }
+        await wait(250)
+      }
+      if (!updated) {
+        throw new Error('Saved check-in was not visible yet')
+      }
       setReadinessCache(today, updated)
       setData(updated)
       setCheckinOpen(false)
+    } catch {
+      setSaveError('Save failed. Please try once more.')
     } finally {
       setSaving(false)
     }
@@ -286,6 +317,9 @@ export default function RecoveryScorePanel() {
           <EmojiPicker label="Energy" value={energy} onChange={setEnergy} />
           <EmojiPicker label="Sleep quality" value={sleepQ} onChange={setSleepQ} />
           <EmojiPicker label="Mood" value={mood} onChange={setMood} />
+          {saveError && (
+            <p className="text-red-400 text-xs">{saveError}</p>
+          )}
           <button
             onClick={submitCheckin}
             disabled={saving}
