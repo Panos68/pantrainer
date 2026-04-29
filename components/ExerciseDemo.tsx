@@ -24,6 +24,10 @@ function youtubeSearchUrl(name: string) {
   return `https://www.youtube.com/results?search_query=${encodeURIComponent(`how to ${name}`)}`
 }
 
+function youtubeSearchEmbedUrl(name: string) {
+  return `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(`how to ${name} exercise`)}`
+}
+
 export default function ExerciseDemo({ name }: { name: string }) {
   const [open, setOpen] = useState(false)
   const [match, setMatch] = useState<WorkoutExercise | null | undefined>(undefined)
@@ -52,6 +56,7 @@ export default function ExerciseDemo({ name }: { name: string }) {
     ? youtubeEmbed.replace('/embed/', '/watch?v=')
     : null
   const youtubeLink = youtubeWatch ?? youtubeSearchUrl(name)
+  const fallbackEmbed = youtubeEmbed ?? youtubeSearchEmbedUrl(name)
 
   const isLoading = open && match === undefined
 
@@ -87,9 +92,9 @@ export default function ExerciseDemo({ name }: { name: string }) {
             />
           )}
 
-          {!isLoading && (videoFailed || !videoUrl) && youtubeEmbed && (
+          {!isLoading && (videoFailed || !videoUrl) && fallbackEmbed && (
             <iframe
-              src={youtubeEmbed}
+              src={fallbackEmbed}
               title={`${name} exercise demo`}
               className="w-full aspect-video"
               loading="lazy"
