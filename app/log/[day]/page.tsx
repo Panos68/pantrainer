@@ -55,6 +55,14 @@ function todayIsoLocal(): string {
   return `${y}-${m}-${d}`
 }
 
+function parseOptionalNumber(value?: string): number | undefined {
+  if (value == null) return undefined
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  const parsed = Number(trimmed)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
 // ─── Read-only view ──────────────────────────────────────────────────────
 
 function ReadOnlyView({ session }: { session: Session }) {
@@ -233,6 +241,30 @@ export default function LogDayPage() {
 
   // Exercise actuals state (indexed to match session.exercises)
   type ExerciseActual = { sets: string; reps: string; weight_kg: string; effort: 'easy' | 'perfect' | 'hard' | null }
+
+  function planToActualPreset(
+    ex: Session['exercises'][number],
+    altIndex?: number,
+  ): ExerciseActual {
+    const alt = altIndex != null ? ex.alternatives[altIndex] : null
+    return {
+      sets: alt?.sets?.toString() ?? ex.sets?.toString() ?? '',
+      reps:
+        alt?.reps != null
+          ? alt.reps.toString()
+          : typeof ex.reps === 'number'
+          ? ex.reps.toString()
+          : ex.reps ?? '',
+      weight_kg:
+        alt?.weight_kg != null
+          ? alt.weight_kg.toString()
+          : ex.weight_kg != null
+          ? ex.weight_kg.toString()
+          : '',
+      effort: null,
+    }
+  }
+
   const [exerciseActuals, setExerciseActuals] = useState<ExerciseActual[]>([])
   const [swappedExercises, setSwappedExercises] = useState<Record<number, number>>({}) // index → alt index
   const [openSwapMenu, setOpenSwapMenu] = useState<number | null>(null)
@@ -327,7 +359,7 @@ export default function LogDayPage() {
   useEffect(() => {
     async function load() {
       try {
-        const sessionRes = await fetch(`/api/session/${day}`)
+        const sessionRes = await fetch(`/api/session/${day}`, { cache: 'no-store' })
         if (!sessionRes.ok) throw new Error('Session not found')
         const sessionData: Session = await sessionRes.json()
 
@@ -394,15 +426,14 @@ export default function LogDayPage() {
               sets: alt?.sets ?? ex.sets,
               reps: alt?.reps ?? ex.reps,
               weight_kg: alt?.weight_kg ?? ex.weight_kg,
-              actual_sets: actual?.sets !== '' ? Number(actual?.sets) : undefined,
+              actual_sets: parseOptionalNumber(actual?.sets),
               actual_reps:
                 actual?.reps !== ''
                   ? isNaN(Number(actual?.reps))
                     ? actual?.reps
                     : Number(actual?.reps)
                   : undefined,
-              actual_weight_kg:
-                actual?.weight_kg !== '' ? Number(actual?.weight_kg) : undefined,
+              actual_weight_kg: parseOptionalNumber(actual?.weight_kg),
               effort: actual?.effort ?? null,
             }
           })
@@ -433,24 +464,37 @@ export default function LogDayPage() {
   ) => {
     if (!sync?.matched) return payload
 
+    const durationFromGarmin =
+      garminSynced.duration && sync.duration_min != null
+        ? sync.duration_min
+        : payload.duration_min ?? sync.duration_min ?? null
+    const avgHrFromGarmin =
+      garminSynced.avg_hr && sync.avg_hr_bpm != null
+        ? sync.avg_hr_bpm
+        : payload.avg_hr_bpm ?? sync.avg_hr_bpm ?? null
+    const caloriesFromGarmin =
+      garminSynced.calories && sync.total_calories != null
+        ? sync.total_calories
+        : payload.total_calories ?? sync.total_calories ?? null
+
     const usedGarminMetric =
-      (payload.duration_min == null && sync.duration_min != null) ||
-      (payload.avg_hr_bpm == null && sync.avg_hr_bpm != null) ||
-      (payload.total_calories == null && sync.total_calories != null)
+      (garminSynced.duration && sync.duration_min != null) ||
+      (garminSynced.avg_hr && sync.avg_hr_bpm != null) ||
+      (garminSynced.calories && sync.total_calories != null)
 
     return {
       ...payload,
       garmin_activity_id: sync.garmin_activity_id ?? payload.garmin_activity_id ?? null,
-      duration_min: payload.duration_min ?? sync.duration_min ?? null,
-      avg_hr_bpm: payload.avg_hr_bpm ?? sync.avg_hr_bpm ?? null,
-      total_calories: payload.total_calories ?? sync.total_calories ?? null,
+      duration_min: durationFromGarmin,
+      avg_hr_bpm: avgHrFromGarmin,
+      total_calories: caloriesFromGarmin,
       source: payload.source === 'garmin' || usedGarminMetric ? 'garmin' as const : 'manual' as const,
       aerobic_training_effect: payload.aerobic_training_effect ?? sync.aerobic_training_effect ?? null,
       anaerobic_training_effect: payload.anaerobic_training_effect ?? sync.anaerobic_training_effect ?? null,
       training_stress_score: payload.training_stress_score ?? sync.training_stress_score ?? null,
       hr_zones: payload.hr_zones ?? sync.hr_zones ?? null,
     }
-  }, [])
+  }, [garminSynced])
 
   async function saveSession(
     nextStatus: Session['status'],
@@ -466,6 +510,7 @@ export default function LogDayPage() {
       const payload = mergeGarminIntoPayload(buildPayload(), sync)
       const res = await fetch(`/api/session/${day}`, {
         method: 'PATCH',
+        cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...payload, status: nextStatus }),
       })
@@ -479,6 +524,7 @@ export default function LogDayPage() {
       setSession(updated)
 
       if (options?.redirectHome) {
+        router.refresh()
         router.push('/')
         return
       }
@@ -528,6 +574,7 @@ export default function LogDayPage() {
     try {
       const res = await fetch(`/api/session/${day}`, {
         method: 'PATCH',
+        cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'skipped', notes: skipReason }),
       })
@@ -536,6 +583,7 @@ export default function LogDayPage() {
         setSaveMsg(err.error ?? 'Failed to skip session')
         setSaving(false)
       } else {
+        router.refresh()
         router.push('/')
       }
     } catch {
@@ -752,6 +800,12 @@ export default function LogDayPage() {
               </div>
               {session.exercises.map((ex, i) => {
                 const openUp = i >= session.exercises.length - 2
+                const selectedAltIndex = swappedExercises[i]
+                const selectedAlt = selectedAltIndex != null ? ex.alternatives[selectedAltIndex] : null
+                const plannedSets = selectedAlt?.sets ?? ex.sets
+                const plannedReps = selectedAlt?.reps ?? ex.reps
+                const plannedWeight = selectedAlt?.weight_kg ?? ex.weight_kg
+                const displayName = selectedAlt?.name ?? ex.name
                 return (
                 <div
                   key={i}
@@ -762,13 +816,12 @@ export default function LogDayPage() {
                 >
                   <div className="bg-zinc-950 px-3 py-2.5 text-zinc-300 text-xs font-mono font-bold relative min-w-0">
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <span className={`truncate ${swappedExercises[i] != null ? 'text-amber-400' : ''}`}>
-                        {swappedExercises[i] != null
-                          ? ex.alternatives[swappedExercises[i]]?.name ?? ex.name
-                          : ex.name}
+                      <span className={`truncate ${selectedAlt != null ? 'text-amber-400' : ''}`}>
+                        {displayName}
                       </span>
                       <ExerciseDemo
-                        name={swappedExercises[i] != null ? (ex.alternatives[swappedExercises[i]]?.name ?? ex.name) : ex.name}
+                        key={displayName}
+                        name={displayName}
                       />
                       {ex.alternatives && ex.alternatives.length > 0 && (
                         <button
@@ -793,6 +846,9 @@ export default function LogDayPage() {
                           type="button"
                           onClick={() => {
                             setSwappedExercises((prev) => { const n = { ...prev }; delete n[i]; return n })
+                            setExerciseActuals((prev) =>
+                              prev.map((a, j) => (j === i ? planToActualPreset(ex) : a))
+                            )
                             setOpenSwapMenu(null)
                           }}
                           className={`w-full text-left px-3 py-2 text-xs font-mono hover:bg-zinc-800 transition-colors ${swappedExercises[i] == null ? 'text-lime-400' : 'text-zinc-400'}`}
@@ -807,10 +863,7 @@ export default function LogDayPage() {
                               setSwappedExercises((prev) => ({ ...prev, [i]: ai }))
                               setExerciseActuals((prev) => prev.map((a, j) =>
                                 j === i ? {
-                                  sets: alt.sets?.toString() ?? a.sets,
-                                  reps: alt.reps?.toString() ?? a.reps,
-                                  weight_kg: alt.weight_kg?.toString() ?? '',
-                                  effort: null,
+                                  ...planToActualPreset(ex, ai),
                                 } : a
                               ))
                               setOpenSwapMenu(null)
@@ -825,11 +878,11 @@ export default function LogDayPage() {
                       </div>
                     )}
                   </div>
-                  <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">{ex.sets ?? '—'}</div>
-                  <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center overflow-hidden leading-tight break-words">{ex.reps ?? '—'}</div>
+                  <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">{plannedSets ?? '—'}</div>
+                  <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center overflow-hidden leading-tight break-words">{plannedReps ?? '—'}</div>
                   {type === 'Strength' && (
                     <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">
-                      {ex.weight_kg != null ? ex.weight_kg : '—'}
+                      {plannedWeight != null ? plannedWeight : '—'}
                     </div>
                   )}
                   <input

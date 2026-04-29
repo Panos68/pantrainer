@@ -2,6 +2,8 @@ import { readCurrentWeek, writeCurrentWeek } from '@/lib/data'
 import { updateLiftProgression } from '@/lib/progression'
 import type { Session, WeekSummary } from '@/lib/schema'
 
+export const dynamic = 'force-dynamic'
+
 function todayIsoLocal(): string {
   const now = new Date()
   const y = now.getFullYear()
@@ -33,9 +35,14 @@ export async function GET(
   }
   const session = week.sessions.find((s) => s.day.toLowerCase() === day.toLowerCase())
   if (!session) {
-    return Response.json({ error: 'Session not found' }, { status: 404 })
+    return Response.json(
+      { error: 'Session not found' },
+      { status: 404, headers: { 'Cache-Control': 'no-store, max-age=0' } },
+    )
   }
-  return Response.json(session)
+  return Response.json(session, {
+    headers: { 'Cache-Control': 'no-store, max-age=0' },
+  })
 }
 
 export async function PATCH(
@@ -83,5 +90,7 @@ export async function PATCH(
   }
 
   await writeCurrentWeek(week)
-  return Response.json(updatedSession)
+  return Response.json(updatedSession, {
+    headers: { 'Cache-Control': 'no-store, max-age=0' },
+  })
 }

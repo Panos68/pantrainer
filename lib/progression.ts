@@ -44,7 +44,11 @@ export function updateLiftProgression(
 ): LiftProgression {
   const updated = { ...current }
   for (const ex of exercises) {
-    if (ex.actual_weight_kg != null) {
+    if (
+      ex.actual_weight_kg != null &&
+      Number.isFinite(ex.actual_weight_kg) &&
+      ex.actual_weight_kg > 0
+    ) {
       const key = nameToKey(ex.name)
       updated[key] = ex.actual_weight_kg
     }
