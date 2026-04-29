@@ -57,8 +57,11 @@ export function updateLiftProgression(
 }
 
 export function progressionFromCompletedStrengthSessions(sessions: Session[]): LiftProgression {
+  const now = new Date()
+  const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   let progression: LiftProgression = {}
   for (const session of sessions) {
+    if (session.date > todayIso) continue
     if (session.status !== 'completed' || session.type !== 'Strength') continue
     progression = updateLiftProgression(session.exercises, progression)
   }

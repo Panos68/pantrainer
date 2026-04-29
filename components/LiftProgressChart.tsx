@@ -89,6 +89,15 @@ interface ChartPoint {
   weighted_pullups_added_kg?: number | null
 }
 
+function hasLiftValue(point: ChartPoint): boolean {
+  return (
+    point.bench_press_kg != null ||
+    point.deadlift_kg != null ||
+    point.push_press_kg != null ||
+    point.weighted_pullups_added_kg != null
+  )
+}
+
 function weekStartDate(week: WeekDoc): string {
   const dates = week.sessions.map((s) => s.date).filter(Boolean)
   return dates.length > 0 ? dates.sort()[0] : ''
@@ -159,7 +168,7 @@ export default function LiftProgressChart({ weeks }: LiftProgressChartProps) {
       }
     },
     { points: [], lastKnownBarbellBench: null },
-  ).points
+  ).points.filter(hasLiftValue)
 
   return (
     <div className="bg-zinc-900 rounded-xl p-5 space-y-4">
