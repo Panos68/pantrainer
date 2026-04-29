@@ -24,6 +24,15 @@ function recalculateWeekSummary(sessions: Session[]): WeekSummary {
   }
 }
 
+function recalculateLiftProgression(sessions: Session[]): Record<string, string | number | null> {
+  let progression: Record<string, string | number | null> = {}
+  for (const s of sessions) {
+    if (s.status !== 'completed' || s.type !== 'Strength' || s.exercises.length === 0) continue
+    progression = updateLiftProgression(s.exercises, progression)
+  }
+  return progression
+}
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ day: string }> },
@@ -79,15 +88,8 @@ export async function PATCH(
   const updatedSession: Session = { ...session, ...body }
   week.sessions[sessionIndex] = updatedSession
 
-  if (body.status === 'completed') {
-    week.week_summary = recalculateWeekSummary(week.sessions)
-    if (updatedSession.type === 'Strength' && updatedSession.exercises.length > 0) {
-      week.lift_progression = updateLiftProgression(
-        updatedSession.exercises,
-        week.lift_progression,
-      )
-    }
-  }
+  week.week_summary = recalculateWeekSummary(week.sessions)
+  week.lift_progression = recalculateLiftProgression(week.sessions)
 
   await writeCurrentWeek(week)
   return Response.json(updatedSession, {

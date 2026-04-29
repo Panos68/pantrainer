@@ -553,7 +553,7 @@ export default function LogDayPage() {
     const currentStatus = session?.status ?? 'in_progress'
     await saveSession(currentStatus, {
       successMessage: 'Saved!',
-      syncGarmin: currentStatus !== 'completed' && currentStatus !== 'skipped',
+      syncGarmin: currentStatus !== 'skipped',
     })
   }
 
