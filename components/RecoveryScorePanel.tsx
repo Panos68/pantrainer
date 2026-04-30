@@ -72,9 +72,6 @@ async function fetchReadiness(date: string, cacheBust = false): Promise<Readines
   return res.json() as Promise<ReadinessApiResponse>
 }
 
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
 
 function ScoreRing({ total, color }: { total: number; color: 'green' | 'amber' | 'red' }) {
   const radius = 44
@@ -194,13 +191,20 @@ export default function RecoveryScorePanel() {
 
         let d = await fetchReadiness(today)
         if (!d.has_garmin_sleep) {
-          await fetch('/api/garmin/recovery', {
+          // Don't block rendering waiting for Garmin — show what we have immediately.
+          // Sleep gets populated by the workout page's Garmin sync and will appear on
+          // the next home load or after cache invalidation.
+          fetch('/api/garmin/recovery', {
             method: 'POST',
             cache: 'no-store',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ date: today }),
+          }).then(() => fetchReadiness(today, true)).then((fresh) => {
+            if (fresh.has_garmin_sleep) {
+              setReadinessCache(today, fresh)
+              setData(fresh)
+            }
           }).catch(() => {})
-          d = await fetchReadiness(today, true)
         }
         setReadinessCache(today, d)
         setData(d)
@@ -227,22 +231,21 @@ export default function RecoveryScorePanel() {
       if (!saveRes.ok) {
         throw new Error(`Check-in save failed (${saveRes.status})`)
       }
+      // Use the readiness the server just persisted — no need to poll a potentially
+      // stale cache. Merge into current data so score/garmin fields stay intact.
+      const { readiness } = await saveRes.json()
       clearReadinessCache(today)
-      let updated: ReadinessApiResponse | null = null
-      for (let attempt = 0; attempt < 4; attempt++) {
-        const fresh = await fetchReadiness(today, true)
-        if (fresh.readiness) {
-          updated = fresh
-          break
-        }
-        await wait(250)
+      const updated = data ? { ...data, readiness } : null
+      if (updated) {
+        setReadinessCache(today, updated)
+        setData(updated)
       }
-      if (!updated) {
-        throw new Error('Saved check-in was not visible yet')
-      }
-      setReadinessCache(today, updated)
-      setData(updated)
       setCheckinOpen(false)
+      // Background refresh to recompute the recovery score with the new readiness
+      fetchReadiness(today, true).then((fresh) => {
+        setReadinessCache(today, fresh)
+        setData(fresh)
+      }).catch(() => {})
     } catch {
       setSaveError('Save failed. Please try once more.')
     } finally {
