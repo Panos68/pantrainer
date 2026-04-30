@@ -240,7 +240,7 @@ export default function LogDayPage() {
   const [loadingProposedDay, setLoadingProposedDay] = useState(false)
 
   // Exercise actuals state (indexed to match session.exercises)
-  type ExerciseActual = { sets: string; reps: string; weight_kg: string; effort: 'easy' | 'perfect' | 'hard' | null }
+  type ExerciseActual = { sets: string; reps: string; weight_kg: string; effort: 'easy' | 'perfect' | 'hard' | null; note: string }
 
   function planToActualPreset(
     ex: Session['exercises'][number],
@@ -262,12 +262,17 @@ export default function LogDayPage() {
           ? ex.weight_kg.toString()
           : '',
       effort: null,
+      note: '',
     }
   }
 
   const [exerciseActuals, setExerciseActuals] = useState<ExerciseActual[]>([])
+  const [openNotes, setOpenNotes] = useState<Record<number, boolean>>({})
   const [swappedExercises, setSwappedExercises] = useState<Record<number, number>>({}) // index → alt index
   const [openSwapMenu, setOpenSwapMenu] = useState<number | null>(null)
+
+  // Muscle map collapsed state
+  const [muscleMapOpen, setMuscleMapOpen] = useState(false)
 
   // Skip flow state
   const [showSkip, setShowSkip] = useState(false)
@@ -397,6 +402,7 @@ export default function LogDayPage() {
                 ? ex.weight_kg.toString()
                 : '',
             effort: ex.effort ?? null,
+            note: ex.actual_note ?? '',
             }))
         )
 
@@ -435,6 +441,7 @@ export default function LogDayPage() {
                   : undefined,
               actual_weight_kg: parseOptionalNumber(actual?.weight_kg),
               effort: actual?.effort ?? null,
+              actual_note: actual?.note?.trim() || null,
             }
           })
         : session?.exercises ?? []
@@ -779,8 +786,20 @@ export default function LogDayPage() {
           </div>
         )}
 
-        {/* Muscle map */}
-        <MuscleMap muscles={session.muscle_groups ?? []} />
+        {/* Muscle map — collapsible */}
+        {(session.muscle_groups ?? []).length > 0 && (
+          <div>
+            <button
+              type="button"
+              onClick={() => setMuscleMapOpen((o) => !o)}
+              className="flex items-center gap-2 text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase hover:text-zinc-300 transition-colors"
+            >
+              <span>{muscleMapOpen ? '▾' : '▸'}</span>
+              <span>Muscles</span>
+            </button>
+            {muscleMapOpen && <div className="mt-3"><MuscleMap muscles={session.muscle_groups ?? []} /></div>}
+          </div>
+        )}
 
         {/* Exercise table — interactive for all session types with exercises */}
         {session.exercises && session.exercises.length > 0 && (
@@ -948,6 +967,30 @@ export default function LogDayPage() {
                     )
                   })}
                 </div>}
+                {/* Per-exercise note */}
+                <div className="px-3 pb-2 bg-zinc-950 border-t border-zinc-800/40">
+                  {openNotes[i] || exerciseActuals[i]?.note ? (
+                    <input
+                      type="text"
+                      value={exerciseActuals[i]?.note ?? ''}
+                      onChange={(e) =>
+                        setExerciseActuals((prev) =>
+                          prev.map((a, j) => (j === i ? { ...a, note: e.target.value } : a))
+                        )
+                      }
+                      placeholder="Note…"
+                      className="w-full mt-1.5 bg-zinc-900 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-700"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setOpenNotes((prev) => ({ ...prev, [i]: true }))}
+                      className="mt-1.5 text-zinc-600 hover:text-zinc-400 text-[10px] font-mono transition-colors"
+                    >
+                      + note
+                    </button>
+                  )}
+                </div>
                 </div>
               )})}
             </div>
