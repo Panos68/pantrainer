@@ -155,14 +155,41 @@ export const AppStateSchema = z.object({
 })
 
 // Automation notes consumed by scheduled jobs
-export const AutomationNotesSchema = z.object({
-  travel_window: z.string().default(''),
-  flag_overrides: z.string().default(''),
-  priority_rules: z.string().default(''),
-  temporary_constraints: z.string().default(''),
-  freeform_notes: z.string().default(''),
+export const AutomationNotesSchema = z.preprocess((raw) => {
+  if (typeof raw !== 'object' || raw === null) return raw
+  const obj = raw as Record<string, unknown>
+
+  const explicitConstraints = typeof obj.constraints === 'string' ? obj.constraints : ''
+  const explicitPriorities = typeof obj.priorities_context === 'string' ? obj.priorities_context : ''
+  if (explicitConstraints || explicitPriorities) {
+    return {
+      constraints: explicitConstraints,
+      priorities_context: explicitPriorities,
+      updated_at: typeof obj.updated_at === 'string' ? obj.updated_at : null,
+    }
+  }
+
+  const legacyConstraints = [
+    typeof obj.travel_window === 'string' ? obj.travel_window : '',
+    typeof obj.temporary_constraints === 'string' ? obj.temporary_constraints : '',
+    typeof obj.flag_overrides === 'string' ? obj.flag_overrides : '',
+  ].filter((v) => v.trim().length > 0)
+
+  const legacyPriorities = [
+    typeof obj.priority_rules === 'string' ? obj.priority_rules : '',
+    typeof obj.freeform_notes === 'string' ? obj.freeform_notes : '',
+  ].filter((v) => v.trim().length > 0)
+
+  return {
+    constraints: legacyConstraints.join('\n\n'),
+    priorities_context: legacyPriorities.join('\n\n'),
+    updated_at: typeof obj.updated_at === 'string' ? obj.updated_at : null,
+  }
+}, z.object({
+  constraints: z.string().default(''),
+  priorities_context: z.string().default(''),
   updated_at: z.string().nullable().default(null),
-})
+}))
 
 export const ProposedPlanRunTypeSchema = z.enum(['manual', 'daily', 'weekly'])
 
