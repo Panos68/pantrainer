@@ -179,7 +179,10 @@ function sanitizeImportedSession(
 function validateAndDecideMode(
   currentWeek: WeekDoc | null,
   importedDoc: WeekDoc,
-): { importedMonday: Date; mode: 'replace_current' | 'advance_next' } {
+): {
+  importedMonday: Date
+  mode: 'replace_current' | 'advance_next' | 'merge_current_remaining'
+} {
   const importedMonday = deriveMondayFromSessions(importedDoc.sessions)
   if (!importedMonday) {
     throw new ApplyImportError(['Imported plan must include at least one valid dated session (YYYY-MM-DD).'])
@@ -226,10 +229,7 @@ function validateAndDecideMode(
   }
 
   if (isCurrentWeek && hasStartedSessions(currentWeek.sessions)) {
-    throw new ApplyImportError([
-      'Current week already has logged sessions. Import is blocked to prevent losing workout logs.',
-      'If you intended to move forward, import the next week (date range must be +7 days).',
-    ])
+    return { importedMonday, mode: 'merge_current_remaining' }
   }
 
   return { importedMonday, mode: isNextWeek ? 'advance_next' : 'replace_current' }
@@ -282,6 +282,48 @@ export async function applyImport(importedDoc: WeekDoc): Promise<WeekDoc> {
   const merged: WeekDoc = {
     ...normalizedImport,
     sessions: mergedSessions,
+  }
+
+  if (mode === 'merge_current_remaining' && currentWeek) {
+    const currentByDay = new Map(currentWeek.sessions.map((session) => [session.day, session]))
+    const mergedCurrentSessions = ALL_DAYS.map((dayName) => {
+      const existing = currentByDay.get(dayName)
+      const started =
+        existing?.status === 'in_progress' ||
+        existing?.status === 'completed' ||
+        existing?.status === 'skipped'
+      if (existing && started) return existing
+
+      if (importedByDay[dayName]) {
+        return sanitizeImportedSession(
+          importedByDay[dayName],
+          existing?.date ?? expectedDates[dayName],
+          existing?.day ?? dayName,
+        )
+      }
+
+      return existing ?? {
+        date: expectedDates[dayName],
+        day: dayName,
+        type: 'Rest',
+        subtype: null,
+        exercises: [],
+        status: 'planned' as const,
+        duration_min: null,
+        avg_hr_bpm: null,
+        total_calories: null,
+        notes: '',
+        photos: [],
+        muscle_groups: [],
+      }
+    })
+
+    const mergedCurrentWeek: WeekDoc = {
+      ...currentWeek,
+      sessions: mergedCurrentSessions,
+    }
+    await writeCurrentWeek(mergedCurrentWeek)
+    return mergedCurrentWeek
   }
 
   if (mode === 'advance_next' && currentWeek && todayIso < importedWeekStartIso) {

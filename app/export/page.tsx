@@ -673,10 +673,10 @@ function ImportSection() {
       <SectionDivider label="Plan Next Week" />
 
       <h2 className="text-2xl sm:text-3xl font-black tracking-tight uppercase text-zinc-50">
-        Import Next Week Plan
+        Apply Next Week Plan
       </h2>
       <p className="text-zinc-500 text-xs font-mono tracking-widest uppercase">
-        Recommended: Export → Claude plan → Import
+        Default flow: MCP automation. Manual JSON import is in Advanced.
       </p>
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
@@ -1014,7 +1014,7 @@ export default function ExportPage() {
             Recommended Weekly Flow
           </p>
           <p className="text-zinc-300 text-sm font-mono">
-            Export this week → Ask Claude for next week JSON → Import here → Log workouts.
+            Default: MCP automation generates proposed plans. Use Advanced import only for manual JSON.
           </p>
         </section>
 
