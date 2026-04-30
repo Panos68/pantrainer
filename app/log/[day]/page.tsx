@@ -950,7 +950,7 @@ export default function LogDayPage() {
                 <div className="space-y-3">
                   {session.exercise_groups.map((group) => {
                     const badgeClass = GROUP_TYPE_COLORS[group.type] ?? 'text-zinc-400 border-zinc-700 bg-zinc-800'
-                    const restLabel = group.rest_between_sets_sec != null ? `${group.rest_between_sets_sec}s rest` : null
+                    const restLabel = (group.type === 'straight' || group.type === 'superset') && group.rest_between_sets_sec != null ? `${group.rest_between_sets_sec}s rest` : null
                     return (
                       <div key={group.group_id}>
                         <div className="flex items-center gap-2 mb-1.5">
