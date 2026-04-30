@@ -872,9 +872,14 @@ function ImportSection() {
 
           <details className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 space-y-3">
             <summary className="cursor-pointer list-none text-zinc-400 hover:text-zinc-200 text-xs font-mono font-bold tracking-widest uppercase">
-              Advanced: Import raw JSON manually
+              Advanced: Manual export/import loop
             </summary>
             <div className="mt-3 space-y-3">
+              <ExportSection />
+              <div className="h-px bg-zinc-800" />
+              <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
+                Import raw JSON manually
+              </p>
               <textarea
                 ref={textareaRef}
                 value={rawText}
@@ -1020,18 +1025,6 @@ export default function ExportPage() {
 
         {/* Import */}
         <ImportSection />
-
-        {/* Divider */}
-        <div className="h-px bg-zinc-800" />
-
-        <details className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-          <summary className="cursor-pointer list-none text-zinc-400 hover:text-zinc-200 text-xs font-mono font-bold tracking-widest uppercase">
-            Advanced: Manual export/import loop
-          </summary>
-          <div className="mt-4">
-            <ExportSection />
-          </div>
-        </details>
 
       </div>
     </main>
