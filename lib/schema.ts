@@ -24,6 +24,16 @@ export const ExerciseSchema = z.object({
   })).default([]),
 })
 
+// Exercise group (optional structured alternative to flat exercises array)
+export const ExerciseGroupSchema = z.object({
+  group_id: z.string(),
+  label: z.string(),
+  type: z.enum(['warmup', 'straight', 'superset', 'cooldown']),
+  rest_between_sets_sec: z.number().optional(),
+  rest_between_exercises_sec: z.number().optional(),
+  exercises: z.array(ExerciseSchema).default([]),
+})
+
 // Individual session
 export const SessionSchema = z.object({
   date: z.string(), // ISO date string YYYY-MM-DD
@@ -31,6 +41,7 @@ export const SessionSchema = z.object({
   type: z.string(), // "Strength", "Conditioning", "Recovery", "Rest"
   subtype: z.string().nullable().optional(),
   exercises: z.array(ExerciseSchema).default([]),
+  exercise_groups: z.array(ExerciseGroupSchema).optional(),
   duration_min: z.number().nullable().optional(),
   avg_hr_bpm: z.number().nullable().optional(),
   total_calories: z.number().nullable().optional(),
@@ -206,6 +217,7 @@ export const ProposedPlanSchema = z.object({
 
 // Export types
 export type Exercise = z.infer<typeof ExerciseSchema>
+export type ExerciseGroup = z.infer<typeof ExerciseGroupSchema>
 export type Session = z.infer<typeof SessionSchema>
 export type SessionStatus = z.infer<typeof SessionStatusSchema>
 export type WeekSummary = z.infer<typeof WeekSummarySchema>
