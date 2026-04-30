@@ -30,11 +30,8 @@ type ImportState =
   | { status: 'error'; errors: string[] }
 
 interface AutomationNotesData {
-  travel_window: string
-  flag_overrides: string
-  priority_rules: string
-  temporary_constraints: string
-  freeform_notes: string
+  constraints: string
+  priorities_context: string
   updated_at: string | null
 }
 
@@ -422,11 +419,8 @@ function ImportSection() {
   const [importState, setImportState] = useState<ImportState>({ status: 'idle' })
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [notes, setNotes] = useState<AutomationNotesData>({
-    travel_window: '',
-    flag_overrides: '',
-    priority_rules: '',
-    temporary_constraints: '',
-    freeform_notes: '',
+    constraints: '',
+    priorities_context: '',
     updated_at: null,
   })
   const [notesSaving, setNotesSaving] = useState(false)
@@ -520,6 +514,103 @@ function ImportSection() {
       return {
         ...prev,
         sessions: prev.sessions.map((session, i) => (i === index ? { ...session, ...updates } : session)),
+      }
+    })
+  }
+
+  function parseOptionalNumber(value: string): number | null {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    const parsed = Number(trimmed)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  function parseRepsInput(value: string): number | string | null {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    const parsed = Number(trimmed)
+    if (Number.isFinite(parsed) && /^-?\d+(\.\d+)?$/.test(trimmed)) return parsed
+    return trimmed
+  }
+
+  function updateDraftExercise(
+    sessionIndex: number,
+    exerciseIndex: number,
+    updates: Partial<WeekDoc['sessions'][number]['exercises'][number]>,
+  ) {
+    setDraftWeek((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        sessions: prev.sessions.map((session, i) => {
+          if (i !== sessionIndex) return session
+          return {
+            ...session,
+            exercises: session.exercises.map((exercise, j) =>
+              j === exerciseIndex ? { ...exercise, ...updates } : exercise
+            ),
+          }
+        }),
+      }
+    })
+  }
+
+  function addDraftExercise(sessionIndex: number) {
+    setDraftWeek((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        sessions: prev.sessions.map((session, i) => {
+          if (i !== sessionIndex) return session
+          return {
+            ...session,
+            exercises: [
+              ...session.exercises,
+              {
+                name: '',
+                sets: null,
+                reps: null,
+                weight_kg: null,
+                notes: null,
+                alternatives: [],
+              },
+            ],
+          }
+        }),
+      }
+    })
+  }
+
+  function removeDraftExercise(sessionIndex: number, exerciseIndex: number) {
+    setDraftWeek((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        sessions: prev.sessions.map((session, i) => {
+          if (i !== sessionIndex) return session
+          return {
+            ...session,
+            exercises: session.exercises.filter((_, j) => j !== exerciseIndex),
+          }
+        }),
+      }
+    })
+  }
+
+  function moveDraftExercise(sessionIndex: number, exerciseIndex: number, direction: -1 | 1) {
+    setDraftWeek((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        sessions: prev.sessions.map((session, i) => {
+          if (i !== sessionIndex) return session
+          const nextIndex = exerciseIndex + direction
+          if (nextIndex < 0 || nextIndex >= session.exercises.length) return session
+          const nextExercises = [...session.exercises]
+          const [item] = nextExercises.splice(exerciseIndex, 1)
+          nextExercises.splice(nextIndex, 0, item)
+          return { ...session, exercises: nextExercises }
+        }),
       }
     })
   }
@@ -681,42 +772,24 @@ function ImportSection() {
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
         <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
-          Automation notes (used by cowork runs)
+          MCP context notes (used by Claude MCP planner)
+        </p>
+        <p className="text-zinc-600 text-[10px] font-mono leading-relaxed">
+          Keep these concise and actionable so the proposed week reflects your real constraints.
         </p>
         <div className="grid grid-cols-1 gap-3">
           <textarea
-            value={notes.travel_window}
-            onChange={(e) => setNotes((prev) => ({ ...prev, travel_window: e.target.value }))}
-            rows={2}
-            placeholder="Travel window notes (dates, location constraints)"
+            value={notes.constraints}
+            onChange={(e) => setNotes((prev) => ({ ...prev, constraints: e.target.value }))}
+            rows={5}
+            placeholder="Constraints (travel/schedule limits, health flags, equipment limits, temporary restrictions)"
             className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-xl px-4 py-3 text-zinc-200 text-xs font-mono placeholder:text-zinc-600 resize-y outline-none transition-colors"
           />
           <textarea
-            value={notes.flag_overrides}
-            onChange={(e) => setNotes((prev) => ({ ...prev, flag_overrides: e.target.value }))}
-            rows={2}
-            placeholder="Flag overrides (injury/strain priority rules)"
-            className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-xl px-4 py-3 text-zinc-200 text-xs font-mono placeholder:text-zinc-600 resize-y outline-none transition-colors"
-          />
-          <textarea
-            value={notes.priority_rules}
-            onChange={(e) => setNotes((prev) => ({ ...prev, priority_rules: e.target.value }))}
-            rows={2}
-            placeholder="Priority rules (what to optimize first)"
-            className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-xl px-4 py-3 text-zinc-200 text-xs font-mono placeholder:text-zinc-600 resize-y outline-none transition-colors"
-          />
-          <textarea
-            value={notes.temporary_constraints}
-            onChange={(e) => setNotes((prev) => ({ ...prev, temporary_constraints: e.target.value }))}
-            rows={2}
-            placeholder="Temporary constraints (equipment, schedule, sleep)"
-            className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-xl px-4 py-3 text-zinc-200 text-xs font-mono placeholder:text-zinc-600 resize-y outline-none transition-colors"
-          />
-          <textarea
-            value={notes.freeform_notes}
-            onChange={(e) => setNotes((prev) => ({ ...prev, freeform_notes: e.target.value }))}
-            rows={3}
-            placeholder="Freeform notes for automation"
+            value={notes.priorities_context}
+            onChange={(e) => setNotes((prev) => ({ ...prev, priorities_context: e.target.value }))}
+            rows={5}
+            placeholder="Priorities & context (what to optimize first this week + any freeform context)"
             className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-xl px-4 py-3 text-zinc-200 text-xs font-mono placeholder:text-zinc-600 resize-y outline-none transition-colors"
           />
         </div>
@@ -760,37 +833,134 @@ function ImportSection() {
                   <p className="text-zinc-400 text-[10px] font-mono tracking-[0.15em] uppercase">
                     Review proposed week
                   </p>
-                  <p className="text-zinc-500 text-[10px] font-mono">
+                  <p className="text-zinc-500 text-[10px] font-mono whitespace-nowrap">
                     {draftWeek.week}
                   </p>
                 </div>
-                <div className="divide-y divide-zinc-800">
+                <div className="px-3 py-2 border-b border-zinc-800 text-zinc-600 text-[10px] font-mono">
+                  Scroll and edit sessions/exercises directly. Completed or in-progress sessions are locked.
+                </div>
+                <div className="max-h-[36rem] overflow-y-auto divide-y divide-zinc-800">
                   {draftWeek.sessions.map((session, index) => (
-                    <div key={`${session.date}-${session.day}`} className="px-3 py-3 space-y-2">
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="text-zinc-300 text-xs font-mono font-bold tracking-widest uppercase">
-                          {session.day}
-                        </p>
-                        <div className="text-right">
-                          <p className="text-zinc-600 text-[10px] font-mono">{session.date}</p>
-                          <p className="text-zinc-500 text-[10px] font-mono">
-                          {session.exercises.length} exercise{session.exercises.length === 1 ? '' : 's'}
+                    <div key={`${session.date}-${session.day}-${index}`} className="px-3 py-3 space-y-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-zinc-300 text-xs font-mono font-bold tracking-widest uppercase">
+                            {session.day}
                           </p>
+                          <p className="text-zinc-600 text-[10px] font-mono mt-0.5">{session.date}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 rounded-md border text-[10px] font-mono uppercase tracking-wide ${session.status === 'planned' ? 'border-zinc-700 text-zinc-400' : 'border-amber-700/40 text-amber-300'}`}>
+                            {session.status}
+                          </span>
+                          <span className="text-zinc-500 text-[10px] font-mono">
+                            {session.exercises.length} exercise{session.exercises.length === 1 ? '' : 's'}
+                          </span>
                         </div>
                       </div>
-                      <div className="grid grid-cols-1 gap-2">
+                      <div className="grid grid-cols-1 gap-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-2">
+                        <p className="text-zinc-600 text-[10px] font-mono tracking-[0.12em] uppercase">Session type</p>
                         <input
                           value={session.type}
                           onChange={(e) => updateDraftSession(index, { type: e.target.value })}
+                          disabled={session.status !== 'planned'}
                           className="w-full h-9 bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-lg px-3 text-zinc-200 text-xs font-mono outline-none transition-colors"
                         />
+                        <p className="text-zinc-600 text-[10px] font-mono tracking-[0.12em] uppercase">Session notes</p>
                         <textarea
                           value={session.notes ?? ''}
                           onChange={(e) => updateDraftSession(index, { notes: e.target.value })}
+                          disabled={session.status !== 'planned'}
                           rows={2}
                           placeholder="Adjustment notes for this day"
                           className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-lg px-3 py-2 text-zinc-300 text-xs font-mono placeholder:text-zinc-600 resize-y outline-none transition-colors"
                         />
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-zinc-500 text-[10px] font-mono tracking-[0.15em] uppercase">Exercises</p>
+                        {session.exercises.length === 0 ? (
+                          <p className="text-zinc-600 text-xs font-mono">No exercises yet.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {session.exercises.map((exercise, exerciseIndex) => (
+                              <div key={`${session.date}-${exercise.name}-${exerciseIndex}`} className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-2 space-y-2">
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                                  <input
+                                    value={exercise.name ?? ''}
+                                    onChange={(e) => updateDraftExercise(index, exerciseIndex, { name: e.target.value })}
+                                    disabled={session.status !== 'planned'}
+                                    placeholder="Exercise name"
+                                    className="w-full h-9 bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-lg px-3 text-zinc-200 text-xs font-mono outline-none transition-colors"
+                                  />
+                                  <div className="flex gap-1">
+                                    <button
+                                      onClick={() => moveDraftExercise(index, exerciseIndex, -1)}
+                                      disabled={session.status !== 'planned' || exerciseIndex === 0}
+                                      className="h-8 px-2 rounded-md border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-mono uppercase tracking-wide disabled:opacity-40"
+                                    >
+                                      Up
+                                    </button>
+                                    <button
+                                      onClick={() => moveDraftExercise(index, exerciseIndex, 1)}
+                                      disabled={session.status !== 'planned' || exerciseIndex === session.exercises.length - 1}
+                                      className="h-8 px-2 rounded-md border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-mono uppercase tracking-wide disabled:opacity-40"
+                                    >
+                                      Down
+                                    </button>
+                                    <button
+                                      onClick={() => removeDraftExercise(index, exerciseIndex)}
+                                      disabled={session.status !== 'planned'}
+                                      className="h-8 px-2 rounded-md border border-red-900/50 bg-red-950/30 hover:bg-red-900/30 text-red-300 text-[10px] font-mono uppercase tracking-wide disabled:opacity-40"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2">
+                                  <input
+                                    value={exercise.sets ?? ''}
+                                    onChange={(e) => updateDraftExercise(index, exerciseIndex, { sets: parseOptionalNumber(e.target.value) })}
+                                    disabled={session.status !== 'planned'}
+                                    placeholder="Sets"
+                                    inputMode="decimal"
+                                    className="w-full h-8 bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-md px-2 text-zinc-200 text-xs font-mono outline-none transition-colors"
+                                  />
+                                  <input
+                                    value={exercise.reps == null ? '' : String(exercise.reps)}
+                                    onChange={(e) => updateDraftExercise(index, exerciseIndex, { reps: parseRepsInput(e.target.value) })}
+                                    disabled={session.status !== 'planned'}
+                                    placeholder="Reps"
+                                    className="w-full h-8 bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-md px-2 text-zinc-200 text-xs font-mono outline-none transition-colors"
+                                  />
+                                  <input
+                                    value={exercise.weight_kg ?? ''}
+                                    onChange={(e) => updateDraftExercise(index, exerciseIndex, { weight_kg: parseOptionalNumber(e.target.value) })}
+                                    disabled={session.status !== 'planned'}
+                                    placeholder="kg"
+                                    inputMode="decimal"
+                                    className="w-full h-8 bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-md px-2 text-zinc-200 text-xs font-mono outline-none transition-colors"
+                                  />
+                                </div>
+                                <textarea
+                                  value={exercise.notes ?? ''}
+                                  onChange={(e) => updateDraftExercise(index, exerciseIndex, { notes: e.target.value })}
+                                  disabled={session.status !== 'planned'}
+                                  rows={2}
+                                  placeholder="Exercise notes"
+                                  className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-md px-2 py-2 text-zinc-300 text-xs font-mono placeholder:text-zinc-600 resize-y outline-none transition-colors"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <button
+                          onClick={() => addDraftExercise(index)}
+                          disabled={session.status !== 'planned'}
+                          className="h-8 px-3 rounded-md border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-mono uppercase tracking-wide disabled:opacity-40"
+                        >
+                          Add exercise
+                        </button>
                       </div>
                     </div>
                   ))}
