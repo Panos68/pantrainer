@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import type { Session, GarminRecoveryDay } from '@/lib/schema'
+import type { Session, GarminRecoveryDay, ExerciseGroup } from '@/lib/schema'
 import GarminRecoveryCard from '@/components/GarminRecoveryCard'
 import MuscleMap from '@/components/MuscleMap'
 import ExerciseDemo from '@/components/ExerciseDemo'
@@ -389,8 +389,12 @@ export default function LogDayPage() {
         }
 
         // Initialize exercise actuals from planned values (or existing actuals if in_progress)
+        // When exercise_groups exist, flatten them to build the actuals array
+        const flatExercises = sessionData.exercise_groups
+          ? sessionData.exercise_groups.flatMap((g) => g.exercises)
+          : (sessionData.exercises ?? [])
         setExerciseActuals(
-          (sessionData.exercises ?? []).map((ex) => ({
+          flatExercises.map((ex) => ({
             sets: ex.actual_sets?.toString() ?? ex.sets?.toString() ?? '',
             reps:
               ex.actual_reps?.toString() ??
@@ -420,31 +424,45 @@ export default function LogDayPage() {
   }, [day, refreshFromGarmin])
 
   const buildPayload = useCallback(() => {
-    const exercises =
-      type === 'Strength'
-        ? (session?.exercises ?? []).map((ex, i) => {
-            const actual = exerciseActuals[i]
-            const altIndex = swappedExercises[i]
-            const alt = altIndex != null ? ex.alternatives[altIndex] : null
-            return {
-              ...ex,
-              name: alt?.name ?? ex.name,
-              sets: alt?.sets ?? ex.sets,
-              reps: alt?.reps ?? ex.reps,
-              weight_kg: alt?.weight_kg ?? ex.weight_kg,
-              actual_sets: parseOptionalNumber(actual?.sets),
-              actual_reps:
-                actual?.reps !== ''
-                  ? isNaN(Number(actual?.reps))
-                    ? actual?.reps
-                    : Number(actual?.reps)
-                  : undefined,
-              actual_weight_kg: parseOptionalNumber(actual?.weight_kg),
-              effort: actual?.effort ?? null,
-              actual_note: actual?.note?.trim() || null,
-            }
-          })
-        : session?.exercises ?? []
+    function mergeActualIntoExercise(ex: Session['exercises'][number], i: number) {
+      const actual = exerciseActuals[i]
+      const altIndex = swappedExercises[i]
+      const alt = altIndex != null ? ex.alternatives[altIndex] : null
+      return {
+        ...ex,
+        name: alt?.name ?? ex.name,
+        sets: alt?.sets ?? ex.sets,
+        reps: alt?.reps ?? ex.reps,
+        weight_kg: alt?.weight_kg ?? ex.weight_kg,
+        actual_sets: parseOptionalNumber(actual?.sets),
+        actual_reps:
+          actual?.reps !== ''
+            ? isNaN(Number(actual?.reps))
+              ? actual?.reps
+              : Number(actual?.reps)
+            : undefined,
+        actual_weight_kg: parseOptionalNumber(actual?.weight_kg),
+        effort: actual?.effort ?? null,
+        actual_note: actual?.note?.trim() || null,
+      }
+    }
+
+    let exercises: Session['exercises']
+    let exercise_groups: ExerciseGroup[] | undefined
+
+    if (type === 'Strength' && session?.exercise_groups) {
+      // Build groups with actuals merged, tracking a global index across groups
+      let globalIndex = 0
+      exercise_groups = session.exercise_groups.map((group) => ({
+        ...group,
+        exercises: group.exercises.map((ex) => mergeActualIntoExercise(ex, globalIndex++)),
+      }))
+      exercises = exercise_groups.flatMap((g) => g.exercises)
+    } else if (type === 'Strength') {
+      exercises = (session?.exercises ?? []).map((ex, i) => mergeActualIntoExercise(ex, i))
+    } else {
+      exercises = session?.exercises ?? []
+    }
 
     return {
       type,
@@ -456,6 +474,7 @@ export default function LogDayPage() {
       notes,
       photos,
       exercises,
+      exercise_groups,
       garmin_activity_id: garminSynced.activity_id ?? null,
       source: (garminSynced.duration || garminSynced.avg_hr || garminSynced.calories) ? 'garmin' as const : 'manual' as const,
       aerobic_training_effect: garminTraining.aerobic_training_effect ?? null,
@@ -802,55 +821,41 @@ export default function LogDayPage() {
         )}
 
         {/* Exercise table — interactive for all session types with exercises */}
-        {session.exercises && session.exercises.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
-              Exercises — Planned → Actual
-            </p>
-            <div className="rounded-xl border border-zinc-800 overflow-visible">
-              <div className={`grid ${type === 'Strength' ? 'grid-cols-[minmax(0,1fr)_repeat(6,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)]' : 'grid-cols-[minmax(0,1fr)_repeat(4,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(4,2.75rem)]'} bg-zinc-900 border-b border-zinc-800`}>
-                <div className="px-3 py-2 text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Exercise</div>
-                <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">S</div>
-                <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">R</div>
-                {type === 'Strength' && <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">kg</div>}
-                <div className="py-2 text-violet-400/60 text-[10px] font-mono text-center">S</div>
-                <div className="py-2 text-violet-400/60 text-[10px] font-mono text-center">R</div>
-                {type === 'Strength' && <div className="py-2 text-violet-400/60 text-[10px] font-mono text-center">kg</div>}
-              </div>
-              {session.exercises.map((ex, i) => {
-                const openUp = i >= session.exercises.length - 2
-                const selectedAltIndex = swappedExercises[i]
-                const selectedAlt = selectedAltIndex != null ? ex.alternatives[selectedAltIndex] : null
-                const plannedSets = selectedAlt?.sets ?? ex.sets
-                const plannedReps = selectedAlt?.reps ?? ex.reps
-                const plannedWeight = selectedAlt?.weight_kg ?? ex.weight_kg
-                const displayName = selectedAlt?.name ?? ex.name
-                return (
-                <div
-                  key={i}
-                  className="border-b border-zinc-800/60 last:border-0"
-                >
-                <div
-                  className={`grid ${type === 'Strength' ? 'grid-cols-[minmax(0,1fr)_repeat(6,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)]' : 'grid-cols-[minmax(0,1fr)_repeat(4,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(4,2.75rem)]'} relative`}
-                >
+        {(session.exercise_groups ? session.exercise_groups.flatMap(g => g.exercises).length > 0 : session.exercises?.length > 0) && (() => {
+          const gridCols = type === 'Strength'
+            ? 'grid-cols-[minmax(0,1fr)_repeat(6,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)]'
+            : 'grid-cols-[minmax(0,1fr)_repeat(4,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(4,2.75rem)]'
+
+          const GROUP_TYPE_COLORS: Record<string, string> = {
+            warmup: 'text-amber-400 border-amber-400/30 bg-amber-400/10',
+            straight: 'text-violet-400 border-violet-400/30 bg-violet-400/10',
+            superset: 'text-sky-400 border-sky-400/30 bg-sky-400/10',
+            cooldown: 'text-emerald-400 border-emerald-400/30 bg-emerald-400/10',
+          }
+
+          const renderExerciseRow = (ex: Session['exercises'][number], globalIndex: number, totalExercises: number) => {
+            const openUp = globalIndex >= totalExercises - 2
+            const selectedAltIndex = swappedExercises[globalIndex]
+            const selectedAlt = selectedAltIndex != null ? ex.alternatives[selectedAltIndex] : null
+            const plannedSets = selectedAlt?.sets ?? ex.sets
+            const plannedReps = selectedAlt?.reps ?? ex.reps
+            const plannedWeight = selectedAlt?.weight_kg ?? ex.weight_kg
+            const displayName = selectedAlt?.name ?? ex.name
+            const i = globalIndex
+            return (
+              <div key={i} className="border-b border-zinc-800/60 last:border-0">
+                <div className={`grid ${gridCols} relative`}>
                   <div className="bg-zinc-950 px-3 py-2.5 text-zinc-300 text-xs font-mono font-bold relative min-w-0">
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <span className={`truncate ${selectedAlt != null ? 'text-amber-400' : ''}`}>
-                        {displayName}
-                      </span>
-                      <ExerciseDemo
-                        key={displayName}
-                        name={displayName}
-                      />
+                      <span className={`truncate ${selectedAlt != null ? 'text-amber-400' : ''}`}>{displayName}</span>
+                      <ExerciseDemo key={displayName} name={displayName} />
                       {ex.alternatives && ex.alternatives.length > 0 && (
                         <button
                           type="button"
                           onClick={() => setOpenSwapMenu(openSwapMenu === i ? null : i)}
                           className="shrink-0 text-zinc-600 hover:text-amber-400 transition-colors text-[10px]"
                           title="Swap exercise"
-                        >
-                          ⇄
-                        </button>
+                        >⇄</button>
                       )}
                     </div>
                     {ex.notes && (
@@ -858,33 +863,23 @@ export default function LogDayPage() {
                     )}
                     {openSwapMenu === i && (
                       <div className={`absolute left-0 z-20 w-56 max-h-56 overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 shadow-xl ${openUp ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
-                        <div className="px-3 py-2 text-zinc-500 text-[9px] font-mono tracking-widest uppercase border-b border-zinc-800">
-                          Swap with
-                        </div>
+                        <div className="px-3 py-2 text-zinc-500 text-[9px] font-mono tracking-widest uppercase border-b border-zinc-800">Swap with</div>
                         <button
                           type="button"
                           onClick={() => {
                             setSwappedExercises((prev) => { const n = { ...prev }; delete n[i]; return n })
-                            setExerciseActuals((prev) =>
-                              prev.map((a, j) => (j === i ? planToActualPreset(ex) : a))
-                            )
+                            setExerciseActuals((prev) => prev.map((a, j) => (j === i ? planToActualPreset(ex) : a)))
                             setOpenSwapMenu(null)
                           }}
                           className={`w-full text-left px-3 py-2 text-xs font-mono hover:bg-zinc-800 transition-colors ${swappedExercises[i] == null ? 'text-lime-400' : 'text-zinc-400'}`}
-                        >
-                          {ex.name} {swappedExercises[i] == null ? '✓' : ''}
-                        </button>
+                        >{ex.name} {swappedExercises[i] == null ? '✓' : ''}</button>
                         {ex.alternatives.map((alt, ai) => (
                           <button
                             key={ai}
                             type="button"
                             onClick={() => {
                               setSwappedExercises((prev) => ({ ...prev, [i]: ai }))
-                              setExerciseActuals((prev) => prev.map((a, j) =>
-                                j === i ? {
-                                  ...planToActualPreset(ex, ai),
-                                } : a
-                              ))
+                              setExerciseActuals((prev) => prev.map((a, j) => j === i ? { ...planToActualPreset(ex, ai) } : a))
                               setOpenSwapMenu(null)
                             }}
                             className={`w-full text-left px-3 py-2 text-xs font-mono hover:bg-zinc-800 transition-colors border-t border-zinc-800/60 ${swappedExercises[i] === ai ? 'text-amber-400' : 'text-zinc-400'}`}
@@ -900,105 +895,97 @@ export default function LogDayPage() {
                   <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">{plannedSets ?? '—'}</div>
                   <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center overflow-hidden leading-tight break-words">{plannedReps ?? '—'}</div>
                   {type === 'Strength' && (
-                    <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">
-                      {plannedWeight != null ? plannedWeight : '—'}
-                    </div>
+                    <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">{plannedWeight != null ? plannedWeight : '—'}</div>
                   )}
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    value={exerciseActuals[i]?.sets ?? ''}
-                    onChange={(e) =>
-                      setExerciseActuals((prev) =>
-                        prev.map((a, j) => (j === i ? { ...a, sets: e.target.value } : a))
-                      )
-                    }
-                    className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full"
-                    placeholder="—"
-                  />
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={exerciseActuals[i]?.reps ?? ''}
-                    onChange={(e) =>
-                      setExerciseActuals((prev) =>
-                        prev.map((a, j) => (j === i ? { ...a, reps: e.target.value } : a))
-                      )
-                    }
-                    className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full"
-                    placeholder="—"
-                  />
+                  <input type="number" inputMode="numeric" value={exerciseActuals[i]?.sets ?? ''} onChange={(e) => setExerciseActuals((prev) => prev.map((a, j) => (j === i ? { ...a, sets: e.target.value } : a)))} className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full" placeholder="—" />
+                  <input type="text" inputMode="decimal" value={exerciseActuals[i]?.reps ?? ''} onChange={(e) => setExerciseActuals((prev) => prev.map((a, j) => (j === i ? { ...a, reps: e.target.value } : a)))} className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full" placeholder="—" />
                   {type === 'Strength' && (
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      value={exerciseActuals[i]?.weight_kg ?? ''}
-                      onChange={(e) =>
-                        setExerciseActuals((prev) =>
-                          prev.map((a, j) => (j === i ? { ...a, weight_kg: e.target.value } : a))
-                        )
-                      }
-                      className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full"
-                      placeholder="—"
-                    />
+                    <input type="number" inputMode="decimal" value={exerciseActuals[i]?.weight_kg ?? ''} onChange={(e) => setExerciseActuals((prev) => prev.map((a, j) => (j === i ? { ...a, weight_kg: e.target.value } : a)))} className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full" placeholder="—" />
                   )}
                 </div>
-                {type !== 'Recovery' && <div className="flex gap-1.5 px-3 py-2 bg-zinc-950 border-t border-zinc-800/40">
-                  {(['easy', 'perfect', 'hard'] as const).map((level) => {
-                    const selected = exerciseActuals[i]?.effort === level
-                    const colors: Record<string, string> = {
-                      easy: selected ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' : 'text-zinc-600 border-zinc-800 hover:border-zinc-700 hover:text-zinc-400',
-                      perfect: selected ? 'bg-blue-500/20 text-blue-400 border-blue-500/40' : 'text-zinc-600 border-zinc-800 hover:border-zinc-700 hover:text-zinc-400',
-                      hard: selected ? 'bg-red-500/20 text-red-400 border-red-500/40' : 'text-zinc-600 border-zinc-800 hover:border-zinc-700 hover:text-zinc-400',
-                    }
-                    return (
-                      <button
-                        key={level}
-                        type="button"
-                        onClick={() =>
-                          setExerciseActuals((prev) =>
-                            prev.map((a, j) => j === i ? { ...a, effort: a.effort === level ? null : level } : a)
-                          )
-                        }
-                        className={`flex-1 py-1 text-[10px] font-mono tracking-widest uppercase rounded border transition-colors ${colors[level]}`}
-                      >
-                        {level}
-                      </button>
-                    )
-                  })}
-                </div>}
-                {/* Per-exercise note */}
+                {type !== 'Recovery' && (
+                  <div className="flex gap-1.5 px-3 py-2 bg-zinc-950 border-t border-zinc-800/40">
+                    {(['easy', 'perfect', 'hard'] as const).map((level) => {
+                      const selected = exerciseActuals[i]?.effort === level
+                      const colors: Record<string, string> = {
+                        easy: selected ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' : 'text-zinc-600 border-zinc-800 hover:border-zinc-700 hover:text-zinc-400',
+                        perfect: selected ? 'bg-blue-500/20 text-blue-400 border-blue-500/40' : 'text-zinc-600 border-zinc-800 hover:border-zinc-700 hover:text-zinc-400',
+                        hard: selected ? 'bg-red-500/20 text-red-400 border-red-500/40' : 'text-zinc-600 border-zinc-800 hover:border-zinc-700 hover:text-zinc-400',
+                      }
+                      return (
+                        <button key={level} type="button" onClick={() => setExerciseActuals((prev) => prev.map((a, j) => j === i ? { ...a, effort: a.effort === level ? null : level } : a))} className={`flex-1 py-1 text-[10px] font-mono tracking-widest uppercase rounded border transition-colors ${colors[level]}`}>{level}</button>
+                      )
+                    })}
+                  </div>
+                )}
                 <div className="px-3 pb-2 bg-zinc-950 border-t border-zinc-800/40">
                   {openNotes[i] || exerciseActuals[i]?.note ? (
-                    <input
-                      type="text"
-                      value={exerciseActuals[i]?.note ?? ''}
-                      onChange={(e) =>
-                        setExerciseActuals((prev) =>
-                          prev.map((a, j) => (j === i ? { ...a, note: e.target.value } : a))
-                        )
-                      }
-                      placeholder="Note…"
-                      className="w-full mt-1.5 bg-zinc-900 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-700"
-                    />
+                    <input type="text" value={exerciseActuals[i]?.note ?? ''} onChange={(e) => setExerciseActuals((prev) => prev.map((a, j) => (j === i ? { ...a, note: e.target.value } : a)))} placeholder="Note…" className="w-full mt-1.5 bg-zinc-900 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-700" />
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => setOpenNotes((prev) => ({ ...prev, [i]: true }))}
-                      className="mt-1.5 text-zinc-600 hover:text-zinc-400 text-[10px] font-mono transition-colors"
-                    >
-                      + note
-                    </button>
+                    <button type="button" onClick={() => setOpenNotes((prev) => ({ ...prev, [i]: true }))} className="mt-1.5 text-zinc-600 hover:text-zinc-400 text-[10px] font-mono transition-colors">+ note</button>
                   )}
                 </div>
-                </div>
-              )})}
+              </div>
+            )
+          }
+
+          const tableHeader = (
+            <div className={`grid ${gridCols} bg-zinc-900 border-b border-zinc-800`}>
+              <div className="px-3 py-2 text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Exercise</div>
+              <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">S</div>
+              <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">R</div>
+              {type === 'Strength' && <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">kg</div>}
+              <div className="py-2 text-violet-400/60 text-[10px] font-mono text-center">S</div>
+              <div className="py-2 text-violet-400/60 text-[10px] font-mono text-center">R</div>
+              {type === 'Strength' && <div className="py-2 text-violet-400/60 text-[10px] font-mono text-center">kg</div>}
             </div>
-            <p className="text-zinc-600 text-[10px] font-mono">
-              Violet = actual. Pre-filled from plan — edit what changed.
-            </p>
-          </div>
-        )}
+          )
+
+          if (session.exercise_groups) {
+            const totalExercises = session.exercise_groups.reduce((sum, g) => sum + g.exercises.length, 0)
+            let globalIndex = 0
+            return (
+              <div className="space-y-2">
+                <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">Exercises — Planned → Actual</p>
+                <div className="space-y-3">
+                  {session.exercise_groups.map((group) => {
+                    const badgeClass = GROUP_TYPE_COLORS[group.type] ?? 'text-zinc-400 border-zinc-700 bg-zinc-800'
+                    const restLabel = group.rest_between_sets_sec != null ? `${group.rest_between_sets_sec}s rest` : null
+                    return (
+                      <div key={group.group_id}>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="text-zinc-300 text-[11px] font-mono font-bold">{group.label}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold tracking-widest uppercase border ${badgeClass}`}>{group.type}</span>
+                          {restLabel && <span className="text-zinc-600 text-[9px] font-mono">{restLabel}</span>}
+                        </div>
+                        <div className="rounded-xl border border-zinc-800 overflow-visible">
+                          {tableHeader}
+                          {group.exercises.map((ex) => {
+                            const row = renderExerciseRow(ex, globalIndex, totalExercises)
+                            globalIndex++
+                            return row
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <p className="text-zinc-600 text-[10px] font-mono">Violet = actual. Pre-filled from plan — edit what changed.</p>
+              </div>
+            )
+          }
+
+          return (
+            <div className="space-y-2">
+              <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">Exercises — Planned → Actual</p>
+              <div className="rounded-xl border border-zinc-800 overflow-visible">
+                {tableHeader}
+                {session.exercises.map((ex, i) => renderExerciseRow(ex, i, session.exercises.length))}
+              </div>
+              <p className="text-zinc-600 text-[10px] font-mono">Violet = actual. Pre-filled from plan — edit what changed.</p>
+            </div>
+          )
+        })()}
 
         {/* Status badge */}
         {session.status === 'in_progress' && (
