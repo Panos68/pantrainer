@@ -1014,18 +1014,24 @@ export default function ExportPage() {
             Recommended Weekly Flow
           </p>
           <p className="text-zinc-300 text-sm font-mono">
-            Default: MCP automation generates proposed plans. Use Advanced import only for manual JSON.
+            Default: review and submit MCP proposed plans below. Use manual export/import only in Advanced.
           </p>
         </section>
 
-        {/* Export */}
-        <ExportSection />
+        {/* Import */}
+        <ImportSection />
 
         {/* Divider */}
         <div className="h-px bg-zinc-800" />
 
-        {/* Import */}
-        <ImportSection />
+        <details className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+          <summary className="cursor-pointer list-none text-zinc-400 hover:text-zinc-200 text-xs font-mono font-bold tracking-widest uppercase">
+            Advanced: Manual export/import loop
+          </summary>
+          <div className="mt-4">
+            <ExportSection />
+          </div>
+        </details>
 
       </div>
     </main>
