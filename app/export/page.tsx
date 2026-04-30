@@ -431,6 +431,7 @@ function ImportSection() {
   const [draftWeek, setDraftWeek] = useState<WeekDoc | null>(null)
   const [draftSaving, setDraftSaving] = useState(false)
   const [proposedMsg, setProposedMsg] = useState<string | null>(null)
+  const [expandedSessionIndex, setExpandedSessionIndex] = useState<number | null>(0)
 
   async function refreshProposed() {
     setProposedLoading(true)
@@ -440,8 +441,10 @@ function ImportSection() {
       setProposed(data)
       if (!data.empty && data.week_doc) {
         setDraftWeek(data.week_doc)
+        setExpandedSessionIndex(0)
       } else {
         setDraftWeek(null)
+        setExpandedSessionIndex(null)
       }
     } finally {
       setProposedLoading(false)
@@ -838,12 +841,18 @@ function ImportSection() {
                   </p>
                 </div>
                 <div className="px-3 py-2 border-b border-zinc-800 text-zinc-600 text-[10px] font-mono">
-                  Scroll and edit sessions/exercises directly. Completed or in-progress sessions are locked.
+                  Expand a day to edit. Completed or in-progress sessions are locked.
                 </div>
-                <div className="max-h-[36rem] overflow-y-auto divide-y divide-zinc-800">
+                <div className="divide-y divide-zinc-800">
                   {draftWeek.sessions.map((session, index) => (
-                    <div key={`${session.date}-${session.day}-${index}`} className="px-3 py-3 space-y-3">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div key={`${session.date}-${session.day}-${index}`} className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedSessionIndex((prev) => (prev === index ? null : index))
+                        }
+                        className="w-full flex flex-wrap items-center justify-between gap-3 text-left"
+                      >
                         <div>
                           <p className="text-zinc-300 text-xs font-mono font-bold tracking-widest uppercase">
                             {session.day}
@@ -857,111 +866,118 @@ function ImportSection() {
                           <span className="text-zinc-500 text-[10px] font-mono">
                             {session.exercises.length} exercise{session.exercises.length === 1 ? '' : 's'}
                           </span>
+                          <span className="text-zinc-500 text-[10px] font-mono">
+                            {expandedSessionIndex === index ? 'Hide' : 'Edit'}
+                          </span>
                         </div>
-                      </div>
-                      <div className="grid grid-cols-1 gap-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-2">
-                        <p className="text-zinc-600 text-[10px] font-mono tracking-[0.12em] uppercase">Session type</p>
-                        <input
-                          value={session.type}
-                          onChange={(e) => updateDraftSession(index, { type: e.target.value })}
-                          disabled={session.status !== 'planned'}
-                          className="w-full h-9 bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-lg px-3 text-zinc-200 text-xs font-mono outline-none transition-colors"
-                        />
-                        <p className="text-zinc-600 text-[10px] font-mono tracking-[0.12em] uppercase">Session notes</p>
-                        <textarea
-                          value={session.notes ?? ''}
-                          onChange={(e) => updateDraftSession(index, { notes: e.target.value })}
-                          disabled={session.status !== 'planned'}
-                          rows={2}
-                          placeholder="Adjustment notes for this day"
-                          className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-lg px-3 py-2 text-zinc-300 text-xs font-mono placeholder:text-zinc-600 resize-y outline-none transition-colors"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <p className="text-zinc-500 text-[10px] font-mono tracking-[0.15em] uppercase">Exercises</p>
-                        {session.exercises.length === 0 ? (
-                          <p className="text-zinc-600 text-xs font-mono">No exercises yet.</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {session.exercises.map((exercise, exerciseIndex) => (
-                              <div key={`${session.date}-${exercise.name}-${exerciseIndex}`} className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-2 space-y-2">
-                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                                  <input
-                                    value={exercise.name ?? ''}
-                                    onChange={(e) => updateDraftExercise(index, exerciseIndex, { name: e.target.value })}
-                                    disabled={session.status !== 'planned'}
-                                    placeholder="Exercise name"
-                                    className="w-full h-9 bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-lg px-3 text-zinc-200 text-xs font-mono outline-none transition-colors"
-                                  />
-                                  <div className="flex gap-1">
-                                    <button
-                                      onClick={() => moveDraftExercise(index, exerciseIndex, -1)}
-                                      disabled={session.status !== 'planned' || exerciseIndex === 0}
-                                      className="h-8 px-2 rounded-md border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-mono uppercase tracking-wide disabled:opacity-40"
-                                    >
-                                      Up
-                                    </button>
-                                    <button
-                                      onClick={() => moveDraftExercise(index, exerciseIndex, 1)}
-                                      disabled={session.status !== 'planned' || exerciseIndex === session.exercises.length - 1}
-                                      className="h-8 px-2 rounded-md border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-mono uppercase tracking-wide disabled:opacity-40"
-                                    >
-                                      Down
-                                    </button>
-                                    <button
-                                      onClick={() => removeDraftExercise(index, exerciseIndex)}
-                                      disabled={session.status !== 'planned'}
-                                      className="h-8 px-2 rounded-md border border-red-900/50 bg-red-950/30 hover:bg-red-900/30 text-red-300 text-[10px] font-mono uppercase tracking-wide disabled:opacity-40"
-                                    >
-                                      Remove
-                                    </button>
-                                  </div>
-                                </div>
-                                <div className="grid grid-cols-3 gap-2">
-                                  <input
-                                    value={exercise.sets ?? ''}
-                                    onChange={(e) => updateDraftExercise(index, exerciseIndex, { sets: parseOptionalNumber(e.target.value) })}
-                                    disabled={session.status !== 'planned'}
-                                    placeholder="Sets"
-                                    inputMode="decimal"
-                                    className="w-full h-8 bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-md px-2 text-zinc-200 text-xs font-mono outline-none transition-colors"
-                                  />
-                                  <input
-                                    value={exercise.reps == null ? '' : String(exercise.reps)}
-                                    onChange={(e) => updateDraftExercise(index, exerciseIndex, { reps: parseRepsInput(e.target.value) })}
-                                    disabled={session.status !== 'planned'}
-                                    placeholder="Reps"
-                                    className="w-full h-8 bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-md px-2 text-zinc-200 text-xs font-mono outline-none transition-colors"
-                                  />
-                                  <input
-                                    value={exercise.weight_kg ?? ''}
-                                    onChange={(e) => updateDraftExercise(index, exerciseIndex, { weight_kg: parseOptionalNumber(e.target.value) })}
-                                    disabled={session.status !== 'planned'}
-                                    placeholder="kg"
-                                    inputMode="decimal"
-                                    className="w-full h-8 bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-md px-2 text-zinc-200 text-xs font-mono outline-none transition-colors"
-                                  />
-                                </div>
-                                <textarea
-                                  value={exercise.notes ?? ''}
-                                  onChange={(e) => updateDraftExercise(index, exerciseIndex, { notes: e.target.value })}
-                                  disabled={session.status !== 'planned'}
-                                  rows={2}
-                                  placeholder="Exercise notes"
-                                  className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-md px-2 py-2 text-zinc-300 text-xs font-mono placeholder:text-zinc-600 resize-y outline-none transition-colors"
-                                />
-                              </div>
-                            ))}
+                      </button>
+                      {expandedSessionIndex === index && (
+                        <div className="mt-3 space-y-3">
+                          <div className="grid grid-cols-1 gap-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-2">
+                            <p className="text-zinc-600 text-[10px] font-mono tracking-[0.12em] uppercase">Session type</p>
+                            <input
+                              value={session.type}
+                              onChange={(e) => updateDraftSession(index, { type: e.target.value })}
+                              disabled={session.status !== 'planned'}
+                              className="w-full h-9 bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-lg px-3 text-zinc-200 text-xs font-mono outline-none transition-colors"
+                            />
+                            <p className="text-zinc-600 text-[10px] font-mono tracking-[0.12em] uppercase">Session notes</p>
+                            <textarea
+                              value={session.notes ?? ''}
+                              onChange={(e) => updateDraftSession(index, { notes: e.target.value })}
+                              disabled={session.status !== 'planned'}
+                              rows={2}
+                              placeholder="Adjustment notes for this day"
+                              className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-lg px-3 py-2 text-zinc-300 text-xs font-mono placeholder:text-zinc-600 resize-y outline-none transition-colors"
+                            />
                           </div>
-                        )}
-                        <button
-                          onClick={() => addDraftExercise(index)}
-                          disabled={session.status !== 'planned'}
-                          className="h-8 px-3 rounded-md border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-mono uppercase tracking-wide disabled:opacity-40"
-                        >
-                          Add exercise
-                        </button>
-                      </div>
+                          <div className="space-y-2">
+                            <p className="text-zinc-500 text-[10px] font-mono tracking-[0.15em] uppercase">Exercises</p>
+                            {session.exercises.length === 0 ? (
+                              <p className="text-zinc-600 text-xs font-mono">No exercises yet.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {session.exercises.map((exercise, exerciseIndex) => (
+                                  <div key={`${session.date}-${exercise.name}-${exerciseIndex}`} className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-2 space-y-2">
+                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                                      <input
+                                        value={exercise.name ?? ''}
+                                        onChange={(e) => updateDraftExercise(index, exerciseIndex, { name: e.target.value })}
+                                        disabled={session.status !== 'planned'}
+                                        placeholder="Exercise name"
+                                        className="w-full h-9 bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-lg px-3 text-zinc-200 text-xs font-mono outline-none transition-colors"
+                                      />
+                                      <div className="flex gap-1">
+                                        <button
+                                          onClick={() => moveDraftExercise(index, exerciseIndex, -1)}
+                                          disabled={session.status !== 'planned' || exerciseIndex === 0}
+                                          className="h-8 px-2 rounded-md border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-mono uppercase tracking-wide disabled:opacity-40"
+                                        >
+                                          Up
+                                        </button>
+                                        <button
+                                          onClick={() => moveDraftExercise(index, exerciseIndex, 1)}
+                                          disabled={session.status !== 'planned' || exerciseIndex === session.exercises.length - 1}
+                                          className="h-8 px-2 rounded-md border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-mono uppercase tracking-wide disabled:opacity-40"
+                                        >
+                                          Down
+                                        </button>
+                                        <button
+                                          onClick={() => removeDraftExercise(index, exerciseIndex)}
+                                          disabled={session.status !== 'planned'}
+                                          className="h-8 px-2 rounded-md border border-red-900/50 bg-red-950/30 hover:bg-red-900/30 text-red-300 text-[10px] font-mono uppercase tracking-wide disabled:opacity-40"
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2">
+                                      <input
+                                        value={exercise.sets ?? ''}
+                                        onChange={(e) => updateDraftExercise(index, exerciseIndex, { sets: parseOptionalNumber(e.target.value) })}
+                                        disabled={session.status !== 'planned'}
+                                        placeholder="Sets"
+                                        inputMode="decimal"
+                                        className="w-full h-8 bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-md px-2 text-zinc-200 text-xs font-mono outline-none transition-colors"
+                                      />
+                                      <input
+                                        value={exercise.reps == null ? '' : String(exercise.reps)}
+                                        onChange={(e) => updateDraftExercise(index, exerciseIndex, { reps: parseRepsInput(e.target.value) })}
+                                        disabled={session.status !== 'planned'}
+                                        placeholder="Reps"
+                                        className="w-full h-8 bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-md px-2 text-zinc-200 text-xs font-mono outline-none transition-colors"
+                                      />
+                                      <input
+                                        value={exercise.weight_kg ?? ''}
+                                        onChange={(e) => updateDraftExercise(index, exerciseIndex, { weight_kg: parseOptionalNumber(e.target.value) })}
+                                        disabled={session.status !== 'planned'}
+                                        placeholder="kg"
+                                        inputMode="decimal"
+                                        className="w-full h-8 bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-md px-2 text-zinc-200 text-xs font-mono outline-none transition-colors"
+                                      />
+                                    </div>
+                                    <textarea
+                                      value={exercise.notes ?? ''}
+                                      onChange={(e) => updateDraftExercise(index, exerciseIndex, { notes: e.target.value })}
+                                      disabled={session.status !== 'planned'}
+                                      rows={2}
+                                      placeholder="Exercise notes"
+                                      className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-md px-2 py-2 text-zinc-300 text-xs font-mono placeholder:text-zinc-600 resize-y outline-none transition-colors"
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <button
+                              onClick={() => addDraftExercise(index)}
+                              disabled={session.status !== 'planned'}
+                              className="h-8 px-3 rounded-md border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-mono uppercase tracking-wide disabled:opacity-40"
+                            >
+                              Add exercise
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
