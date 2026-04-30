@@ -858,6 +858,10 @@ function ImportSection() {
                             {session.day}
                           </p>
                           <p className="text-zinc-600 text-[10px] font-mono mt-0.5">{session.date}</p>
+                          <p className="text-zinc-500 text-[10px] font-mono mt-1 uppercase tracking-wide">
+                            {session.type}
+                            {session.subtype ? ` · ${session.subtype}` : ''}
+                          </p>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className={`px-2 py-1 rounded-md border text-[10px] font-mono uppercase tracking-wide ${session.status === 'planned' ? 'border-zinc-700 text-zinc-400' : 'border-amber-700/40 text-amber-300'}`}>
