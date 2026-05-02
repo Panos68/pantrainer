@@ -1,5 +1,5 @@
 import { fetchSleepData, fetchHRData } from '@/lib/garmin'
-import { readCurrentWeek, writeCurrentWeek } from '@/lib/data'
+import { readCurrentWeekDirect, writeCurrentWeek } from '@/lib/data'
 
 function positiveOrNull(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
     return Response.json({ error: 'Garmin credentials not configured' }, { status: 503 })
   }
 
-  const week = await readCurrentWeek()
+  const week = await readCurrentWeekDirect()
   if (!week) {
     return Response.json({ error: 'No active week' }, { status: 404 })
   }
@@ -89,7 +89,7 @@ export async function POST(req: Request) {
     // Re-read week before writing to avoid clobbering concurrent session writes
     // (e.g. "Mark Complete" PATCH racing with the initial background garmin fetch).
     if (hasAnyRecoveryMetric(recovery)) {
-      const freshWeek = await readCurrentWeek()
+      const freshWeek = await readCurrentWeekDirect()
       if (freshWeek) {
         freshWeek.garmin_recovery = { ...freshWeek.garmin_recovery, [date]: recovery }
         await writeCurrentWeek(freshWeek)

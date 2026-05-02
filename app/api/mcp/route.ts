@@ -2,7 +2,7 @@ import { head } from '@vercel/blob'
 import { format } from 'date-fns'
 import { signPhotoUrl } from '@/app/api/photos/route'
 import {
-  readCurrentWeek,
+  readCurrentWeekDirect,
   readAutomationNotes,
   readProposedPlan,
   writeProposedPlan,
@@ -103,7 +103,7 @@ async function fetchPhotoAsBase64(pathname: string): Promise<{ data: string; mim
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://pantrainer.vercel.app'
 
 async function handleGetCurrentWeek() {
-  const currentWeek = await readCurrentWeek()
+  const currentWeek = await readCurrentWeekDirect()
   if (!currentWeek) {
     return { error: 'No current week found' }
   }
@@ -178,7 +178,7 @@ async function handleSubmitTodaySession(args: Record<string, unknown>) {
     }
   }
 
-  const currentWeek = await readCurrentWeek()
+  const currentWeek = await readCurrentWeekDirect()
   if (!currentWeek) {
     return { ok: false, error: 'No current week found' }
   }
