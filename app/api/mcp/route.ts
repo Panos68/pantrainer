@@ -1,4 +1,4 @@
-// import { head } from '@vercel/blob' // needed if reverting to base64 photos — see comment below
+import { head } from '@vercel/blob'
 import { format } from 'date-fns'
 import { signPhotoUrl } from '@/app/api/photos/route'
 import {
@@ -79,28 +79,26 @@ const TOOLS = [
 // Tool handlers
 // ---------------------------------------------------------------------------
 
-// REVERTED: base64 photo embedding caused huge Fluid memory/CPU spikes (83 GB-Hrs in 2 days).
-// To revert back to base64: restore the fetchPhotoAsBase64 function below, re-add the
-// `import { head } from '@vercel/blob'` import, and swap handleGetCurrentWeek back.
-//
-// async function fetchPhotoAsBase64(pathname: string): Promise<{ data: string; mimeType: string } | null> {
-//   try {
-//     const token = process.env.BLOB_READ_WRITE_TOKEN
-//     if (!token) return null
-//     const blob = await head(pathname, { token })
-//     const res = await fetch(blob.url, {
-//       headers: { Authorization: `Bearer ${token}` },
-//     })
-//     if (!res.ok) return null
-//     const contentType = res.headers.get('content-type') ?? 'image/jpeg'
-//     const mimeType = contentType.split(';')[0].trim()
-//     const buffer = await res.arrayBuffer()
-//     const data = Buffer.from(buffer).toString('base64')
-//     return { data, mimeType }
-//   } catch {
-//     return null
-//   }
-// }
+// Note: base64 embedding was previously reverted due to SSE polling causing 83 GB-Hrs in 2 days.
+// The SSE polling is now fixed (GET returns 405), so base64 is safe to use again.
+async function fetchPhotoAsBase64(pathname: string): Promise<{ data: string; mimeType: string } | null> {
+  try {
+    const token = process.env.BLOB_READ_WRITE_TOKEN
+    if (!token) return null
+    const blob = await head(pathname, { token })
+    const res = await fetch(blob.url, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) return null
+    const contentType = res.headers.get('content-type') ?? 'image/jpeg'
+    const mimeType = contentType.split(';')[0].trim()
+    const buffer = await res.arrayBuffer()
+    const data = Buffer.from(buffer).toString('base64')
+    return { data, mimeType }
+  } catch {
+    return null
+  }
+}
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://pantrainer.vercel.app'
 
@@ -117,6 +115,7 @@ async function handleGetCurrentWeek() {
 
   const photoPathnames: string[] = payload.photos_to_attach ?? []
   const photoUrls = photoPathnames.map((p) => signPhotoUrl(APP_URL, p))
+  const photoBase64 = await Promise.all(photoPathnames.map((p) => fetchPhotoAsBase64(p)))
 
   return {
     export_v2: payload,
@@ -132,6 +131,7 @@ async function handleGetCurrentWeek() {
         }
       : null,
     photoUrls,
+    photoBase64: photoBase64.filter((p): p is { data: string; mimeType: string } => p !== null),
   }
 }
 
@@ -293,9 +293,13 @@ async function dispatch(req: McpRequest): Promise<Response> {
         if ('error' in result) {
           return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] })
         }
-        const { photoUrls, ...rest } = result
+        const { photoUrls, photoBase64, ...rest } = result
         const payload = photoUrls.length > 0 ? { ...rest, photo_urls: photoUrls } : rest
-        return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] })
+        const content: unknown[] = [{ type: 'text', text: JSON.stringify(payload, null, 2) }]
+        for (const photo of photoBase64) {
+          content.push({ type: 'image', data: photo.data, mimeType: photo.mimeType })
+        }
+        return mcpResult(id, { content })
       }
 
       let data: unknown
