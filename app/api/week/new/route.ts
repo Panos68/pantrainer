@@ -1,4 +1,4 @@
-import { readCurrentWeek, readAthleteProfile, writeCurrentWeek, archiveWeek } from '@/lib/data'
+import { readCurrentWeek, readCurrentWeekDirect, readAthleteProfile, writeCurrentWeek, archiveWeek } from '@/lib/data'
 import { rollDeloadCounterOnWeekAdvance } from '@/lib/state'
 import { startOfISOWeek, addDays, format, addWeeks } from 'date-fns'
 import type { WeekDoc, Session, NextWeekPlan } from '@/lib/schema'
@@ -61,7 +61,7 @@ export async function GET() {
 // Creates a new week document from the previous week's next_week_plan and lift_progression
 export async function POST() {
   const [prevWeek, athlete] = await Promise.all([
-    readCurrentWeek(),
+    readCurrentWeekDirect(),
     readAthleteProfile(),
   ])
 

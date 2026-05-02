@@ -1,4 +1,4 @@
-import { readCurrentWeek, writeCurrentWeek } from '@/lib/data'
+import { readCurrentWeekDirect, writeCurrentWeek } from '@/lib/data'
 import { updateLiftProgression } from '@/lib/progression'
 import type { Session, WeekSummary } from '@/lib/schema'
 
@@ -38,7 +38,7 @@ export async function GET(
   { params }: { params: Promise<{ day: string }> },
 ) {
   const { day } = await params
-  const week = await readCurrentWeek()
+  const week = await readCurrentWeekDirect()
   if (!week) {
     return Response.json({ error: 'No active week' }, { status: 404 })
   }
@@ -59,7 +59,7 @@ export async function PATCH(
   { params }: { params: Promise<{ day: string }> },
 ) {
   const { day } = await params
-  const week = await readCurrentWeek()
+  const week = await readCurrentWeekDirect()
   if (!week) {
     return Response.json({ error: 'No active week' }, { status: 404 })
   }

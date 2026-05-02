@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { SessionSchema } from '@/lib/schema'
-import { readCurrentWeek, writeCurrentWeek } from '@/lib/data'
+import { readCurrentWeekDirect, writeCurrentWeek } from '@/lib/data'
 
 // POST /api/session/import
 // Body: { json: string } — raw JSON for a single session
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   }
 
   const imported = result.data
-  const week = await readCurrentWeek()
+  const week = await readCurrentWeekDirect()
   if (!week) return Response.json({ ok: false, errors: ['No active week'] }, { status: 400 })
 
   const idx = week.sessions.findIndex((s) => s.day === imported.day)
