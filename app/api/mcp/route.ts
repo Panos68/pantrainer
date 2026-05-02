@@ -294,11 +294,8 @@ async function dispatch(req: McpRequest): Promise<Response> {
           return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] })
         }
         const { photoUrls, ...rest } = result
-        const content: unknown[] = [{ type: 'text', text: JSON.stringify(rest, null, 2) }]
-        for (const url of photoUrls) {
-          content.push({ type: 'image', url })
-        }
-        return mcpResult(id, { content })
+        const payload = photoUrls.length > 0 ? { ...rest, photo_urls: photoUrls } : rest
+        return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] })
       }
 
       let data: unknown
