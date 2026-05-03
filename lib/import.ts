@@ -10,6 +10,7 @@ export interface ImportResult {
   ok: true
   data: WeekDoc
   analysis_text: string | null
+  activation?: 'immediate' | 'scheduled'
   nextWeek: {
     week: string
     gymWeek: string

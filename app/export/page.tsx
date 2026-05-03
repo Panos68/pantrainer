@@ -705,6 +705,7 @@ function ImportSection() {
           ok: true,
           data: applied,
           analysis_text: proposed.analysis_text ?? null,
+          activation: data.activation,
           nextWeek: {
             week: applied.week,
             gymWeek: inferGymWeekFromWeekDoc(applied),
@@ -1173,7 +1174,7 @@ function ImportSection() {
             onClick={handleConfirm}
             className="w-full h-14 bg-lime-400 hover:bg-lime-300 active:bg-lime-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase rounded-xl transition-colors"
           >
-            Go to Week
+            {importState.result.activation === 'scheduled' ? 'Go to Home (press Next → to preview)' : 'Go to Week'}
           </button>
 
           <button
