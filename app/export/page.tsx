@@ -440,7 +440,16 @@ function ImportSection() {
       const data = (await res.json()) as ProposedPlanData
       setProposed(data)
       if (!data.empty && data.week_doc) {
-        setDraftWeek(data.week_doc)
+        setDraftWeek({
+          ...data.week_doc,
+          sessions: data.week_doc.sessions.map((s) => ({
+            ...s,
+            exercises:
+              s.exercises.length === 0 && s.exercise_groups && s.exercise_groups.length > 0
+                ? s.exercise_groups.flatMap((g) => g.exercises)
+                : s.exercises,
+          })),
+        })
         setExpandedSessionIndex(0)
       } else {
         setDraftWeek(null)
