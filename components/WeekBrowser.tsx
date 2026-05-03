@@ -6,17 +6,21 @@ import WeekGrid from './WeekGrid'
 
 interface WeekBrowserProps {
   weeks: WeekDoc[]
+  pendingWeek?: WeekDoc
   todayISO: string
 }
 
-export default function WeekBrowser({ weeks, todayISO }: WeekBrowserProps) {
+export default function WeekBrowser({ weeks, pendingWeek, todayISO }: WeekBrowserProps) {
+  const allWeeks = pendingWeek ? [...weeks, pendingWeek] : weeks
+
   const defaultDayForWeek = (week: WeekDoc) =>
     week.sessions.find((s) => s.date === todayISO)?.day ?? week.sessions[0]?.day ?? 'Monday'
 
   const [index, setIndex] = useState(Math.max(weeks.length - 1, 0))
   const [activeDay, setActiveDay] = useState<string>(defaultDayForWeek(weeks[Math.max(weeks.length - 1, 0)]))
-  const selected = weeks[index]
+  const selected = allWeeks[index]
   const isCurrent = index === weeks.length - 1
+  const isPending = pendingWeek != null && index === allWeeks.length - 1 && !isCurrent
 
   const completedCount = useMemo(
     () => selected.sessions.filter((s) => s.status === 'completed').length,
@@ -27,7 +31,7 @@ export default function WeekBrowser({ weeks, todayISO }: WeekBrowserProps) {
     <section>
       <div className="flex items-center gap-3 mb-4">
         <h2 className="text-xs font-mono font-bold tracking-[0.25em] uppercase text-zinc-400">
-          {isCurrent ? 'This Week' : 'Archived Week'}
+          {isCurrent ? 'This Week' : isPending ? 'Next Week' : 'Archived Week'}
         </h2>
         <div className="flex-1 h-px bg-zinc-800" />
         <span className="text-zinc-600 text-xs font-mono">
@@ -41,7 +45,7 @@ export default function WeekBrowser({ weeks, todayISO }: WeekBrowserProps) {
           onClick={() =>
             setIndex((i) => {
               const nextIndex = Math.max(i - 1, 0)
-              setActiveDay(defaultDayForWeek(weeks[nextIndex]))
+              setActiveDay(defaultDayForWeek(allWeeks[nextIndex]))
               return nextIndex
             })
           }
@@ -52,7 +56,7 @@ export default function WeekBrowser({ weeks, todayISO }: WeekBrowserProps) {
         </button>
         <div className="text-center">
           <p className="text-zinc-400 text-[10px] font-mono tracking-[0.2em] uppercase">
-            {isCurrent ? 'Current Week' : 'Read-only Archive'}
+            {isCurrent ? 'Current Week' : isPending ? 'Scheduled — Read-only' : 'Read-only Archive'}
           </p>
           <p className="text-zinc-200 text-xs font-mono">{selected.week}</p>
         </div>
@@ -60,12 +64,12 @@ export default function WeekBrowser({ weeks, todayISO }: WeekBrowserProps) {
           type="button"
           onClick={() =>
             setIndex((i) => {
-              const nextIndex = Math.min(i + 1, weeks.length - 1)
-              setActiveDay(defaultDayForWeek(weeks[nextIndex]))
+              const nextIndex = Math.min(i + 1, allWeeks.length - 1)
+              setActiveDay(defaultDayForWeek(allWeeks[nextIndex]))
               return nextIndex
             })
           }
-          disabled={index === weeks.length - 1}
+          disabled={index === allWeeks.length - 1}
           className="h-8 px-3 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-zinc-800 transition-colors text-xs font-mono tracking-widest uppercase"
         >
           Next →

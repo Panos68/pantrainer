@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { redirect } from 'next/navigation'
 import { format } from 'date-fns'
 import Link from 'next/link'
-import { readAthleteProfile, readCurrentWeek, readAppState, readArchivedWeeks } from '@/lib/data'
+import { readAthleteProfile, readCurrentWeek, readAppState, readArchivedWeeks, readPendingWeek } from '@/lib/data'
 import { activatePendingWeekIfDue } from '@/lib/week-activation'
 import GymWeekBadge from '@/components/GymWeekBadge'
 import NewWeekButton from '@/components/NewWeekButton'
@@ -18,10 +18,11 @@ export default async function Home() {
   const profile = await readAthleteProfile()
   if (!profile) redirect('/setup')
 
-  const [week, appState, archivedWeeks] = await Promise.all([
+  const [week, appState, archivedWeeks, pendingWeek] = await Promise.all([
     readCurrentWeek(),
     readAppState(),
     readArchivedWeeks(12),
+    readPendingWeek(),
   ])
   const todayISO = format(new Date(), 'yyyy-MM-dd')
 
@@ -83,7 +84,7 @@ export default async function Home() {
           {hasActiveFlags && <HealthFlagsBanner flags={week.health_flags} />}
         </div>
 
-        <WeekBrowser weeks={[...archivedWeeks, week]} todayISO={todayISO} />
+        <WeekBrowser weeks={[...archivedWeeks, week]} pendingWeek={pendingWeek ?? undefined} todayISO={todayISO} />
 
         <footer className="hidden md:flex items-center gap-4 pt-4 border-t border-zinc-800">
           <Link
