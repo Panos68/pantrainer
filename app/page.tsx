@@ -4,8 +4,8 @@ import { redirect } from 'next/navigation'
 import { format } from 'date-fns'
 import Link from 'next/link'
 import { readAthleteProfile, readCurrentWeek, readAppState, readArchivedWeeks, readPendingWeek } from '@/lib/data'
+import { isPendingWeekDue } from '@/lib/week-activation'
 import GymWeekBadge from '@/components/GymWeekBadge'
-import WeekActivator from '@/components/WeekActivator'
 import NewWeekButton from '@/components/NewWeekButton'
 import HealthFlagsBanner from '@/components/HealthFlagsBanner'
 import WeekBrowser from '@/components/WeekBrowser'
@@ -14,6 +14,8 @@ import RecoveryScorePanel from '@/components/RecoveryScorePanel'
 import AdaptiveAlertBanner from '@/components/AdaptiveAlertBanner'
 
 export default async function Home() {
+  if (await isPendingWeekDue()) redirect('/api/week/activate')
+
   const profile = await readAthleteProfile()
   if (!profile) redirect('/setup')
 
@@ -28,7 +30,6 @@ export default async function Home() {
   if (!week) {
     return (
       <main className="min-h-screen bg-zinc-950 text-zinc-50 flex flex-col items-center justify-center p-8">
-        <WeekActivator />
         <div className="max-w-md w-full text-center space-y-6">
           <p className="text-lime-400 text-xs font-mono font-bold tracking-[0.3em] uppercase">
             PanTrainer
@@ -54,7 +55,6 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-50">
-      <WeekActivator />
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-8 space-y-6">
 
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
