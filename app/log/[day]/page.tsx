@@ -529,11 +529,11 @@ export default function LogDayPage() {
     setSaving(true)
     setSaveMsg('')
     try {
-      const shouldSyncGarmin = options?.syncGarmin ?? false
-      const sync = shouldSyncGarmin && session
-        ? await refreshFromGarmin({ date: session.date, type: session.type }, false)
-        : null
-      const payload = mergeGarminIntoPayload(buildPayload(), sync)
+      // Fire Garmin sync in background — don't block the save on it
+      if ((options?.syncGarmin ?? false) && session) {
+        refreshFromGarmin({ date: session.date, type: session.type }, false).catch(() => {})
+      }
+      const payload = mergeGarminIntoPayload(buildPayload(), null)
       const res = await fetch(`/api/session/${day}`, {
         method: 'PATCH',
         cache: 'no-store',
