@@ -1,4 +1,5 @@
-import { head, put } from '@vercel/blob'
+import { put } from '@vercel/blob'
+import { blobUrl } from '@/lib/blob-url'
 import { createHmac, timingSafeEqual } from 'crypto'
 
 export function signPhotoUrl(baseUrl: string, pathname: string, ttlSeconds = 3600): string {
@@ -101,8 +102,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const blob = await head(pathname)
-    const res = await fetch(blob.url, {
+    const res = await fetch(blobUrl(pathname), {
       cache: 'no-store',
       headers: { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` },
     })

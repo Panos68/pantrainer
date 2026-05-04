@@ -1,5 +1,6 @@
 import pkg from 'garmin-connect'
-import { put, head } from '@vercel/blob'
+import { put } from '@vercel/blob'
+import { blobUrl } from './blob-url'
 
 // garmin-connect is CJS — cast to any to avoid type issues
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -9,9 +10,8 @@ const TOKEN_KEY = 'data/garmin-tokens.json'
 
 async function loadCachedToken(): Promise<{ oauth1: unknown; oauth2: unknown } | null> {
   try {
-    const blob = await head(TOKEN_KEY)
     const token = process.env.BLOB_READ_WRITE_TOKEN
-    const res = await fetch(blob.url, {
+    const res = await fetch(blobUrl(TOKEN_KEY), {
       cache: 'no-store',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
