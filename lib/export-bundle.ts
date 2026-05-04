@@ -1,5 +1,5 @@
 import JSZip from 'jszip'
-import { head } from '@vercel/blob'
+import { blobUrl } from './blob-url'
 
 interface ExportWithPhotos {
   photos_to_attach: string[]
@@ -27,9 +27,9 @@ async function fetchPhotoBytes(photoRef: string): Promise<{ bytes: ArrayBuffer; 
     }
   }
 
-  const blob = await head(photoRef)
   const token = process.env.BLOB_READ_WRITE_TOKEN
-  const photoRes = await fetch(blob.url, {
+  const url = blobUrl(photoRef)
+  const photoRes = await fetch(url, {
     cache: 'no-store',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
@@ -39,7 +39,7 @@ async function fetchPhotoBytes(photoRef: string): Promise<{ bytes: ArrayBuffer; 
 
   return {
     bytes: await photoRes.arrayBuffer(),
-    ext: fileExtFromUrl(blob.url),
+    ext: fileExtFromUrl(url),
   }
 }
 

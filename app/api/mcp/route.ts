@@ -1,4 +1,4 @@
-import { head } from '@vercel/blob'
+import { blobUrl } from '@/lib/blob-url'
 import { format } from 'date-fns'
 import { signPhotoUrl } from '@/app/api/photos/route'
 import {
@@ -85,8 +85,7 @@ async function fetchPhotoAsBase64(pathname: string): Promise<{ data: string; mim
   try {
     const token = process.env.BLOB_READ_WRITE_TOKEN
     if (!token) return null
-    const blob = await head(pathname, { token })
-    const res = await fetch(blob.url, {
+    const res = await fetch(blobUrl(pathname), {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!res.ok) return null

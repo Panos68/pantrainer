@@ -1,4 +1,4 @@
-import { put, head, del, list } from '@vercel/blob'
+import { put, del, list } from '@vercel/blob'
 import { unstable_cache, revalidateTag } from 'next/cache'
 import {
   WeekDocSchema,
@@ -9,6 +9,8 @@ import {
 } from './schema'
 import type { WeekDoc, AthleteProfile, AppState, AutomationNotes, ProposedPlan, DailyReadiness } from './schema'
 import { format, parseISO } from 'date-fns'
+
+import { blobUrl } from './blob-url'
 
 const CURRENT_WEEK_KEY = 'data/current-week.json'
 const ATHLETE_KEY = 'data/athlete.json'
@@ -21,9 +23,8 @@ const WEEKS_PREFIX = 'data/weeks/'
 
 async function readBlobAsJson<T>(pathname: string): Promise<T | null> {
   try {
-    const blob = await head(pathname)
     const token = process.env.BLOB_READ_WRITE_TOKEN
-    const res = await fetch(blob.url, {
+    const res = await fetch(blobUrl(pathname), {
       cache: 'no-store',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
@@ -52,8 +53,7 @@ async function writeBlobAsJson(pathname: string, data: unknown): Promise<void> {
 
 async function deleteBlobIfExists(pathname: string): Promise<void> {
   try {
-    const blob = await head(pathname)
-    await del(blob.url)
+    await del(blobUrl(pathname))
   } catch {
     // blob not found, ignore
   }
