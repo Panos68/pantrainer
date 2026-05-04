@@ -9,6 +9,8 @@ const PUBLIC_PATHS = [
   '/api/oauth/token',
   '/api/mcp',
   '/api/automation',
+  '/api/revalidate',
+  '/api/week/activate',
 ]
 
 export function proxy(request: NextRequest) {
