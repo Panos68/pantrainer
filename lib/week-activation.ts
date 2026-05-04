@@ -40,6 +40,14 @@ function weekStartIso(week: WeekDoc | null): string | null {
   return monday ? monday.toISOString().slice(0, 10) : null
 }
 
+export async function isPendingWeekDue(): Promise<boolean> {
+  const pending = await readPendingWeek()
+  if (!pending) return false
+  const pendingStart = weekStartIso(pending)
+  if (!pendingStart) return false
+  return pendingStart <= todayIsoInTimeZone()
+}
+
 export async function activatePendingWeekIfDue(): Promise<{
   activated: boolean
   reason: string
