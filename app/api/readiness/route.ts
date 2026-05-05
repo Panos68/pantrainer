@@ -14,8 +14,9 @@ function calcACWR(loadPoints: NonNullable<ReturnType<typeof sessionToLoadPoint>>
   const sorted = [...loadPoints].sort((a, b) => a.date.localeCompare(b.date))
   const oldest = parseISO(sorted[0].date)
   const latest = parseISO(sorted[sorted.length - 1].date)
-  // Need at least 14 days of history for ACWR to be meaningful
-  if (differenceInDays(latest, oldest) < 14) return null
+  // Need at least 21 days of history for ACWR to be meaningful —
+  // chronic window is 28 days, so fewer than 21 days gives a badly skewed ratio
+  if (differenceInDays(latest, oldest) < 21) return null
   const latestStr = format(latest, 'yyyy-MM-dd')
   const acuteStart = format(subDays(latest, 6), 'yyyy-MM-dd')
   const chronicStart = format(subDays(latest, 27), 'yyyy-MM-dd')
