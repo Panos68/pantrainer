@@ -10,6 +10,6 @@ export async function POST(req: NextRequest) {
   }
   const tag = req.nextUrl.searchParams.get('tag')
   if (!tag) return Response.json({ error: 'tag required' }, { status: 400 })
-  revalidateTag(tag, 'max')
+  revalidateTag(tag, { expire: 0 })
   return Response.json({ revalidated: tag })
 }
