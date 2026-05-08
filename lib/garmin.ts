@@ -1,34 +1,30 @@
 import pkg from 'garmin-connect'
-import { put } from '@vercel/blob'
-import { blobUrl } from './blob-url'
+import { getDb } from './mongodb'
 
 // garmin-connect is CJS — cast to any to avoid type issues
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { GarminConnect } = pkg as any
 
-const TOKEN_KEY = 'data/garmin-tokens.json'
+const TOKEN_KEY = 'garmin-tokens'
 
 async function loadCachedToken(): Promise<{ oauth1: unknown; oauth2: unknown } | null> {
   try {
-    const token = process.env.BLOB_READ_WRITE_TOKEN
-    const res = await fetch(blobUrl(TOKEN_KEY), {
-      cache: 'no-store',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-    if (!res.ok) return null
-    return res.json()
+    const db = await getDb()
+    const doc = await db.collection('data').findOne({ _id: TOKEN_KEY as never })
+    if (!doc) return null
+    return doc.value as { oauth1: unknown; oauth2: unknown }
   } catch {
     return null
   }
 }
 
 async function saveCachedToken(token: unknown): Promise<void> {
-  await put(TOKEN_KEY, JSON.stringify(token), {
-    access: 'private',
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: 'application/json',
-  })
+  const db = await getDb()
+  await db.collection('data').replaceOne(
+    { _id: TOKEN_KEY as never },
+    { _id: TOKEN_KEY as never, value: token, updatedAt: new Date() },
+    { upsert: true }
+  )
 }
 
 async function createClient() {
