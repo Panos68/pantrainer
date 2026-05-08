@@ -82,7 +82,6 @@ export async function readAppState(): Promise<AppState> {
   if (!raw) {
     const defaults = AppStateSchema.parse({})
     await dbSet(STATE_KEY, defaults)
-    revalidateTag('app-state', { expire: 0 })
     return defaults
   }
   return AppStateSchema.parse(raw)
@@ -99,7 +98,6 @@ export async function readAutomationNotes(): Promise<AutomationNotes> {
   if (!raw) {
     const defaults = AutomationNotesSchema.parse({})
     await dbSet(AUTOMATION_NOTES_KEY, defaults)
-    revalidateTag('automation-notes', { expire: 0 })
     return defaults
   }
   return AutomationNotesSchema.parse(raw)
