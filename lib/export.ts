@@ -233,11 +233,13 @@ function buildCoachContext(
     (confidenceComponents.reduce((sum, value) => sum + value, 0) / confidenceComponents.length) * 100,
   )
 
-  // Recovery score for today
+  // Recovery score for today — read persisted score, fall back to live computation
   const todayDate = format(new Date(), 'yyyy-MM-dd')
-  const todayGarmin = currentWeek.garmin_recovery?.[todayDate] ?? null
-  const todayReadiness = currentWeek.daily_readiness?.[todayDate] ?? null
-  const todayScore = calcRecoveryScore(todayGarmin, currentWeek.athlete.rhr_bpm, acwr, todayReadiness)
+  const todayScore = currentWeek.daily_scores?.[todayDate] ?? (() => {
+    const todayGarmin = currentWeek.garmin_recovery?.[todayDate] ?? null
+    const todayReadiness = currentWeek.daily_readiness?.[todayDate] ?? null
+    return calcRecoveryScore(todayGarmin, currentWeek.athlete.rhr_bpm, acwr, todayReadiness)
+  })()
 
   // RPE from completed sessions this week
   const recentRpe = currentWeek.sessions
