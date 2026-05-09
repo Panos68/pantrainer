@@ -1,5 +1,6 @@
 import { fetchSleepData, fetchHRData } from '@/lib/garmin'
-import { readCurrentWeekDirect, writeCurrentWeek } from '@/lib/data'
+import { readCurrentWeekDirect, writeCurrentWeek, readArchivedWeeks } from '@/lib/data'
+import { computeDailyScore } from '@/lib/daily-score'
 
 function positiveOrNull(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
@@ -92,6 +93,13 @@ export async function POST(req: Request) {
       const freshWeek = await readCurrentWeekDirect()
       if (freshWeek) {
         freshWeek.garmin_recovery = { ...freshWeek.garmin_recovery, [date]: recovery }
+        try {
+          const archivedWeeks = await readArchivedWeeks(8)
+          const score = computeDailyScore(date, freshWeek, archivedWeeks)
+          freshWeek.daily_scores = { ...freshWeek.daily_scores, [date]: score }
+        } catch {
+          // score persistence is best-effort
+        }
         await writeCurrentWeek(freshWeek)
       }
     }
