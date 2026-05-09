@@ -1,5 +1,5 @@
 import type { WeekDoc } from './schema'
-import { calcRecoveryScore } from './recovery-score'
+import { computeDailyScore } from './daily-score'
 import { readArchivedWeeks, readAppState } from './data'
 import { sessionToLoadPoint, type TrainingLoadPoint } from './training-load'
 import { calcOverloadInsights } from './overload'
@@ -233,13 +233,9 @@ function buildCoachContext(
     (confidenceComponents.reduce((sum, value) => sum + value, 0) / confidenceComponents.length) * 100,
   )
 
-  // Recovery score for today — read persisted score, fall back to live computation
+  // Recovery score for today — read persisted score, fall back to computing with same inputs as write routes
   const todayDate = format(new Date(), 'yyyy-MM-dd')
-  const todayScore = currentWeek.daily_scores?.[todayDate] ?? (() => {
-    const todayGarmin = currentWeek.garmin_recovery?.[todayDate] ?? null
-    const todayReadiness = currentWeek.daily_readiness?.[todayDate] ?? null
-    return calcRecoveryScore(todayGarmin, currentWeek.athlete.rhr_bpm, acwr, todayReadiness)
-  })()
+  const todayScore = currentWeek.daily_scores?.[todayDate] ?? computeDailyScore(todayDate, currentWeek, archivedWeeks)
 
   // RPE from completed sessions this week
   const recentRpe = currentWeek.sessions
