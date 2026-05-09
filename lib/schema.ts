@@ -96,6 +96,17 @@ export const DailyReadinessSchema = z.object({
 })
 export type DailyReadiness = z.infer<typeof DailyReadinessSchema>
 
+export const RecoveryScoreBreakdownSchema = z.object({
+  total: z.number(),
+  sleep: z.number(),
+  rhr: z.number(),
+  load: z.number(),
+  subjective: z.number(),
+  label: z.enum(['Ready', 'Moderate', 'Rest']),
+  color: z.enum(['green', 'amber', 'red']),
+})
+export type RecoveryScoreBreakdown = z.infer<typeof RecoveryScoreBreakdownSchema>
+
 // Health flag
 export const HealthFlagSchema = z.object({
   flag: z.string(),
@@ -144,6 +155,7 @@ export const WeekDocSchema = z.object({
   next_week_plan: NextWeekPlanSchema.default({}),
   garmin_recovery: z.record(z.string(), GarminRecoveryDaySchema).default({}),
   daily_readiness: z.record(z.string(), DailyReadinessSchema).default({}),
+  daily_scores: z.record(z.string(), RecoveryScoreBreakdownSchema).default({}),
 })
 
 // Athlete profile (stored separately in data/athlete.json)

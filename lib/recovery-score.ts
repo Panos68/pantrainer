@@ -1,14 +1,4 @@
-import type { DailyReadiness, GarminRecoveryDay } from './schema'
-
-export interface RecoveryScoreBreakdown {
-  total: number          // 0–100
-  sleep: number          // 0–40
-  rhr: number            // 0–30
-  load: number           // 0–20
-  subjective: number     // 0–10
-  label: 'Ready' | 'Moderate' | 'Rest'
-  color: 'green' | 'amber' | 'red'
-}
+import type { DailyReadiness, GarminRecoveryDay, RecoveryScoreBreakdown } from './schema'
 
 // Sleep score (0–40):
 //   Hours component (0–30): linear scale, 8h = 30pts, <4h = 0pts

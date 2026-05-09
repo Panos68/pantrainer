@@ -131,6 +131,7 @@ export async function POST() {
     next_week_plan: {},
     garmin_recovery: {},
     daily_readiness: {},
+    daily_scores: {},
   }
 
   await writeCurrentWeek(newWeek)
