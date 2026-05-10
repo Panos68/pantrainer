@@ -113,7 +113,10 @@ export default async function Home() {
           </div>
         </header>
 
-        <WeekStatsBar calories={weekCalories} durationMin={weekDurationMin} load={weekLoad} />
+        <div>
+          <p className="text-zinc-500 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-2">This Week</p>
+          <WeekStatsBar calories={weekCalories} durationMin={weekDurationMin} load={weekLoad} />
+        </div>
 
         <div className="grid md:grid-cols-2 gap-4 items-start">
           <HomeQuickPanels week={week} todayISO={todayISO} baselineRhr={profile.rhr_bpm} />
