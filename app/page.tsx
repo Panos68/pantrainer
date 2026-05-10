@@ -5,6 +5,7 @@ import { format } from 'date-fns'
 import Link from 'next/link'
 import { readAthleteProfile, readCurrentWeek, readAppState, readArchivedWeeks, readPendingWeek } from '@/lib/data'
 import { isPendingWeekDue } from '@/lib/week-activation'
+import { sessionToLoadPoint } from '@/lib/training-load'
 import GymWeekBadge from '@/components/GymWeekBadge'
 import NewWeekButton from '@/components/NewWeekButton'
 import HealthFlagsBanner from '@/components/HealthFlagsBanner'
@@ -12,6 +13,33 @@ import WeekBrowser from '@/components/WeekBrowser'
 import HomeQuickPanels from '@/components/HomeQuickPanels'
 import RecoveryScorePanel from '@/components/RecoveryScorePanel'
 import AdaptiveAlertBanner from '@/components/AdaptiveAlertBanner'
+
+function formatDuration(totalMin: number): string {
+  if (totalMin <= 0) return '—'
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  if (h === 0) return `${m}m`
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}m`
+}
+
+function WeekStatsBar({ calories, durationMin, load }: { calories: number; durationMin: number; load: number }) {
+  const stats = [
+    { label: 'Total Calories', value: calories > 0 ? calories.toLocaleString() : '—' },
+    { label: 'Total Time', value: formatDuration(durationMin) },
+    { label: 'Load', value: load > 0 ? load.toString() : '—' },
+  ]
+  return (
+    <div className="flex gap-6 sm:gap-10">
+      {stats.map(({ label, value }) => (
+        <div key={label}>
+          <p className="text-zinc-500 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-0.5">{label}</p>
+          <p className="text-zinc-50 text-lg font-black tabular-nums leading-none">{value}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export default async function Home() {
   if (await isPendingWeekDue()) redirect('/api/week/activate')
@@ -26,6 +54,7 @@ export default async function Home() {
     readPendingWeek(),
   ])
   const todayISO = format(new Date(), 'yyyy-MM-dd')
+  const athlete = { rhr: profile.rhr_bpm, maxHr: 220 - profile.age }
 
   if (!week) {
     return (
@@ -51,6 +80,16 @@ export default async function Home() {
     )
   }
 
+  const completedSessions = week.sessions.filter((s) => s.status === 'completed')
+  const weekCalories = week.week_summary.total_calories
+  const weekDurationMin = completedSessions.reduce((sum, s) => sum + (s.duration_min ?? 0), 0)
+  const weekLoad = Math.round(
+    completedSessions
+      .map((s) => sessionToLoadPoint(s, athlete))
+      .filter((p): p is NonNullable<typeof p> => p !== null)
+      .reduce((sum, p) => sum + p.training_load, 0)
+  )
+
   const hasActiveFlags = week.health_flags.some((f) => !f.cleared)
 
   return (
@@ -73,6 +112,8 @@ export default async function Home() {
             <GymWeekBadge gymWeek={appState.gymWeek} />
           </div>
         </header>
+
+        <WeekStatsBar calories={weekCalories} durationMin={weekDurationMin} load={weekLoad} />
 
         <div className="grid md:grid-cols-2 gap-4 items-start">
           <HomeQuickPanels week={week} todayISO={todayISO} baselineRhr={profile.rhr_bpm} />
