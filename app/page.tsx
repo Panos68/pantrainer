@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { redirect } from 'next/navigation'
-import { format } from 'date-fns'
+import { format, differenceInDays, parseISO, subDays } from 'date-fns'
 import Link from 'next/link'
 import { readAthleteProfile, readCurrentWeek, readAppState, readArchivedWeeks, readPendingWeek } from '@/lib/data'
 import { isPendingWeekDue } from '@/lib/week-activation'
@@ -23,20 +23,43 @@ function formatDuration(totalMin: number): string {
   return `${h}h ${m}m`
 }
 
-function WeekStatsBar({ calories, durationMin, load }: { calories: number; durationMin: number; load: number }) {
-  const stats = [
-    { label: 'Total Calories', value: calories > 0 ? calories.toLocaleString() : '—' },
-    { label: 'Total Time', value: formatDuration(durationMin) },
-    { label: 'Load', value: load > 0 ? load.toString() : '—' },
-  ]
+function WeekStatsBar({
+  calories, durationMin, load, loadDelta, loadZone,
+}: {
+  calories: number
+  durationMin: number
+  load: number
+  loadDelta: number | null
+  loadZone: { label: string; color: string } | null
+}) {
   return (
     <div className="flex gap-6 sm:gap-10">
-      {stats.map(({ label, value }) => (
-        <div key={label}>
-          <p className="text-zinc-500 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-0.5">{label}</p>
-          <p className="text-zinc-50 text-lg font-black tabular-nums leading-none">{value}</p>
+      <div>
+        <p className="text-zinc-500 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-0.5">Total Calories</p>
+        <p className="text-zinc-50 text-lg font-black tabular-nums leading-none">
+          {calories > 0 ? calories.toLocaleString() : '—'}
+        </p>
+      </div>
+      <div>
+        <p className="text-zinc-500 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-0.5">Total Time</p>
+        <p className="text-zinc-50 text-lg font-black tabular-nums leading-none">{formatDuration(durationMin)}</p>
+      </div>
+      <div>
+        <p className="text-zinc-500 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-0.5">Load</p>
+        <div className="flex items-baseline gap-2">
+          <p className="text-zinc-50 text-lg font-black tabular-nums leading-none">
+            {load > 0 ? load.toString() : '—'}
+          </p>
+          {loadZone && (
+            <span className={`text-[11px] font-mono font-bold uppercase ${loadZone.color}`}>{loadZone.label}</span>
+          )}
+          {loadDelta != null && (
+            <span className={`text-[11px] font-mono font-bold ${loadDelta > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+              {loadDelta > 0 ? `+${loadDelta}%` : `${loadDelta}%`}
+            </span>
+          )}
         </div>
-      ))}
+      </div>
     </div>
   )
 }
@@ -90,6 +113,49 @@ export default async function Home() {
       .reduce((sum, p) => sum + p.training_load, 0)
   )
 
+  const prevWeek = archivedWeeks.length > 0 ? archivedWeeks[archivedWeeks.length - 1] : null
+  const prevWeekLoad = prevWeek
+    ? Math.round(
+        prevWeek.sessions
+          .filter((s) => s.status === 'completed')
+          .map((s) => sessionToLoadPoint(s, athlete))
+          .filter((p): p is NonNullable<typeof p> => p !== null)
+          .reduce((sum, p) => sum + p.training_load, 0)
+      )
+    : null
+
+  const loadDelta = prevWeekLoad != null && prevWeekLoad > 0 && weekLoad > 0
+    ? Math.round(((weekLoad - prevWeekLoad) / prevWeekLoad) * 100)
+    : null
+
+  // ACWR zone using all history up to today
+  const allLoadPoints = [...archivedWeeks, week]
+    .flatMap((w) => w.sessions)
+    .filter((s) => s.status === 'completed' && s.date <= todayISO)
+    .map((s) => sessionToLoadPoint(s, athlete))
+    .filter((p): p is NonNullable<typeof p> => p !== null)
+    .sort((a, b) => a.date.localeCompare(b.date))
+
+  const acwr = (() => {
+    if (allLoadPoints.length < 3) return null
+    const oldest = allLoadPoints[0].date
+    const latest = allLoadPoints[allLoadPoints.length - 1].date
+    if (differenceInDays(parseISO(latest), parseISO(oldest)) < 21) return null
+    const acuteStart = format(subDays(parseISO(latest), 6), 'yyyy-MM-dd')
+    const chronicStart = format(subDays(parseISO(latest), 27), 'yyyy-MM-dd')
+    const acute = allLoadPoints.filter((p) => p.date >= acuteStart).reduce((s, p) => s + p.training_load, 0)
+    const chronicPts = allLoadPoints.filter((p) => p.date >= chronicStart && p.date <= latest)
+    const chronic = chronicPts.length > 0 ? chronicPts.reduce((s, p) => s + p.training_load, 0) / 4 : null
+    if (!chronic || chronic === 0) return null
+    return Math.round((acute / chronic) * 100) / 100
+  })()
+
+  const loadZone: { label: string; color: string } | null = acwr == null ? null
+    : acwr >= 0.8 && acwr <= 1.0 ? { label: 'Optimal', color: 'text-emerald-400' }
+    : acwr > 1.0 && acwr <= 1.3 ? { label: 'Moderate', color: 'text-amber-400' }
+    : acwr > 1.3 ? { label: 'High Risk', color: 'text-red-400' }
+    : { label: 'Low', color: 'text-zinc-400' }
+
   const hasActiveFlags = week.health_flags.some((f) => !f.cleared)
 
   return (
@@ -115,7 +181,7 @@ export default async function Home() {
 
         <div>
           <p className="text-zinc-500 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-2">This Week</p>
-          <WeekStatsBar calories={weekCalories} durationMin={weekDurationMin} load={weekLoad} />
+          <WeekStatsBar calories={weekCalories} durationMin={weekDurationMin} load={weekLoad} loadDelta={loadDelta} loadZone={loadZone} />
         </div>
 
         <div className="grid md:grid-cols-2 gap-4 items-start">
