@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 
 interface Props {
   label?: string
@@ -58,11 +59,17 @@ export default function NewWeekButton({ label = 'Create from Saved Template', cl
     setLoading(false)
   }
 
-  const disabled = loading || checking || !readiness.canCreate
-  const buttonTitle = readiness.reason ?? 'Create next week from saved template'
+  if (!checking && !readiness.canCreate) {
+    return (
+      <Link href="/export" className={className}>
+        Plan Next Week →
+      </Link>
+    )
+  }
 
+  const disabled = loading || checking
   return (
-    <button onClick={handleClick} disabled={disabled} className={className} title={buttonTitle}>
+    <button onClick={handleClick} disabled={disabled} className={className}>
       {loading ? 'Creating…' : checking ? 'Checking…' : label}
     </button>
   )
