@@ -49,7 +49,7 @@ export const SessionSchema = z.object({
   status: SessionStatusSchema.default('planned'),
   photos: z.array(z.string()).default([]),
   garmin_activity_id: z.number().nullable().optional(),
-  source: z.enum(['garmin', 'manual']).optional(),
+  source: z.enum(['garmin', 'manual']).nullable().optional(),
   aerobic_training_effect: z.number().nullable().optional(),
   anaerobic_training_effect: z.number().nullable().optional(),
   training_stress_score: z.number().nullable().optional(),
