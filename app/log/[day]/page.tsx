@@ -36,6 +36,7 @@ type GarminSyncResponse = {
   hr_zones?: Array<{ zone_name: string; secs_in_zone: number; zone_high_boundary: number }> | null
   distance_m?: number | null
   avg_speed_mps?: number | null
+  activity_notes?: string | null
 }
 
 function isPreviewablePhotoUrl(value: string): boolean {
@@ -342,6 +343,13 @@ export default function LogDayPage() {
         }
         const distanceLine = `Distance: ${km}km${paceStr}`
         setNotes((prev) => prev?.includes(distanceLine) ? prev : (prev ? `${prev}\n${distanceLine}` : distanceLine))
+      }
+
+      if (sync.activity_notes) {
+        setNotes((prev) => {
+          if (prev?.includes(sync.activity_notes!)) return prev
+          return prev ? `${prev}\n${sync.activity_notes}` : sync.activity_notes!
+        })
       }
 
       setGarminSynced(synced)
