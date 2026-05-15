@@ -41,6 +41,17 @@ function formatActivityNote(a: GarminActivityRaw): string {
   if (a.duration) parts.push(`${Math.round(a.duration / 60)} min`)
   if (a.averageHR) parts.push(`${Math.round(a.averageHR)} bpm`)
   if (a.calories) parts.push(`${Math.round(a.calories)} kcal`)
+  if (a.distance && a.distance > 0) {
+    const km = (a.distance / 1000).toFixed(2)
+    let distStr = `${km}km`
+    if (a.averageSpeed && a.averageSpeed > 0) {
+      const paceSecPerKm = 1000 / a.averageSpeed
+      const paceMin = Math.floor(paceSecPerKm / 60)
+      const paceSec = Math.round(paceSecPerKm % 60).toString().padStart(2, '0')
+      distStr += ` @ ${paceMin}:${paceSec}/km`
+    }
+    parts.push(distStr)
+  }
   return `Garmin: ${name}${parts.length ? ' — ' + parts.join(', ') : ''}`
 }
 
