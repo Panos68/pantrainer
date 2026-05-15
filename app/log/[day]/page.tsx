@@ -830,7 +830,13 @@ export default function LogDayPage() {
 
         {/* Exercise table — interactive for all session types with exercises */}
         {(session.exercise_groups ? session.exercise_groups.flatMap(g => g.exercises).length > 0 : session.exercises?.length > 0) && (() => {
-          const gridCols = type === 'Strength'
+          const flatForWeightCheck = session.exercise_groups
+            ? session.exercise_groups.flatMap((g) => g.exercises)
+            : (session.exercises ?? [])
+          const showWeightCol = type === 'Strength' || flatForWeightCheck.some(
+            (ex) => ex.weight_kg != null || ex.actual_weight_kg != null,
+          )
+          const gridCols = showWeightCol
             ? 'grid-cols-[minmax(0,1fr)_repeat(6,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(6,2.75rem)]'
             : 'grid-cols-[minmax(0,1fr)_repeat(4,2rem)] sm:grid-cols-[minmax(0,1fr)_repeat(4,2.75rem)]'
 
@@ -902,12 +908,12 @@ export default function LogDayPage() {
                   </div>
                   <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">{plannedSets ?? '—'}</div>
                   <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center overflow-hidden leading-tight break-words">{plannedReps ?? '—'}</div>
-                  {type === 'Strength' && (
+                  {showWeightCol && (
                     <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">{plannedWeight != null ? plannedWeight : '—'}</div>
                   )}
                   <input type="number" inputMode="numeric" value={exerciseActuals[i]?.sets ?? ''} onChange={(e) => setExerciseActuals((prev) => prev.map((a, j) => (j === i ? { ...a, sets: e.target.value } : a)))} className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full" placeholder="—" />
                   <input type="text" inputMode="decimal" value={exerciseActuals[i]?.reps ?? ''} onChange={(e) => setExerciseActuals((prev) => prev.map((a, j) => (j === i ? { ...a, reps: e.target.value } : a)))} className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full" placeholder="—" />
-                  {type === 'Strength' && (
+                  {showWeightCol && (
                     <input type="number" inputMode="decimal" value={exerciseActuals[i]?.weight_kg ?? ''} onChange={(e) => setExerciseActuals((prev) => prev.map((a, j) => (j === i ? { ...a, weight_kg: e.target.value } : a)))} className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full" placeholder="—" />
                   )}
                 </div>
@@ -942,10 +948,10 @@ export default function LogDayPage() {
               <div className="px-3 py-2 text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Exercise</div>
               <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">S</div>
               <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">R</div>
-              {type === 'Strength' && <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">kg</div>}
+              {showWeightCol && <div className="py-2 text-zinc-600 text-[10px] font-mono text-center">kg</div>}
               <div className="py-2 text-violet-400/60 text-[10px] font-mono text-center">S</div>
               <div className="py-2 text-violet-400/60 text-[10px] font-mono text-center">R</div>
-              {type === 'Strength' && <div className="py-2 text-violet-400/60 text-[10px] font-mono text-center">kg</div>}
+              {showWeightCol && <div className="py-2 text-violet-400/60 text-[10px] font-mono text-center">kg</div>}
             </div>
           )
 
