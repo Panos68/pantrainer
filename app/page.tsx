@@ -114,10 +114,14 @@ export default async function Home() {
   )
 
   const prevWeek = archivedWeeks.length > 0 ? archivedWeeks[archivedWeeks.length - 1] : null
+  // Compare same day-of-week: only count last week's sessions up to the equivalent day.
+  // Remap JS getDay() (0=Sun…6=Sat) to Mon-anchored (Mon=0…Sun=6).
+  const remapDay = (d: number) => (d + 6) % 7
+  const todayRemapped = remapDay(new Date(todayISO).getDay())
   const prevWeekLoad = prevWeek
     ? Math.round(
         prevWeek.sessions
-          .filter((s) => s.status === 'completed')
+          .filter((s) => s.status === 'completed' && remapDay(new Date(s.date).getDay()) <= todayRemapped)
           .map((s) => sessionToLoadPoint(s, athlete))
           .filter((p): p is NonNullable<typeof p> => p !== null)
           .reduce((sum, p) => sum + p.training_load, 0)
