@@ -458,7 +458,7 @@ export default function LogDayPage() {
     let exercises: Session['exercises']
     let exercise_groups: ExerciseGroup[] | undefined
 
-    if (type === 'Strength' && session?.exercise_groups) {
+    if (session?.exercise_groups) {
       // Build groups with actuals merged, tracking a global index across groups
       let globalIndex = 0
       exercise_groups = session.exercise_groups.map((group) => ({
@@ -466,10 +466,8 @@ export default function LogDayPage() {
         exercises: group.exercises.map((ex) => mergeActualIntoExercise(ex, globalIndex++)),
       }))
       exercises = exercise_groups.flatMap((g) => g.exercises)
-    } else if (type === 'Strength') {
-      exercises = (session?.exercises ?? []).map((ex, i) => mergeActualIntoExercise(ex, i))
     } else {
-      exercises = session?.exercises ?? []
+      exercises = (session?.exercises ?? []).map((ex, i) => mergeActualIntoExercise(ex, i))
     }
 
     return {
