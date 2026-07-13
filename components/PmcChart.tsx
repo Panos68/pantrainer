@@ -11,10 +11,17 @@ import {
 } from 'recharts'
 import type { PmcPoint } from '@/lib/pmc'
 import { format, parseISO } from 'date-fns'
+import { useState } from 'react'
 
 interface Props {
   data: PmcPoint[]
 }
+
+const RANGES = [
+  { label: '12W', days: 84 },
+  { label: '26W', days: 182 },
+  { label: 'ALL', days: null },
+] as const
 
 function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) {
   if (!active || !payload?.length) return null
@@ -31,6 +38,8 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
 }
 
 export default function PmcChart({ data }: Props) {
+  const [rangeIdx, setRangeIdx] = useState(0)
+
   if (data.length === 0) {
     return (
       <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
@@ -39,7 +48,10 @@ export default function PmcChart({ data }: Props) {
     )
   }
 
-  const formatted = data.map((p) => ({
+  const range = RANGES[rangeIdx]
+  const windowed = range.days == null ? data : data.slice(-range.days)
+
+  const formatted = windowed.map((p) => ({
     ...p,
     label: format(parseISO(p.date), 'MMM d'),
   }))
@@ -48,10 +60,26 @@ export default function PmcChart({ data }: Props) {
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">Performance Management</p>
-        <div className="flex gap-3 text-[10px] font-mono">
-          <span className="text-blue-400">CTL fitness</span>
-          <span className="text-rose-400">ATL fatigue</span>
-          <span className="text-lime-400">TSB form</span>
+        <div className="flex items-center gap-3">
+          <div className="flex gap-3 text-[10px] font-mono">
+            <span className="text-blue-400">CTL fitness</span>
+            <span className="text-rose-400">ATL fatigue</span>
+            <span className="text-lime-400">TSB form</span>
+            <span className="text-amber-400">ACWR</span>
+          </div>
+          <div className="flex gap-1">
+            {RANGES.map((r, i) => (
+              <button
+                key={r.label}
+                onClick={() => setRangeIdx(i)}
+                className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                  i === rangeIdx ? 'bg-zinc-700 text-zinc-50' : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
       <ResponsiveContainer width="100%" height={200}>
@@ -64,19 +92,29 @@ export default function PmcChart({ data }: Props) {
             interval="preserveStartEnd"
           />
           <YAxis
+            yAxisId="load"
             tick={{ fill: '#52525b', fontSize: 9, fontFamily: 'monospace' }}
             tickLine={false}
             axisLine={false}
           />
+          <YAxis
+            yAxisId="acwr"
+            orientation="right"
+            domain={[0, 2]}
+            tick={{ fill: '#fbbf24', fontSize: 9, fontFamily: 'monospace' }}
+            tickLine={false}
+            axisLine={false}
+          />
           <Tooltip content={<CustomTooltip />} />
-          <ReferenceLine y={0} stroke="#3f3f46" strokeDasharray="3 3" />
-          <Line type="monotone" dataKey="ctl" name="CTL" stroke="#60a5fa" dot={false} strokeWidth={2} />
-          <Line type="monotone" dataKey="atl" name="ATL" stroke="#f87171" dot={false} strokeWidth={2} />
-          <Line type="monotone" dataKey="tsb" name="TSB" stroke="#a3e635" dot={false} strokeWidth={1.5} strokeDasharray="4 2" />
+          <ReferenceLine yAxisId="load" y={0} stroke="#3f3f46" strokeDasharray="3 3" />
+          <Line yAxisId="load" type="monotone" dataKey="ctl" name="CTL" stroke="#60a5fa" dot={false} strokeWidth={2} />
+          <Line yAxisId="load" type="monotone" dataKey="atl" name="ATL" stroke="#f87171" dot={false} strokeWidth={2} />
+          <Line yAxisId="load" type="monotone" dataKey="tsb" name="TSB" stroke="#a3e635" dot={false} strokeWidth={1.5} strokeDasharray="4 2" />
+          <Line yAxisId="acwr" type="monotone" dataKey="acwr" name="ACWR" stroke="#fbbf24" dot={false} strokeWidth={1.5} connectNulls />
         </LineChart>
       </ResponsiveContainer>
       <p className="text-[10px] font-mono text-zinc-600">
-        TSB &gt; 0 = fresh · TSB &lt; −10 = accumulated fatigue · TSB &lt; −30 = overreaching
+        TSB &gt; 0 = fresh · TSB &lt; −10 = accumulated fatigue · TSB &lt; −30 = overreaching · ACWR 0.8–1.3 = optimal
       </p>
     </div>
   )

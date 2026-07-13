@@ -7,6 +7,7 @@ export interface PmcPoint {
   atl: number
   tsb: number
   load: number
+  acwr: number | null
 }
 
 const CTL_TC = 42
@@ -33,13 +34,23 @@ export function calcPmc(loadPoints: TrainingLoadPoint[], windowDays = 90): PmcPo
   const result: PmcPoint[] = []
   const cutoff = format(subDays(lastDate, windowDays), 'yyyy-MM-dd')
 
-  for (const day of days) {
-    const dateStr = format(day, 'yyyy-MM-dd')
-    const load = dailyLoad.get(dateStr) ?? 0
+  // Sliding 7-day (acute) and 28-day (chronic) load sums, index-aligned to `days`.
+  const loads = days.map((day) => dailyLoad.get(format(day, 'yyyy-MM-dd')) ?? 0)
+
+  for (let i = 0; i < days.length; i++) {
+    const dateStr = format(days[i], 'yyyy-MM-dd')
+    const load = loads[i]
 
     ctl = ctl + CTL_FACTOR * (load - ctl)
     atl = atl + ATL_FACTOR * (load - atl)
     const tsb = ctl - atl
+
+    let acwr: number | null = null
+    if (i >= 27) {
+      const acute = loads.slice(i - 6, i + 1).reduce((s, v) => s + v, 0)
+      const chronic = loads.slice(i - 27, i + 1).reduce((s, v) => s + v, 0) / 4
+      acwr = chronic > 0 ? Math.round((acute / chronic) * 100) / 100 : null
+    }
 
     if (dateStr >= cutoff) {
       result.push({
@@ -48,6 +59,7 @@ export function calcPmc(loadPoints: TrainingLoadPoint[], windowDays = 90): PmcPo
         atl: Math.round(atl * 10) / 10,
         tsb: Math.round(tsb * 10) / 10,
         load,
+        acwr,
       })
     }
   }

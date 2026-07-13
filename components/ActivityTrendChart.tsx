@@ -9,13 +9,40 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from 'recharts'
-import { format, parseISO } from 'date-fns'
+import { format, parseISO, subDays } from 'date-fns'
+import { useState } from 'react'
 import type { WeekDoc } from '@/lib/schema'
 import { sessionToLoadPoint, type AthleteLoadParams, type TrainingLoadPoint } from '@/lib/training-load'
 
 interface ActivityTrendChartProps {
   weeks: WeekDoc[]
   athlete?: AthleteLoadParams
+}
+
+const RANGES = [
+  { label: '12W', days: 84 },
+  { label: '26W', days: 182 },
+  { label: 'ALL', days: null },
+] as const
+
+// 7-day trailing rolling average of training_load, keyed by date.
+function withRollingAvg(points: TrainingLoadPoint[]): (TrainingLoadPoint & { load_avg7: number | null })[] {
+  const dailyLoad = new Map<string, number>()
+  for (const p of points) {
+    dailyLoad.set(p.date, (dailyLoad.get(p.date) ?? 0) + p.training_load)
+  }
+  return points.map((p) => {
+    const windowStart = format(subDays(parseISO(p.date), 6), 'yyyy-MM-dd')
+    let sum = 0
+    let count = 0
+    for (const [date, load] of dailyLoad) {
+      if (date >= windowStart && date <= p.date) {
+        sum += load
+        count++
+      }
+    }
+    return { ...p, load_avg7: count > 0 ? Math.round((sum / 7) * 10) / 10 : null }
+  })
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -37,11 +64,20 @@ function TypeDot(props: { cx?: number; cy?: number; payload?: TrainingLoadPoint 
 }
 
 export default function ActivityTrendChart({ weeks, athlete }: ActivityTrendChartProps) {
-  const points: TrainingLoadPoint[] = weeks
+  const [rangeIdx, setRangeIdx] = useState(0)
+
+  const allPoints: TrainingLoadPoint[] = weeks
     .flatMap((w) => w.sessions)
     .map((s) => sessionToLoadPoint(s, athlete))
     .filter((p): p is TrainingLoadPoint => p !== null)
     .sort((a, b) => a.date.localeCompare(b.date))
+
+  // Rolling average is computed over full history so early points in the window still have context.
+  const withAvg = withRollingAvg(allPoints)
+
+  const range = RANGES[rangeIdx]
+  const cutoff = range.days == null ? null : format(subDays(new Date(), range.days), 'yyyy-MM-dd')
+  const points = cutoff == null ? withAvg : withAvg.filter((p) => p.date >= cutoff)
 
   const presentTypes = [...new Set(points.map((p) => p.type))]
 
@@ -52,6 +88,19 @@ export default function ActivityTrendChart({ weeks, athlete }: ActivityTrendChar
           Activity Trend
         </h2>
         <div className="flex-1 h-px bg-zinc-800" />
+        <div className="flex gap-1">
+          {RANGES.map((r, i) => (
+            <button
+              key={r.label}
+              onClick={() => setRangeIdx(i)}
+              className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                i === rangeIdx ? 'bg-zinc-700 text-zinc-50' : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Legend */}
@@ -69,6 +118,10 @@ export default function ActivityTrendChart({ weeks, athlete }: ActivityTrendChar
           <div className="flex items-center gap-1.5">
             <span className="w-4 h-0.5 inline-block bg-lime-400 rounded" />
             <span className="text-xs font-mono text-zinc-400 uppercase tracking-widest">Load</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-4 h-0.5 inline-block bg-amber-400 rounded" />
+            <span className="text-xs font-mono text-zinc-400 uppercase tracking-widest">7d Avg</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-4 inline-block border-t border-dashed border-sky-400" />
@@ -160,6 +213,17 @@ export default function ActivityTrendChart({ weeks, athlete }: ActivityTrendChar
                 strokeWidth={2}
                 dot={<TypeDot />}
                 activeDot={{ r: 6, strokeWidth: 0, fill: '#a3e635' }}
+                connectNulls
+              />
+              {/* 7-day rolling avg load — smooth trend line, no dots */}
+              <Line
+                yAxisId="load"
+                type="monotone"
+                dataKey="load_avg7"
+                stroke="#fbbf24"
+                strokeWidth={2}
+                dot={false}
+                activeDot={false}
                 connectNulls
               />
               {/* Avg HR — dashed, no dots */}
