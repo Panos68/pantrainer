@@ -28,7 +28,7 @@ export default async function ProgressPage() {
     .map((s) => sessionToLoadPoint(s, athlete))
     .filter((p): p is NonNullable<typeof p> => p !== null)
 
-  const pmcData = calcPmc(loadPoints)
+  const pmcData = calcPmc(loadPoints, 3650)
 
   const archivedForOverload = weeks.slice(0, -1)
   const currentForOverload = weeks[weeks.length - 1]

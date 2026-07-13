@@ -18,8 +18,8 @@ interface Props {
 }
 
 const RANGES = [
-  { label: '12W', days: 84 },
-  { label: '26W', days: 182 },
+  { label: '4W', days: 28 },
+  { label: '8W', days: 56 },
   { label: 'ALL', days: null },
 ] as const
 
