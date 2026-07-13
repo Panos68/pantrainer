@@ -20,8 +20,8 @@ interface ActivityTrendChartProps {
 }
 
 const RANGES = [
-  { label: '12W', days: 84 },
-  { label: '26W', days: 182 },
+  { label: '4W', days: 28 },
+  { label: '8W', days: 56 },
   { label: 'ALL', days: null },
 ] as const
 
@@ -65,6 +65,7 @@ function TypeDot(props: { cx?: number; cy?: number; payload?: TrainingLoadPoint 
 
 export default function ActivityTrendChart({ weeks, athlete }: ActivityTrendChartProps) {
   const [rangeIdx, setRangeIdx] = useState(0)
+  const [showHr, setShowHr] = useState(false)
 
   const allPoints: TrainingLoadPoint[] = weeks
     .flatMap((w) => w.sessions)
@@ -116,17 +117,17 @@ export default function ActivityTrendChart({ weeks, athlete }: ActivityTrendChar
         ))}
         <div className="flex items-center gap-3 ml-auto">
           <div className="flex items-center gap-1.5">
-            <span className="w-4 h-0.5 inline-block bg-lime-400 rounded" />
-            <span className="text-xs font-mono text-zinc-400 uppercase tracking-widest">Load</span>
-          </div>
-          <div className="flex items-center gap-1.5">
             <span className="w-4 h-0.5 inline-block bg-amber-400 rounded" />
-            <span className="text-xs font-mono text-zinc-400 uppercase tracking-widest">7d Avg</span>
+            <span className="text-xs font-mono text-zinc-400 uppercase tracking-widest">Load (7d avg)</span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-4 inline-block border-t border-dashed border-sky-400" />
-            <span className="text-xs font-mono text-zinc-400 uppercase tracking-widest">Avg HR</span>
-          </div>
+          <button
+            onClick={() => setShowHr((v) => !v)}
+            className={`text-xs font-mono uppercase tracking-widest px-1.5 py-0.5 rounded ${
+              showHr ? 'text-sky-400 bg-sky-400/10' : 'text-zinc-600 hover:text-zinc-400'
+            }`}
+          >
+            Show HR
+          </button>
         </div>
       </div>
 
@@ -157,10 +158,11 @@ export default function ActivityTrendChart({ weeks, athlete }: ActivityTrendChar
                 width={46}
                 tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`}
               />
-              {/* Right Y: avg HR */}
+              {/* Right Y: avg HR — hidden until toggled on */}
               <YAxis
                 yAxisId="hr"
                 orientation="right"
+                hide={!showHr}
                 tick={{ fill: '#38bdf8', fontSize: 11, fontFamily: 'var(--font-geist-mono)' }}
                 axisLine={false}
                 tickLine={false}
@@ -204,40 +206,42 @@ export default function ActivityTrendChart({ weeks, athlete }: ActivityTrendChar
                   )
                 }}
               />
-              {/* Training load — solid, type-colored dots */}
+              {/* Raw daily load — faint, dots only on hover (type-colored) */}
               <Line
                 yAxisId="load"
                 type="monotone"
                 dataKey="training_load"
-                stroke="#a3e635"
-                strokeWidth={2}
-                dot={<TypeDot />}
-                activeDot={{ r: 6, strokeWidth: 0, fill: '#a3e635' }}
+                stroke="#3f3f46"
+                strokeWidth={1}
+                dot={false}
+                activeDot={<TypeDot />}
                 connectNulls
               />
-              {/* 7-day rolling avg load — smooth trend line, no dots */}
+              {/* 7-day rolling avg load — bold primary trend line */}
               <Line
                 yAxisId="load"
                 type="monotone"
                 dataKey="load_avg7"
                 stroke="#fbbf24"
-                strokeWidth={2}
+                strokeWidth={2.5}
                 dot={false}
-                activeDot={false}
+                activeDot={{ r: 5, strokeWidth: 0, fill: '#fbbf24' }}
                 connectNulls
               />
-              {/* Avg HR — dashed, no dots */}
-              <Line
-                yAxisId="hr"
-                type="monotone"
-                dataKey="avg_hr_bpm"
-                stroke="#38bdf8"
-                strokeWidth={1.5}
-                strokeDasharray="4 3"
-                dot={false}
-                activeDot={false}
-                connectNulls
-              />
+              {/* Avg HR — dashed, only rendered when toggled on */}
+              {showHr && (
+                <Line
+                  yAxisId="hr"
+                  type="monotone"
+                  dataKey="avg_hr_bpm"
+                  stroke="#38bdf8"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                  dot={false}
+                  activeDot={false}
+                  connectNulls
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
         )}
