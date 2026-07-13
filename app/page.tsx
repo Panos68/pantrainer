@@ -24,13 +24,14 @@ function formatDuration(totalMin: number): string {
 }
 
 function WeekStatsBar({
-  calories, durationMin, load, loadDelta, loadZone,
+  calories, durationMin, load, loadDelta, loadZone, acwr,
 }: {
   calories: number
   durationMin: number
   load: number
   loadDelta: number | null
   loadZone: { label: string; color: string } | null
+  acwr: number | null
 }) {
   return (
     <div className="flex gap-6 sm:gap-10">
@@ -51,7 +52,9 @@ function WeekStatsBar({
             {load > 0 ? load.toString() : '—'}
           </p>
           {loadZone && (
-            <span className={`text-[11px] font-mono font-bold uppercase ${loadZone.color}`}>{loadZone.label}</span>
+            <span className={`text-[11px] font-mono font-bold uppercase ${loadZone.color}`}>
+              {loadZone.label}{acwr != null ? ` (${acwr.toFixed(2)})` : ''}
+            </span>
           )}
           {loadDelta != null && (
             <span className={`text-[11px] font-mono font-bold ${loadDelta > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
@@ -185,7 +188,7 @@ export default async function Home() {
 
         <div>
           <p className="text-zinc-500 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-2">This Week</p>
-          <WeekStatsBar calories={weekCalories} durationMin={weekDurationMin} load={weekLoad} loadDelta={loadDelta} loadZone={loadZone} />
+          <WeekStatsBar calories={weekCalories} durationMin={weekDurationMin} load={weekLoad} loadDelta={loadDelta} loadZone={loadZone} acwr={acwr} />
         </div>
 
         <div className="grid md:grid-cols-2 gap-4 items-start">
