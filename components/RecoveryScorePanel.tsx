@@ -291,15 +291,15 @@ export default function RecoveryScorePanel() {
           <BreakdownBar label="Feeling" value={score.subjective} max={10} barColor={BAR_COLORS.subjective} />
         </div>
 
-        {/* Score ring + label — anchored right */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          <div className="text-right hidden sm:block">
-            <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-widest mb-0.5">Recovery</p>
-            <p className={`text-2xl font-black uppercase tracking-tight ${c.label}`}>{score.label}</p>
+        {/* Score ring + label — anchored right; label sits under the ring on mobile, beside it from sm: up */}
+        <div className="flex flex-col-reverse sm:flex-row items-center gap-1 sm:gap-3 shrink-0">
+          <div className="text-center sm:text-right">
+            <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-widest mb-0.5 hidden sm:block">Recovery</p>
+            <p className={`text-xs sm:text-2xl font-black uppercase tracking-tight ${c.label}`}>{score.label}</p>
             {!data.readiness && !checkinOpen && (
               <button
                 onClick={() => setCheckinOpen(true)}
-                className="mt-1.5 text-[10px] text-zinc-400 border border-zinc-700 rounded px-1.5 py-0.5 hover:border-zinc-500 transition-colors"
+                className="mt-1 sm:mt-1.5 text-[10px] text-zinc-400 border border-zinc-700 rounded px-1.5 py-0.5 hover:border-zinc-500 transition-colors"
               >
                 Add check-in
               </button>
@@ -314,19 +314,6 @@ export default function RecoveryScorePanel() {
           </div>
         </div>
       </div>
-
-      {/* Recovery label — own row on mobile since the ring is too small to hold it */}
-      <p className={`sm:hidden mt-2 text-xs font-black uppercase tracking-tight ${c.label}`}>
-        Recovery: {score.label}
-        {!data.readiness && !checkinOpen && (
-          <button
-            onClick={() => setCheckinOpen(true)}
-            className="ml-2 text-[10px] font-normal normal-case text-zinc-400 border border-zinc-700 rounded px-1.5 py-0.5 hover:border-zinc-500 transition-colors"
-          >
-            Add check-in
-          </button>
-        )}
-      </p>
 
       {checkinOpen && (
         <div className="border-t border-zinc-800 pt-3 space-y-2">
