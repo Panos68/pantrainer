@@ -206,15 +206,15 @@ export default function ActivityTrendChart({ weeks, athlete }: ActivityTrendChar
                   )
                 }}
               />
-              {/* Raw daily load — faint, dots only on hover (type-colored) */}
+              {/* Raw daily load — faint line, always-visible type-colored dots */}
               <Line
                 yAxisId="load"
                 type="monotone"
                 dataKey="training_load"
                 stroke="#3f3f46"
                 strokeWidth={1}
-                dot={false}
-                activeDot={<TypeDot />}
+                dot={<TypeDot />}
+                activeDot={{ r: 6, strokeWidth: 0, fill: '#a3e635' }}
                 connectNulls
               />
               {/* 7-day rolling avg load — bold primary trend line */}
