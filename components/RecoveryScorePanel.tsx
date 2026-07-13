@@ -281,9 +281,9 @@ export default function RecoveryScorePanel() {
       className="w-full md:flex-1 relative overflow-hidden rounded-xl p-3"
       style={{ background: `radial-gradient(ellipse 60% 80% at 95% 50%, ${c.glow} 0%, transparent 60%)` }}
     >
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
         {/* Breakdown bars — fill available space */}
-        <div className="flex-1 min-w-0 space-y-2">
+        <div className="w-full sm:flex-1 sm:min-w-0 space-y-2">
           <BreakdownBar label="Sleep" value={score.sleep} max={40} unavailable={noSleep} barColor={BAR_COLORS.sleep} />
           {data.sleep_avg_7d != null && (
             <p className="text-[10px] text-zinc-600 pl-16 -mt-1">7d avg {data.sleep_avg_7d}h</p>
@@ -294,7 +294,7 @@ export default function RecoveryScorePanel() {
         </div>
 
         {/* Score ring + label — anchored right */}
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center justify-center sm:justify-end gap-3 shrink-0">
           <div className="text-right">
             <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-widest mb-0.5">Recovery</p>
             <p className={`text-2xl font-black uppercase tracking-tight ${c.label}`}>{score.label}</p>

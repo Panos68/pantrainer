@@ -48,8 +48,8 @@ export default function HealthFlagsBanner({ flags }: HealthFlagsBannerProps) {
         {activeFlags.map((flag, i) => {
           const originalIndex = flags.indexOf(flag)
           return (
-            <div key={i} className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 min-w-0">
+            <div key={i} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
+              <div className="flex flex-wrap items-center gap-2 min-w-0">
                 <span
                   className={`text-xs font-mono font-bold tracking-wide ${
                     hasCritical ? 'text-red-300' : 'text-amber-300'
@@ -63,7 +63,7 @@ export default function HealthFlagsBanner({ flags }: HealthFlagsBannerProps) {
                   </span>
                 )}
                 <span
-                  className={`text-xs font-mono px-2 py-0.5 rounded-full border ${
+                  className={`text-xs font-mono px-2 py-0.5 rounded-md border ${
                     hasCritical
                       ? 'text-red-400 border-red-400/30 bg-red-400/10'
                       : 'text-amber-400 border-amber-400/30 bg-amber-400/10'
@@ -72,14 +72,14 @@ export default function HealthFlagsBanner({ flags }: HealthFlagsBannerProps) {
                   {flag.status}
                 </span>
                 {flag.training_impact && (
-                  <span className="text-zinc-500 text-xs font-mono truncate">
+                  <span className="text-zinc-500 text-xs font-mono">
                     — {flag.training_impact}
                   </span>
                 )}
               </div>
               <button
                 onClick={() => handleClear(originalIndex)}
-                className="shrink-0 text-xs font-semibold text-zinc-500 hover:text-zinc-300 tracking-widest uppercase transition-colors px-2 py-0.5 rounded border border-zinc-700 hover:border-zinc-500"
+                className="self-start sm:self-auto shrink-0 text-xs font-semibold text-zinc-500 hover:text-zinc-300 tracking-widest uppercase transition-colors px-2 py-0.5 rounded border border-zinc-700 hover:border-zinc-500"
               >
                 Clear
               </button>
