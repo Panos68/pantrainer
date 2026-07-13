@@ -86,9 +86,8 @@ function ScoreRing({ total, color }: { total: number; color: 'green' | 'amber' |
 
   return (
     <svg
-      width={size}
-      height={size}
-      className="absolute inset-0 -rotate-90"
+      viewBox={`0 0 ${size} ${size}`}
+      className="absolute inset-0 w-full h-full -rotate-90"
       style={{ transform: 'rotate(-90deg)' }}
     >
       <circle
@@ -274,16 +273,15 @@ export default function RecoveryScorePanel() {
   const noSleep = !garmin || garmin.sleep_hours == null
   const noRhr = !garmin || garmin.resting_hr_bpm == null
   const c = COLOR[score.color]
-  const ringSize = (64 + 7) * 2
 
   return (
     <div
       className="w-full md:flex-1 relative overflow-hidden rounded-xl p-3"
       style={{ background: `radial-gradient(ellipse 60% 80% at 95% 50%, ${c.glow} 0%, transparent 60%)` }}
     >
-      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+      <div className="flex items-center gap-3 sm:gap-4">
         {/* Breakdown bars — fill available space */}
-        <div className="w-full sm:flex-1 sm:min-w-0 space-y-2">
+        <div className="flex-1 min-w-0 space-y-2">
           <BreakdownBar label="Sleep" value={score.sleep} max={40} unavailable={noSleep} barColor={BAR_COLORS.sleep} />
           {data.sleep_avg_7d != null && (
             <p className="text-[10px] text-zinc-600 pl-16 -mt-1">7d avg {data.sleep_avg_7d}h</p>
@@ -294,8 +292,8 @@ export default function RecoveryScorePanel() {
         </div>
 
         {/* Score ring + label — anchored right */}
-        <div className="flex items-center justify-center sm:justify-end gap-3 shrink-0">
-          <div className="text-right">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="text-right hidden sm:block">
             <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-widest mb-0.5">Recovery</p>
             <p className={`text-2xl font-black uppercase tracking-tight ${c.label}`}>{score.label}</p>
             {!data.readiness && !checkinOpen && (
@@ -307,18 +305,28 @@ export default function RecoveryScorePanel() {
               </button>
             )}
           </div>
-          <div
-            className="relative shrink-0 flex items-center justify-center"
-            style={{ width: ringSize, height: ringSize }}
-          >
+          <div className="relative shrink-0 flex items-center justify-center w-20 h-20 sm:w-36 sm:h-36">
             <ScoreRing total={score.total} color={score.color} />
             <div className="flex flex-col items-center">
-              <span className={`font-display font-bold text-7xl leading-none tabular-nums ${c.score}`}>{displayScore}</span>
-              <span className="text-zinc-600 text-[10px] font-mono">/100</span>
+              <span className={`font-display font-bold text-2xl sm:text-7xl leading-none tabular-nums ${c.score}`}>{displayScore}</span>
+              <span className="text-zinc-600 text-[8px] sm:text-[10px] font-mono">/100</span>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Recovery label — own row on mobile since the ring is too small to hold it */}
+      <p className={`sm:hidden mt-2 text-xs font-black uppercase tracking-tight ${c.label}`}>
+        Recovery: {score.label}
+        {!data.readiness && !checkinOpen && (
+          <button
+            onClick={() => setCheckinOpen(true)}
+            className="ml-2 text-[10px] font-normal normal-case text-zinc-400 border border-zinc-700 rounded px-1.5 py-0.5 hover:border-zinc-500 transition-colors"
+          >
+            Add check-in
+          </button>
+        )}
+      </p>
 
       {checkinOpen && (
         <div className="border-t border-zinc-800 pt-3 space-y-2">
