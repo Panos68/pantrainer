@@ -8,11 +8,9 @@ import { isPendingWeekDue } from '@/lib/week-activation'
 import { sessionToLoadPoint } from '@/lib/training-load'
 import GymWeekBadge from '@/components/GymWeekBadge'
 import NewWeekButton from '@/components/NewWeekButton'
-import HealthFlagsBanner from '@/components/HealthFlagsBanner'
 import WeekBrowser from '@/components/WeekBrowser'
 import HomeQuickPanels from '@/components/HomeQuickPanels'
-import RecoveryScorePanel from '@/components/RecoveryScorePanel'
-import AdaptiveAlertBanner from '@/components/AdaptiveAlertBanner'
+import HomeHero from '@/components/HomeHero'
 
 function formatDuration(totalMin: number): string {
   if (totalMin <= 0) return '—'
@@ -23,45 +21,18 @@ function formatDuration(totalMin: number): string {
   return `${h}h ${m}m`
 }
 
-function WeekStatsBar({
-  calories, durationMin, load, loadDelta, loadZone, acwr,
-}: {
-  calories: number
-  durationMin: number
-  load: number
-  loadDelta: number | null
-  loadZone: { label: string; color: string } | null
-  acwr: number | null
-}) {
+function WeekStatsBar({ calories, durationMin }: { calories: number; durationMin: number }) {
   return (
     <div className="flex gap-6 sm:gap-10">
       <div>
-        <p className="text-zinc-500 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-0.5">Total Calories</p>
-        <p className="text-zinc-50 text-lg font-black tabular-nums leading-none">
+        <p className="text-zinc-600 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-0.5">Total Calories</p>
+        <p className="text-zinc-300 text-base font-bold tabular-nums leading-none">
           {calories > 0 ? calories.toLocaleString() : '—'}
         </p>
       </div>
       <div>
-        <p className="text-zinc-500 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-0.5">Total Time</p>
-        <p className="text-zinc-50 text-lg font-black tabular-nums leading-none">{formatDuration(durationMin)}</p>
-      </div>
-      <div>
-        <p className="text-zinc-500 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-0.5">Load</p>
-        <div className="flex items-baseline gap-2">
-          <p className="text-zinc-50 text-lg font-black tabular-nums leading-none">
-            {load > 0 ? load.toString() : '—'}
-          </p>
-          {loadZone && (
-            <span className={`text-[11px] font-mono font-bold uppercase ${loadZone.color}`}>
-              {loadZone.label}{acwr != null ? ` (${acwr.toFixed(2)})` : ''}
-            </span>
-          )}
-          {loadDelta != null && (
-            <span className={`text-[11px] font-mono font-bold ${loadDelta > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
-              {loadDelta > 0 ? `+${loadDelta}%` : `${loadDelta}%`}
-            </span>
-          )}
-        </div>
+        <p className="text-zinc-600 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-0.5">Total Time</p>
+        <p className="text-zinc-300 text-base font-bold tabular-nums leading-none">{formatDuration(durationMin)}</p>
       </div>
     </div>
   )
@@ -86,7 +57,7 @@ export default async function Home() {
     return (
       <main className="min-h-screen bg-zinc-950 text-zinc-50 flex flex-col items-center justify-center p-8">
         <div className="max-w-md w-full text-center space-y-6">
-          <p className="text-lime-400 text-xs font-mono font-bold tracking-[0.3em] uppercase">
+          <p className="text-cyan-400 text-xs font-mono font-bold tracking-[0.3em] uppercase">
             PanTrainer
           </p>
           <h1 className="text-5xl font-black tracking-tight uppercase leading-none">
@@ -98,7 +69,7 @@ export default async function Home() {
           <div>
             <NewWeekButton
               label="START YOUR WEEK"
-              className="w-full h-14 bg-lime-400 hover:bg-lime-300 active:bg-lime-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase rounded-xl transition-colors disabled:opacity-50"
+              className="w-full h-14 bg-cyan-400 hover:bg-cyan-300 active:bg-cyan-500 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase rounded-xl transition-colors disabled:opacity-50"
             />
           </div>
         </div>
@@ -163,15 +134,13 @@ export default async function Home() {
     : acwr > 1.3 ? { label: 'High Risk', color: 'text-red-400' }
     : { label: 'Low', color: 'text-zinc-400' }
 
-  const hasActiveFlags = week.health_flags.some((f) => !f.cleared)
-
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-50">
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-8 space-y-6">
 
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <p className="text-lime-400 text-xs font-mono font-bold tracking-[0.3em] uppercase mb-1">
+            <p className="text-cyan-400 text-xs font-mono font-bold tracking-[0.3em] uppercase mb-1">
               PanTrainer
             </p>
             <h1 className="text-3xl sm:text-4xl font-black tracking-tight uppercase leading-none text-zinc-50">
@@ -186,23 +155,26 @@ export default async function Home() {
           </div>
         </header>
 
-        <div>
-          <p className="text-zinc-500 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-2">This Week</p>
-          <WeekStatsBar calories={weekCalories} durationMin={weekDurationMin} load={weekLoad} loadDelta={loadDelta} loadZone={loadZone} acwr={acwr} />
+        <HomeHero
+          weekLoad={weekLoad}
+          loadDelta={loadDelta}
+          acwr={acwr}
+          loadZone={loadZone}
+          healthFlags={week.health_flags}
+        />
+
+        <div className="animate-fade-in-up" style={{ animationDelay: '0ms' }}>
+          <p className="text-zinc-600 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-2">This Week</p>
+          <WeekStatsBar calories={weekCalories} durationMin={weekDurationMin} />
         </div>
 
-        <div className="grid md:grid-cols-2 gap-4 items-start">
+        <div className="animate-fade-in-up" style={{ animationDelay: '40ms' }}>
           <HomeQuickPanels week={week} todayISO={todayISO} baselineRhr={profile.rhr_bpm} />
-          <RecoveryScorePanel />
         </div>
 
-        <AdaptiveAlertBanner />
-
-        <div className="space-y-3">
-          {hasActiveFlags && <HealthFlagsBanner flags={week.health_flags} />}
+        <div className="animate-fade-in-up" style={{ animationDelay: '80ms' }}>
+          <WeekBrowser weeks={[...archivedWeeks, week]} pendingWeek={pendingWeek ?? undefined} todayISO={todayISO} />
         </div>
-
-        <WeekBrowser weeks={[...archivedWeeks, week]} pendingWeek={pendingWeek ?? undefined} todayISO={todayISO} />
 
         <footer className="hidden md:flex items-center gap-4 pt-4 border-t border-zinc-800">
           <Link
