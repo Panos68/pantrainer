@@ -21,23 +21,6 @@ function formatDuration(totalMin: number): string {
   return `${h}h ${m}m`
 }
 
-function WeekStatsBar({ calories, durationMin }: { calories: number; durationMin: number }) {
-  return (
-    <div className="flex gap-6 sm:gap-10">
-      <div>
-        <p className="text-zinc-600 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-0.5">Total Calories</p>
-        <p className="text-zinc-300 text-base font-bold tabular-nums leading-none">
-          {calories > 0 ? calories.toLocaleString() : '—'}
-        </p>
-      </div>
-      <div>
-        <p className="text-zinc-600 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-0.5">Total Time</p>
-        <p className="text-zinc-300 text-base font-bold tabular-nums leading-none">{formatDuration(durationMin)}</p>
-      </div>
-    </div>
-  )
-}
-
 export default async function Home() {
   if (await isPendingWeekDue()) redirect('/api/week/activate')
 
@@ -161,12 +144,9 @@ export default async function Home() {
           acwr={acwr}
           loadZone={loadZone}
           healthFlags={week.health_flags}
+          calories={weekCalories}
+          durationLabel={formatDuration(weekDurationMin)}
         />
-
-        <div className="animate-fade-in-up" style={{ animationDelay: '0ms' }}>
-          <p className="text-zinc-600 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-2">This Week</p>
-          <WeekStatsBar calories={weekCalories} durationMin={weekDurationMin} />
-        </div>
 
         <div className="animate-fade-in-up" style={{ animationDelay: '40ms' }}>
           <HomeQuickPanels week={week} todayISO={todayISO} baselineRhr={profile.rhr_bpm} />

@@ -13,38 +13,53 @@ interface HomeHeroProps {
   acwr: number | null
   loadZone: { label: string; color: string } | null
   healthFlags: HealthFlag[]
+  calories: number
+  durationLabel: string
 }
 
-function HeroLoadStat({ weekLoad, loadDelta, acwr, loadZone }: Omit<HomeHeroProps, 'healthFlags'>) {
-  const displayLoad = useCountUp(weekLoad)
-  const displayAcwrHundredths = useCountUp(acwr != null ? Math.round(acwr * 100) : 0)
-
+function StatMini({ label, value }: { label: string; value: string }) {
   return (
-    <div className="text-left md:text-right shrink-0">
-      <p className="text-zinc-500 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-1">
-        This Week&rsquo;s Load
-      </p>
-      <div className="flex items-baseline gap-3 md:justify-end">
-        <span className="font-display font-bold text-3xl text-cyan-400 leading-none tabular-nums">
-          {weekLoad > 0 ? displayLoad : '—'}
-        </span>
-        {loadDelta != null && (
-          <span className={`text-xs font-mono font-bold ${loadDelta > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
-            {loadDelta > 0 ? `+${loadDelta}%` : `${loadDelta}%`}
-          </span>
-        )}
-      </div>
-      {loadZone && acwr != null && (
-        <p className={`mt-1 font-display font-bold text-sm ${loadZone.color}`}>
-          {(displayAcwrHundredths / 100).toFixed(2)}{' '}
-          <span className="text-[10px] font-mono uppercase tracking-widest">{loadZone.label}</span>
-        </p>
-      )}
+    <div>
+      <p className="text-zinc-600 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-0.5">{label}</p>
+      <p className="text-zinc-300 text-lg font-bold tabular-nums leading-none">{value}</p>
     </div>
   )
 }
 
-export default function HomeHero({ weekLoad, loadDelta, acwr, loadZone, healthFlags }: HomeHeroProps) {
+function WeekStatsRow({ weekLoad, loadDelta, acwr, loadZone, calories, durationLabel }: Omit<HomeHeroProps, 'healthFlags'>) {
+  const displayLoad = useCountUp(weekLoad)
+  const displayAcwrHundredths = useCountUp(acwr != null ? Math.round(acwr * 100) : 0)
+
+  return (
+    <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
+      <div>
+        <p className="text-zinc-500 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-0.5">
+          This Week&rsquo;s Load
+        </p>
+        <div className="flex items-baseline gap-3">
+          <span className="font-display font-bold text-3xl text-cyan-400 leading-none tabular-nums">
+            {weekLoad > 0 ? displayLoad : '—'}
+          </span>
+          {loadDelta != null && (
+            <span className={`text-xs font-mono font-bold ${loadDelta > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+              {loadDelta > 0 ? `+${loadDelta}%` : `${loadDelta}%`}
+            </span>
+          )}
+          {loadZone && acwr != null && (
+            <span className={`font-display font-bold text-sm ${loadZone.color}`}>
+              {(displayAcwrHundredths / 100).toFixed(2)}{' '}
+              <span className="text-[10px] font-mono uppercase tracking-widest">{loadZone.label}</span>
+            </span>
+          )}
+        </div>
+      </div>
+      <StatMini label="Calories" value={calories > 0 ? calories.toLocaleString() : '—'} />
+      <StatMini label="Time" value={durationLabel} />
+    </div>
+  )
+}
+
+export default function HomeHero({ weekLoad, loadDelta, acwr, loadZone, healthFlags, calories, durationLabel }: HomeHeroProps) {
   const hasActiveFlags = healthFlags.some((f) => !f.cleared)
 
   return (
@@ -58,9 +73,18 @@ export default function HomeHero({ weekLoad, loadDelta, acwr, loadZone, healthFl
         className="pointer-events-none absolute inset-0"
         style={{ background: 'radial-gradient(ellipse 50% 40% at 100% 0%, rgba(34,211,238,0.06) 0%, transparent 70%)' }}
       />
-      <div className="relative flex flex-col md:flex-row gap-6 md:items-center md:justify-between">
+      <div className="relative">
         <RecoveryScorePanel />
-        <HeroLoadStat weekLoad={weekLoad} loadDelta={loadDelta} acwr={acwr} loadZone={loadZone} />
+      </div>
+      <div className="relative border-t border-zinc-800 pt-4">
+        <WeekStatsRow
+          weekLoad={weekLoad}
+          loadDelta={loadDelta}
+          acwr={acwr}
+          loadZone={loadZone}
+          calories={calories}
+          durationLabel={durationLabel}
+        />
       </div>
       <div className="relative space-y-4">
         <AdaptiveAlertBanner />
