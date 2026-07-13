@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
+import { motion, useReducedMotion } from 'framer-motion'
+import { useCountUp } from '@/lib/useCountUp'
 
 interface ScoreBreakdown {
   total: number
@@ -74,6 +76,7 @@ async function fetchReadiness(date: string, cacheBust = false): Promise<Readines
 
 
 function ScoreRing({ total, color }: { total: number; color: 'green' | 'amber' | 'red' }) {
+  const prefersReducedMotion = useReducedMotion()
   const radius = 44
   const stroke = 5
   const size = (radius + stroke) * 2
@@ -96,7 +99,7 @@ function ScoreRing({ total, color }: { total: number; color: 'green' | 'amber' |
         stroke="#27272a"
         strokeWidth={stroke}
       />
-      <circle
+      <motion.circle
         cx={size / 2}
         cy={size / 2}
         r={radius}
@@ -104,8 +107,10 @@ function ScoreRing({ total, color }: { total: number; color: 'green' | 'amber' |
         stroke={ringColor}
         strokeWidth={stroke}
         strokeDasharray={circumference}
-        strokeDashoffset={offset}
         strokeLinecap="round"
+        initial={{ strokeDashoffset: prefersReducedMotion ? offset : circumference }}
+        animate={{ strokeDashoffset: offset }}
+        transition={{ duration: 1, ease: 'easeOut' }}
       />
     </svg>
   )
@@ -178,6 +183,7 @@ export default function RecoveryScorePanel() {
   const [mood, setMood] = useState(3)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const displayScore = useCountUp(data?.score.total ?? 0)
 
   useEffect(() => {
     async function load() {
@@ -255,8 +261,8 @@ export default function RecoveryScorePanel() {
 
   if (loading) {
     return (
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 animate-pulse">
-        <div className="h-4 bg-zinc-800 rounded w-32 mb-3" />
+      <div className="w-full md:flex-1 animate-pulse space-y-2">
+        <div className="h-4 bg-zinc-800 rounded w-32" />
         <div className="h-10 bg-zinc-800 rounded w-20" />
       </div>
     )
@@ -272,8 +278,8 @@ export default function RecoveryScorePanel() {
 
   return (
     <div
-      className={`border ${c.border} rounded-xl p-3 overflow-hidden`}
-      style={{ background: `radial-gradient(ellipse 60% 80% at 95% 50%, ${c.glow} 0%, transparent 60%), #18181b` }}
+      className="w-full md:flex-1 relative overflow-hidden rounded-xl p-3"
+      style={{ background: `radial-gradient(ellipse 60% 80% at 95% 50%, ${c.glow} 0%, transparent 60%)` }}
     >
       <div className="flex items-center gap-4">
         {/* Breakdown bars — fill available space */}
@@ -307,7 +313,7 @@ export default function RecoveryScorePanel() {
           >
             <ScoreRing total={score.total} color={score.color} />
             <div className="flex flex-col items-center">
-              <span className={`text-4xl font-black leading-none ${c.score}`}>{score.total}</span>
+              <span className={`font-display font-bold text-6xl leading-none tabular-nums ${c.score}`}>{displayScore}</span>
               <span className="text-zinc-600 text-[10px] font-mono">/100</span>
             </div>
           </div>
