@@ -25,7 +25,7 @@ function HeroLoadStat({ weekLoad, loadDelta, acwr, loadZone }: Omit<HomeHeroProp
         This Week&rsquo;s Load
       </p>
       <div className="flex items-baseline gap-3 md:justify-end">
-        <span className="font-display font-bold text-6xl text-cyan-400 leading-none tabular-nums">
+        <span className="font-display font-bold text-3xl text-cyan-400 leading-none tabular-nums">
           {weekLoad > 0 ? displayLoad : '—'}
         </span>
         {loadDelta != null && (
@@ -35,9 +35,9 @@ function HeroLoadStat({ weekLoad, loadDelta, acwr, loadZone }: Omit<HomeHeroProp
         )}
       </div>
       {loadZone && acwr != null && (
-        <p className={`mt-2 font-display font-bold text-lg ${loadZone.color}`}>
+        <p className={`mt-1 font-display font-bold text-sm ${loadZone.color}`}>
           {(displayAcwrHundredths / 100).toFixed(2)}{' '}
-          <span className="text-xs font-mono uppercase tracking-widest">{loadZone.label}</span>
+          <span className="text-[10px] font-mono uppercase tracking-widest">{loadZone.label}</span>
         </p>
       )}
     </div>
@@ -52,14 +52,20 @@ export default function HomeHero({ weekLoad, loadDelta, acwr, loadZone, healthFl
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-4"
+      className="relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 p-5 space-y-4"
     >
-      <div className="flex flex-col md:flex-row gap-6 md:items-center md:justify-between">
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{ background: 'radial-gradient(ellipse 50% 40% at 100% 0%, rgba(34,211,238,0.06) 0%, transparent 70%)' }}
+      />
+      <div className="relative flex flex-col md:flex-row gap-6 md:items-center md:justify-between">
         <RecoveryScorePanel />
         <HeroLoadStat weekLoad={weekLoad} loadDelta={loadDelta} acwr={acwr} loadZone={loadZone} />
       </div>
-      <AdaptiveAlertBanner />
-      {hasActiveFlags && <HealthFlagsBanner flags={healthFlags} />}
+      <div className="relative space-y-4">
+        <AdaptiveAlertBanner />
+        {hasActiveFlags && <HealthFlagsBanner flags={healthFlags} />}
+      </div>
     </motion.div>
   )
 }
