@@ -77,8 +77,8 @@ async function fetchReadiness(date: string, cacheBust = false): Promise<Readines
 
 function ScoreRing({ total, color }: { total: number; color: 'green' | 'amber' | 'red' }) {
   const prefersReducedMotion = useReducedMotion()
-  const radius = 44
-  const stroke = 5
+  const radius = 64
+  const stroke = 7
   const size = (radius + stroke) * 2
   const circumference = 2 * Math.PI * radius
   const offset = circumference - (total / 100) * circumference
@@ -274,7 +274,7 @@ export default function RecoveryScorePanel() {
   const noSleep = !garmin || garmin.sleep_hours == null
   const noRhr = !garmin || garmin.resting_hr_bpm == null
   const c = COLOR[score.color]
-  const ringSize = (44 + 5) * 2
+  const ringSize = (64 + 7) * 2
 
   return (
     <div
@@ -297,7 +297,7 @@ export default function RecoveryScorePanel() {
         <div className="flex items-center gap-3 shrink-0">
           <div className="text-right">
             <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-widest mb-0.5">Recovery</p>
-            <p className={`text-xl font-black uppercase tracking-tight ${c.label}`}>{score.label}</p>
+            <p className={`text-2xl font-black uppercase tracking-tight ${c.label}`}>{score.label}</p>
             {!data.readiness && !checkinOpen && (
               <button
                 onClick={() => setCheckinOpen(true)}
@@ -313,7 +313,7 @@ export default function RecoveryScorePanel() {
           >
             <ScoreRing total={score.total} color={score.color} />
             <div className="flex flex-col items-center">
-              <span className={`font-display font-bold text-6xl leading-none tabular-nums ${c.score}`}>{displayScore}</span>
+              <span className={`font-display font-bold text-7xl leading-none tabular-nums ${c.score}`}>{displayScore}</span>
               <span className="text-zinc-600 text-[10px] font-mono">/100</span>
             </div>
           </div>
