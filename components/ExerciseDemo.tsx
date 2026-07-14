@@ -32,7 +32,6 @@ export default function ExerciseDemo({ name }: { name: string }) {
   const [match, setMatch] = useState<WorkoutExercise | null | undefined>(undefined)
   const [videoFailed, setVideoFailed] = useState(false)
   const [youtubeFailed, setYoutubeFailed] = useState(false)
-  const [useStaticFallback, setUseStaticFallback] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const unplayableTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -41,7 +40,6 @@ export default function ExerciseDemo({ name }: { name: string }) {
     if (!open || match !== undefined) return
     lookupExercise(name).then((result) => {
       setMatch(result)
-      if (!result) setUseStaticFallback(true)
     })
   }, [open, name, match])
 
@@ -67,7 +65,8 @@ export default function ExerciseDemo({ name }: { name: string }) {
 
   const isLoading = open && match === undefined
 
-  const shouldFallbackToStatic = useStaticFallback || (videoFailed && !youtubeEmbed)
+  const noLiveMatch = match === null
+  const shouldFallbackToStatic = noLiveMatch || (videoFailed && (!youtubeEmbed || youtubeFailed))
   const localMedia = shouldFallbackToStatic ? findLocalMedia(name) : null
   const showStaticImage = shouldFallbackToStatic && localMedia != null
   const showYoutube = !isLoading && (videoFailed || !videoUrl) && youtubeEmbed && !youtubeFailed && !shouldFallbackToStatic
@@ -94,7 +93,6 @@ export default function ExerciseDemo({ name }: { name: string }) {
 
   function handleYoutubeError() {
     setYoutubeFailed(true)
-    setUseStaticFallback(true)
   }
 
   return (
@@ -104,7 +102,6 @@ export default function ExerciseDemo({ name }: { name: string }) {
         onClick={() => {
           setVideoFailed(false)
           setYoutubeFailed(false)
-          setUseStaticFallback(false)
           setOpen((v) => !v)
         }}
         className="text-zinc-700 hover:text-zinc-400 transition-colors text-[10px]"
