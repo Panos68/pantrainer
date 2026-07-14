@@ -7,6 +7,10 @@ const ABBREVIATIONS: Record<string, string> = {
   kb: 'kettlebell',
 }
 
+function singularize(t: string): string {
+  return t.length > 3 && t.endsWith('s') && !t.endsWith('ss') ? t.slice(0, -1) : t
+}
+
 export function tokenize(name: string): string[] {
   return name
     .toLowerCase()
@@ -14,7 +18,7 @@ export function tokenize(name: string): string[] {
     .replace(/[^a-z0-9 ]/g, '')
     .split(/\s+/)
     .filter(Boolean)
-    .map((t) => ABBREVIATIONS[t] ?? t)
+    .map((t) => singularize(ABBREVIATIONS[t] ?? t))
 }
 
 export function coreTokens(tokens: string[]): string[] {
@@ -23,16 +27,19 @@ export function coreTokens(tokens: string[]): string[] {
 
 function score(hayName: string, needleTokens: string[], needleCore: string[]): number {
   const hayTokens = tokenize(hayName)
-  const hayCore = coreTokens(hayTokens)
 
   if (hayTokens.join(' ') === needleTokens.join(' ')) return 100
 
-  const allPresent = needleTokens.every((t) => hayTokens.includes(t))
-  if (!allPresent) return 0
+  // Every *core* (non-equipment) needle word must appear in the haystack name.
+  // Equipment qualifiers (cable/dumbbell/machine/etc.) are treated as optional —
+  // real-world exercise names vary wildly in whether they're included at all
+  // (e.g. "Cable Face Pull" vs. the dataset's plain "Face Pull"), so requiring
+  // them caused most real names to fail to match anything.
+  if (needleCore.length === 0) return 0
+  const allCorePresent = needleCore.every((t) => hayTokens.includes(t))
+  if (!allCorePresent) return 0
 
-  const coreMatches = needleCore.filter((t) => hayCore.includes(t)).length
-  if (coreMatches === 0) return 0
-
+  const coreMatches = needleCore.length
   const extraWords = hayTokens.filter((t) => !needleTokens.includes(t)).length
   const needleHasEquipment = needleTokens.some((t) => EQUIPMENT.has(t))
   const barbellBonus = !needleHasEquipment && hayTokens.includes('barbell') ? 1 : 0

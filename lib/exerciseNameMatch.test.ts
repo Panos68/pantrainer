@@ -19,6 +19,29 @@ function testFindBestMatch() {
   assert.equal(findBestMatch(items, 'Bulgarian split squat', getName), null, 'returns null when nothing matches')
 }
 
+function testToleratesExtraQualifierWords() {
+  const items = [{ name: 'Seated Leg Curl' }, { name: 'Face Pull' }]
+  const getName = (i: { name: string }) => i.name
+  assert.equal(
+    findBestMatch(items, 'Seated Leg Curl Machine', getName)?.name,
+    'Seated Leg Curl',
+    'an extra equipment-style qualifier in the search name (e.g. "Machine") should not block a match',
+  )
+  assert.equal(
+    findBestMatch(items, 'Cable Face Pull', getName)?.name,
+    'Face Pull',
+    'an extra equipment word in the search name (e.g. "Cable") should not block a match',
+  )
+}
+
+function testTreatsPluralsAsEquivalent() {
+  const items = [{ name: 'Hip Circles (prone)' }]
+  const getName = (i: { name: string }) => i.name
+  assert.equal(findBestMatch(items, 'Hip Circle', getName)?.name, 'Hip Circles (prone)')
+}
+
 testTokenize()
 testFindBestMatch()
+testToleratesExtraQualifierWords()
+testTreatsPluralsAsEquivalent()
 console.log('lib/exerciseNameMatch.test.ts: all assertions passed')
