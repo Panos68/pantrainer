@@ -3,6 +3,13 @@ import { z } from 'zod'
 // Session status
 export const SessionStatusSchema = z.enum(['planned', 'in_progress', 'completed', 'skipped'])
 
+export const SetEntrySchema = z.object({
+  reps: z.number(),
+  weight_kg: z.number().nullable(),
+  effort: z.enum(['easy', 'perfect', 'hard']),
+  completed_at: z.string(),
+})
+
 // Planned exercise within a session
 export const ExerciseSchema = z.object({
   name: z.string(),
@@ -15,6 +22,7 @@ export const ExerciseSchema = z.object({
   actual_weight_kg: z.number().nullable().optional(),
   effort: z.enum(['easy', 'perfect', 'hard']).nullable().optional(),
   actual_note: z.string().nullable().optional(),
+  set_log: z.array(SetEntrySchema).optional(),
   alternatives: z.array(z.object({
     name: z.string(),
     sets: z.number().nullable().optional(),
@@ -228,6 +236,7 @@ export const ProposedPlanSchema = z.object({
 })
 
 // Export types
+export type SetEntry = z.infer<typeof SetEntrySchema>
 export type Exercise = z.infer<typeof ExerciseSchema>
 export type ExerciseGroup = z.infer<typeof ExerciseGroupSchema>
 export type Session = z.infer<typeof SessionSchema>
