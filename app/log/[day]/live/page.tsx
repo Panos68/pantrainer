@@ -16,23 +16,56 @@ function resumeIndex(queue: LiveStep[], loggedSets: Record<number, SetEntry[]>):
 function SetEntryForm({
   step,
   saving,
+  canSwap,
   onLog,
 }: {
   step: Extract<LiveStep, { kind: 'set' }>
   saving: boolean
+  canSwap: boolean
   onLog: (reps: string, weight: string, effort: SetEntry['effort']) => void
 }) {
-  const [reps, setReps] = useState(step.exercise.reps != null ? String(step.exercise.reps) : '')
-  const [weight, setWeight] = useState(step.exercise.weight_kg != null ? String(step.exercise.weight_kg) : '')
+  const [altIndex, setAltIndex] = useState<number | null>(null)
+  const activeExercise =
+    altIndex != null
+      ? {
+          ...step.exercise,
+          name: step.exercise.alternatives[altIndex].name,
+          reps: step.exercise.alternatives[altIndex].reps ?? step.exercise.reps,
+          weight_kg: step.exercise.alternatives[altIndex].weight_kg ?? step.exercise.weight_kg,
+        }
+      : step.exercise
+  const [reps, setReps] = useState(activeExercise.reps != null ? String(activeExercise.reps) : '')
+  const [weight, setWeight] = useState(activeExercise.weight_kg != null ? String(activeExercise.weight_kg) : '')
   const roundLabel = step.roundNumber != null ? `Round ${step.roundNumber} of ${step.totalRounds}` : null
+
+  function handleSwap(v: number) {
+    setAltIndex(v === -1 ? null : v)
+    const alt = v === -1 ? null : step.exercise.alternatives[v]
+    const nextReps = alt?.reps ?? step.exercise.reps
+    const nextWeight = alt?.weight_kg ?? step.exercise.weight_kg
+    setReps(nextReps != null ? String(nextReps) : '')
+    setWeight(nextWeight != null ? String(nextWeight) : '')
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-zinc-950 text-zinc-100 p-6">
       {roundLabel && <div className="text-xs text-zinc-500 font-mono">{roundLabel}</div>}
-      <div className="text-2xl font-mono">{step.exercise.name}</div>
+      <div className="text-2xl font-mono">{activeExercise.name}</div>
       <div className="text-sm text-zinc-500 font-mono">
         Set {step.setNumber} of {step.totalSets}
       </div>
+      {canSwap && step.exercise.alternatives.length > 0 && (
+        <select
+          value={altIndex ?? -1}
+          onChange={(e) => handleSwap(Number(e.target.value))}
+          className="px-3 py-2 rounded bg-zinc-900 text-zinc-200 text-sm font-mono"
+        >
+          <option value={-1}>{step.exercise.name}</option>
+          {step.exercise.alternatives.map((alt, ai) => (
+            <option key={ai} value={ai}>{alt.name}</option>
+          ))}
+        </select>
+      )}
       <div className="flex gap-3">
         <input
           type="number"
@@ -211,5 +244,6 @@ export default function LiveSessionPage() {
     )
   }
 
-  return <SetEntryForm key={stepIndex} step={step} saving={saving} onLog={logCurrentSet} />
+  const canSwap = (loggedSets[step.exerciseIndex]?.length ?? 0) === 0
+  return <SetEntryForm key={stepIndex} step={step} saving={saving} canSwap={canSwap} onLog={logCurrentSet} />
 }
