@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import RestTimer from '@/components/RestTimer'
+import ExerciseDemo from '@/components/ExerciseDemo'
 import { buildLiveQueue, type LiveStep } from '@/lib/liveSession'
 import type { Session, SetEntry } from '@/lib/schema'
 
@@ -50,7 +51,10 @@ function SetEntryForm({
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-zinc-950 text-zinc-100 p-6">
       {roundLabel && <div className="text-xs text-zinc-500 font-mono">{roundLabel}</div>}
-      <div className="text-2xl font-mono">{activeExercise.name}</div>
+      <div className="flex items-center gap-2">
+        <div className="text-2xl font-mono">{activeExercise.name}</div>
+        <ExerciseDemo name={activeExercise.name} />
+      </div>
       <div className="text-sm text-zinc-500 font-mono">
         Set {step.setNumber} of {step.totalSets}
       </div>
