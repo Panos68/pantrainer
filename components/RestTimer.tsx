@@ -8,6 +8,10 @@ function formatMmSs(totalSeconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+/**
+ * Render with a `key` that changes per rest period (e.g. the queue step index)
+ * so remaining-time state resets via remount instead of a synced effect.
+ */
 export default function RestTimer({
   seconds,
   onDone,
@@ -20,10 +24,6 @@ export default function RestTimer({
   onAddSeconds: (delta: number) => void
 }) {
   const [remaining, setRemaining] = useState(seconds)
-
-  useEffect(() => {
-    setRemaining(seconds)
-  }, [seconds])
 
   useEffect(() => {
     if (remaining <= 0) {

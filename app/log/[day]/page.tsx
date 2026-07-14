@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import type { Session, GarminRecoveryDay, ExerciseGroup } from '@/lib/schema'
 import GarminRecoveryCard from '@/components/GarminRecoveryCard'
 import MuscleMap from '@/components/MuscleMap'
@@ -796,12 +797,22 @@ export default function LogDayPage() {
               {session.day}
             </h1>
           </div>
-          <button
-            onClick={() => router.push('/')}
-            className="text-zinc-500 hover:text-zinc-300 text-xs font-mono tracking-widest uppercase transition-colors"
-          >
-            ← Home
-          </button>
+          <div className="flex items-center gap-3">
+            {!isFutureSession && ((session.exercises && session.exercises.length > 0) || (session.exercise_groups && session.exercise_groups.length > 0)) && (
+              <Link
+                href={`/log/${day}/live`}
+                className="px-3 py-1.5 rounded-full bg-lime-400/10 text-lime-400 border border-lime-400/30 text-xs font-mono font-bold tracking-widest uppercase transition-colors hover:bg-lime-400/20"
+              >
+                Start Live Session
+              </Link>
+            )}
+            <button
+              onClick={() => router.push('/')}
+              className="text-zinc-500 hover:text-zinc-300 text-xs font-mono tracking-widest uppercase transition-colors"
+            >
+              ← Home
+            </button>
+          </div>
         </header>
 
         {/* Coach guidance banner */}
