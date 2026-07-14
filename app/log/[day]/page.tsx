@@ -2,10 +2,12 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import type { Session, GarminRecoveryDay, ExerciseGroup } from '@/lib/schema'
 import GarminRecoveryCard from '@/components/GarminRecoveryCard'
 import MuscleMap from '@/components/MuscleMap'
 import ExerciseDemo from '@/components/ExerciseDemo'
+import { deriveAggregates } from '@/lib/liveSession'
 
 // ─── Type colors ─────────────────────────────────────────────────────────
 
@@ -402,20 +404,32 @@ export default function LogDayPage() {
           ? sessionData.exercise_groups.flatMap((g) => g.exercises)
           : (sessionData.exercises ?? [])
         setExerciseActuals(
-          flatExercises.map((ex) => ({
-            sets: ex.actual_sets?.toString() ?? ex.sets?.toString() ?? '',
-            reps:
-              ex.actual_reps?.toString() ??
-              (typeof ex.reps === 'number' ? ex.reps.toString() : ex.reps ?? ''),
-            weight_kg:
-              ex.actual_weight_kg != null
-                ? ex.actual_weight_kg.toString()
-                : ex.weight_kg != null
-                ? ex.weight_kg.toString()
-                : '',
-            effort: ex.effort ?? null,
-            note: ex.actual_note ?? '',
-            }))
+          flatExercises.map((ex) => {
+            if (ex.set_log && ex.set_log.length > 0) {
+              const derived = deriveAggregates(ex.set_log)
+              return {
+                sets: derived.actual_sets.toString(),
+                reps: derived.actual_reps.toString(),
+                weight_kg: derived.actual_weight_kg?.toString() ?? '',
+                effort: derived.effort,
+                note: ex.actual_note ?? '',
+              }
+            }
+            return {
+              sets: ex.actual_sets?.toString() ?? ex.sets?.toString() ?? '',
+              reps:
+                ex.actual_reps?.toString() ??
+                (typeof ex.reps === 'number' ? ex.reps.toString() : ex.reps ?? ''),
+              weight_kg:
+                ex.actual_weight_kg != null
+                  ? ex.actual_weight_kg.toString()
+                  : ex.weight_kg != null
+                  ? ex.weight_kg.toString()
+                  : '',
+              effort: ex.effort ?? null,
+              note: ex.actual_note ?? '',
+            }
+          })
         )
 
         // Auto-fetch if no Garmin match yet — regardless of status
@@ -783,12 +797,22 @@ export default function LogDayPage() {
               {session.day}
             </h1>
           </div>
-          <button
-            onClick={() => router.push('/')}
-            className="text-zinc-500 hover:text-zinc-300 text-xs font-mono tracking-widest uppercase transition-colors"
-          >
-            ← Home
-          </button>
+          <div className="flex items-center gap-3">
+            {!isFutureSession && ((session.exercises && session.exercises.length > 0) || (session.exercise_groups && session.exercise_groups.length > 0)) && (
+              <Link
+                href={`/log/${day}/live`}
+                className="px-3 py-1.5 rounded-full bg-lime-400/10 text-lime-400 border border-lime-400/30 text-xs font-mono font-bold tracking-widest uppercase transition-colors hover:bg-lime-400/20"
+              >
+                Start Live Session
+              </Link>
+            )}
+            <button
+              onClick={() => router.push('/')}
+              className="text-zinc-500 hover:text-zinc-300 text-xs font-mono tracking-widest uppercase transition-colors"
+            >
+              ← Home
+            </button>
+          </div>
         </header>
 
         {/* Coach guidance banner */}
