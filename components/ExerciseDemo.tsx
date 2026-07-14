@@ -145,22 +145,17 @@ export default function ExerciseDemo({ name }: { name: string }) {
           )}
 
           {showStaticImage && (
-            <div className="relative w-full">
-              <div className="grid grid-cols-2 gap-px bg-zinc-800">
-                {localMedia!.images.slice(0, 2).map((img, i) => (
-                  <div key={img} className="relative aspect-[3/2]">
-                    <Image
-                      src={`/exercise-media/${img}`}
-                      alt={`${name} demo — ${i === 0 ? 'start' : 'end'} position`}
-                      fill
-                      className="object-cover"
-                    />
-                  </div>
-                ))}
-              </div>
-              <span className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-zinc-950/80 text-zinc-400 text-[9px] font-mono uppercase tracking-widest">
-                static
-              </span>
+            <div className="grid grid-cols-2 gap-px bg-zinc-800">
+              {localMedia!.images.slice(0, 2).map((img, i) => (
+                <div key={img} className="relative aspect-[3/2]">
+                  <Image
+                    src={`/exercise-media/${img}`}
+                    alt={`${name} demo — ${i === 0 ? 'start' : 'end'} position`}
+                    fill
+                    className="object-cover"
+                  />
+                </div>
+              ))}
             </div>
           )}
 
