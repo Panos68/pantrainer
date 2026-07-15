@@ -182,6 +182,39 @@ function testGetCarryForwardDefaultsFromPlan() {
   assert.deepEqual(timedDefaults, { reps: 45, weight_kg: null }, 'parses timed reps strings for the plan default')
 }
 
+function testGetCarryForwardDefaultsPerSideFiltersBySide() {
+  const plan = { name: 'DB Curl', sets: 3, reps: 10, weight_kg: 10, alternatives: [], per_side: true }
+  const logged: SetEntry[] = [
+    { reps: 10, weight_kg: 10, effort: 'perfect', completed_at: 't1', side: 'left' },
+    { reps: 10, weight_kg: 12, effort: 'hard', completed_at: 't2', side: 'right' },
+    { reps: 9, weight_kg: 10, effort: 'easy', completed_at: 't3', side: 'left' },
+  ]
+  const leftDefaults = getCarryForwardDefaults(logged, plan, 'left')
+  assert.deepEqual(
+    leftDefaults,
+    { reps: 9, weight_kg: 10 },
+    'left side carries forward from the previous left entry, skipping the right entry logged in between',
+  )
+
+  const rightDefaults = getCarryForwardDefaults(logged, plan, 'right')
+  assert.deepEqual(
+    rightDefaults,
+    { reps: 10, weight_kg: 12 },
+    'right side carries forward from the previous right entry',
+  )
+}
+
+function testGetCarryForwardDefaultsPerSideFallsBackToPlan() {
+  const plan = { name: 'DB Curl', sets: 3, reps: 10, weight_kg: 10, alternatives: [], per_side: true }
+  const logged: SetEntry[] = [{ reps: 10, weight_kg: 10, effort: 'perfect', completed_at: 't1', side: 'left' }]
+  const rightDefaults = getCarryForwardDefaults(logged, plan, 'right')
+  assert.deepEqual(
+    rightDefaults,
+    { reps: 10, weight_kg: 10 },
+    'falls back to plan default when there is no prior entry for the requested side yet',
+  )
+}
+
 testStraightSets()
 testSupersetRounds()
 testDeriveAggregates()
@@ -192,4 +225,6 @@ testApplyTableEditToSetLogTruncates()
 testApplyTableEditToSetLogFromEmpty()
 testGetCarryForwardDefaultsFromLoggedSets()
 testGetCarryForwardDefaultsFromPlan()
+testGetCarryForwardDefaultsPerSideFiltersBySide()
+testGetCarryForwardDefaultsPerSideFallsBackToPlan()
 console.log('lib/liveSession.test.ts: all assertions passed')

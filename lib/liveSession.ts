@@ -210,8 +210,10 @@ function planDefaultReps(plan: Exercise): number {
 export function getCarryForwardDefaults(
   loggedSets: SetEntry[],
   plan: Exercise,
+  side?: 'left' | 'right' | null,
 ): { reps: number; weight_kg: number | null } {
-  const prev = loggedSets[loggedSets.length - 1]
+  const candidates = side != null ? loggedSets.filter((s) => s.side === side) : loggedSets
+  const prev = candidates[candidates.length - 1]
   if (prev) {
     return { reps: prev.reps, weight_kg: prev.weight_kg }
   }
