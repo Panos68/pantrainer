@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { playBeep } from '@/lib/timerSound'
+import { notifyTimerDone } from '@/lib/notify'
 
 function formatMmSs(totalSeconds: number): string {
   const m = Math.floor(totalSeconds / 60)
@@ -11,6 +13,10 @@ function formatMmSs(totalSeconds: number): string {
 /**
  * Render with a `key` that changes per rest period (e.g. the queue step index)
  * so remaining-time state resets via remount instead of a synced effect.
+ *
+ * Countdown is timestamp-based (endAt = Date.now() + seconds*1000, stored in a
+ * ref) rather than accumulated per-second decrements, so it self-corrects
+ * after the tab is backgrounded/throttled instead of drifting or freezing.
  */
 export default function RestTimer({
   seconds,
@@ -23,15 +29,36 @@ export default function RestTimer({
   onSkip: () => void
   onAddSeconds: (delta: number) => void
 }) {
+  const endAtRef = useRef(Date.now() + seconds * 1000)
   const [remaining, setRemaining] = useState(seconds)
+  const hasBeepedAt5 = useRef(false)
+  const hasBeepedAt0 = useRef(false)
+  const hasNotified = useRef(false)
 
   useEffect(() => {
-    if (remaining <= 0) {
-      onDone()
-      return
+    const tick = () => {
+      const next = Math.max(0, Math.round((endAtRef.current - Date.now()) / 1000))
+      setRemaining(next)
     }
-    const id = setTimeout(() => setRemaining((r) => r - 1), 1000)
-    return () => clearTimeout(id)
+    tick()
+    const id = setInterval(tick, 250)
+    return () => clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    if (remaining === 5 && !hasBeepedAt5.current) {
+      hasBeepedAt5.current = true
+      playBeep(880, 150)
+    }
+    if (remaining === 0 && !hasBeepedAt0.current) {
+      hasBeepedAt0.current = true
+      playBeep(1200, 400)
+      if (!hasNotified.current) {
+        hasNotified.current = true
+        notifyTimerDone('Rest timer done')
+      }
+      onDone()
+    }
   }, [remaining, onDone])
 
   return (
@@ -40,7 +67,7 @@ export default function RestTimer({
       <div className="flex gap-3">
         <button
           type="button"
-          onClick={() => { setRemaining((r) => r + 30); onAddSeconds(30) }}
+          onClick={() => { endAtRef.current += 30000; setRemaining((r) => r + 30); onAddSeconds(30) }}
           className="px-4 py-2 rounded bg-zinc-800 text-zinc-200 text-sm"
         >
           +30s
