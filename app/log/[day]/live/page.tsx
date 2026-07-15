@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import RestTimer from '@/components/RestTimer'
+import ExerciseTimer from '@/components/ExerciseTimer'
 import ExerciseDemo from '@/components/ExerciseDemo'
-import { buildLiveQueue, type LiveStep } from '@/lib/liveSession'
+import { buildLiveQueue, parseTimedSeconds, type LiveStep } from '@/lib/liveSession'
 import type { Session, SetEntry } from '@/lib/schema'
 
 function resumeIndex(queue: LiveStep[], loggedSets: Record<number, SetEntry[]>): number {
@@ -35,7 +36,10 @@ function SetEntryForm({
           weight_kg: step.exercise.alternatives[altIndex].weight_kg ?? step.exercise.weight_kg,
         }
       : step.exercise
-  const [reps, setReps] = useState(activeExercise.reps != null ? String(activeExercise.reps) : '')
+  const timedSeconds = parseTimedSeconds(activeExercise.reps)
+  const [reps, setReps] = useState(
+    timedSeconds != null ? String(timedSeconds) : activeExercise.reps != null ? String(activeExercise.reps) : '',
+  )
   const [weight, setWeight] = useState(activeExercise.weight_kg != null ? String(activeExercise.weight_kg) : '')
   const roundLabel = step.roundNumber != null ? `Round ${step.roundNumber} of ${step.totalRounds}` : null
 
@@ -44,17 +48,16 @@ function SetEntryForm({
     const alt = v === -1 ? null : step.exercise.alternatives[v]
     const nextReps = alt?.reps ?? step.exercise.reps
     const nextWeight = alt?.weight_kg ?? step.exercise.weight_kg
-    setReps(nextReps != null ? String(nextReps) : '')
+    const nextTimedSeconds = parseTimedSeconds(nextReps)
+    setReps(nextTimedSeconds != null ? String(nextTimedSeconds) : nextReps != null ? String(nextReps) : '')
     setWeight(nextWeight != null ? String(nextWeight) : '')
   }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-zinc-950 text-zinc-100 p-6">
       {roundLabel && <div className="text-xs text-zinc-500 font-mono">{roundLabel}</div>}
-      <div className="flex items-center gap-2">
-        <div className="text-2xl font-mono">{activeExercise.name}</div>
-        <ExerciseDemo name={activeExercise.name} />
-      </div>
+      <div className="text-2xl font-mono">{activeExercise.name}</div>
+      <ExerciseDemo name={activeExercise.name} inline />
       <div className="text-sm text-zinc-500 font-mono">
         Set {step.setNumber} of {step.totalSets}
       </div>
@@ -70,22 +73,30 @@ function SetEntryForm({
           ))}
         </select>
       )}
-      <div className="flex gap-3">
-        <input
-          type="number"
-          value={reps}
-          onChange={(e) => setReps(e.target.value)}
-          placeholder="reps"
-          className="w-20 px-3 py-2 rounded bg-zinc-900 text-center font-mono"
+      {timedSeconds != null ? (
+        <ExerciseTimer
+          key={`${step.setNumber}-${altIndex}`}
+          seconds={timedSeconds}
+          onSkip={() => setReps(String(timedSeconds))}
         />
-        <input
-          type="number"
-          value={weight}
-          onChange={(e) => setWeight(e.target.value)}
-          placeholder="kg"
-          className="w-20 px-3 py-2 rounded bg-zinc-900 text-center font-mono"
-        />
-      </div>
+      ) : (
+        <div className="flex gap-3">
+          <input
+            type="number"
+            value={reps}
+            onChange={(e) => setReps(e.target.value)}
+            placeholder="reps"
+            className="w-20 px-3 py-2 rounded bg-zinc-900 text-center font-mono"
+          />
+          <input
+            type="number"
+            value={weight}
+            onChange={(e) => setWeight(e.target.value)}
+            placeholder="kg"
+            className="w-20 px-3 py-2 rounded bg-zinc-900 text-center font-mono"
+          />
+        </div>
+      )}
       <div className="flex gap-3">
         <button
           type="button"
@@ -110,6 +121,15 @@ function SetEntryForm({
           className="px-4 py-2 rounded bg-zinc-800 text-zinc-200 text-sm font-mono"
         >
           Hard
+        </button>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => onLog(reps, weight, null)}
+          className="px-4 py-2 rounded bg-zinc-900 text-zinc-500 text-sm font-mono"
+          title="Skip rating this exercise (e.g. stretching)"
+        >
+          Skip
         </button>
       </div>
     </div>

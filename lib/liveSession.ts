@@ -107,7 +107,7 @@ export function buildLiveQueue(session: Session): LiveStep[] {
   return steps
 }
 
-const EFFORT_RANK: Record<SetEntry['effort'], number> = { perfect: 0, easy: 1, hard: 2 }
+const EFFORT_RANK: Record<Exclude<SetEntry['effort'], null>, number> = { perfect: 0, easy: 1, hard: 2 }
 
 export function deriveAggregates(sets: SetEntry[]): {
   actual_sets: number
@@ -117,8 +117,8 @@ export function deriveAggregates(sets: SetEntry[]): {
 } {
   const last = sets[sets.length - 1]
   const worst = sets.reduce(
-    (acc, s) => (EFFORT_RANK[s.effort] > EFFORT_RANK[acc] ? s.effort : acc),
-    'perfect' as SetEntry['effort'],
+    (acc, s) => (s.effort != null && (acc == null || EFFORT_RANK[s.effort] > EFFORT_RANK[acc]) ? s.effort : acc),
+    null as SetEntry['effort'],
   )
   return {
     actual_sets: sets.length,
@@ -126,4 +126,13 @@ export function deriveAggregates(sets: SetEntry[]): {
     actual_weight_kg: last.weight_kg,
     effort: worst,
   }
+}
+
+// Matches strings like "30 sec", "45sec", "1 min" used for timed exercises (e.g. dead hang, plank).
+export function parseTimedSeconds(reps: number | string | null | undefined): number | null {
+  if (typeof reps !== 'string') return null
+  const match = reps.match(/(\d+(?:\.\d+)?)\s*(sec|min)/i)
+  if (!match) return null
+  const value = parseFloat(match[1])
+  return match[2].toLowerCase() === 'min' ? Math.round(value * 60) : Math.round(value)
 }
