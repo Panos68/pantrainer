@@ -2,8 +2,11 @@ import assert from 'node:assert/strict'
 import {
   buildLiveQueue,
   deriveAggregates,
+  deriveExerciseAggregates,
   applyTableEditToSetLog,
+  applyExerciseTableEditToSetLog,
   getCarryForwardDefaults,
+  getResumeIndex,
 } from './liveSession'
 import type { Session, SetEntry } from './schema'
 
@@ -77,6 +80,21 @@ function testDeriveAggregates() {
   assert.equal(effortOnly.effort, 'easy', 'prefers easy over perfect')
 }
 
+function testDeriveExerciseAggregatesPerSide() {
+  const exercise = { name: 'Split Squat', sets: 2, reps: 8, weight_kg: 20, alternatives: [], per_side: true }
+  const result = deriveExerciseAggregates(exercise, [
+    { reps: 8, weight_kg: 20, effort: 'perfect', completed_at: 't1', side: 'left' },
+    { reps: 8, weight_kg: 20, effort: 'easy', completed_at: 't2', side: 'right' },
+    { reps: 7, weight_kg: 22, effort: 'hard', completed_at: 't3', side: 'left' },
+    { reps: 8, weight_kg: 20, effort: 'perfect', completed_at: 't4', side: 'right' },
+  ])
+  assert.deepEqual(
+    result,
+    { actual_sets: 2, actual_reps: 8, actual_weight_kg: 20, effort: 'hard' },
+    'per-side aggregate counts paired sets once, keeps the conservative side weight, and preserves worst effort',
+  )
+}
+
 function testPerSideStraightQueue() {
   const session = baseSession({
     exercise_groups: [
@@ -96,6 +114,40 @@ function testPerSideStraightQueue() {
   assert.deepEqual(setSteps.map((s) => s.setNumber), [1, 1, 2, 2], 'per_side: same setNumber for both sides')
   // rest still appears only once between sets (not doubled per side)
   assert.deepEqual(queue.map((s) => s.kind), ['set', 'set', 'rest', 'set', 'set'], 'per_side: single rest between set pairs')
+}
+
+function testResumeIndexPerSide() {
+  const session = baseSession({
+    exercise_groups: [
+      {
+        group_id: 'g1',
+        label: 'Main',
+        type: 'straight',
+        rest_between_sets_sec: 90,
+        exercises: [{ name: 'Bulgarian Split Squat', sets: 2, reps: 8, weight_kg: 20, alternatives: [], per_side: true }],
+      },
+    ],
+  })
+  const queue = buildLiveQueue(session)
+  assert.equal(
+    getResumeIndex(queue, {
+      0: [{ reps: 8, weight_kg: 20, effort: 'perfect', completed_at: 't1', side: 'left' }],
+    }),
+    1,
+    'resumes at right side of set 1 after only left side was logged',
+  )
+  assert.equal(
+    getResumeIndex(queue, {
+      0: [
+        { reps: 8, weight_kg: 20, effort: 'perfect', completed_at: 't1', side: 'left' },
+        { reps: 8, weight_kg: 20, effort: 'perfect', completed_at: 't2', side: 'right' },
+        { reps: 8, weight_kg: 20, effort: 'perfect', completed_at: 't3', side: 'left' },
+        { reps: 8, weight_kg: 20, effort: 'perfect', completed_at: 't4', side: 'right' },
+      ],
+    }),
+    queue.length,
+    'fully logged per-side sessions resume to the review screen',
+  )
 }
 
 function testPerSideSupersetQueue() {
@@ -162,6 +214,33 @@ function testApplyTableEditToSetLogFromEmpty() {
   assert.equal(result[1].effort, 'perfect')
 }
 
+function testApplyExerciseTableEditToSetLogPerSide() {
+  const exercise = { name: 'Split Squat', sets: 2, reps: 8, weight_kg: 20, alternatives: [], per_side: true }
+  const result = applyExerciseTableEditToSetLog(
+    exercise,
+    [
+      { reps: 8, weight_kg: 20, effort: 'perfect', completed_at: 't1', side: 'left' },
+      { reps: 8, weight_kg: 20, effort: 'easy', completed_at: 't2', side: 'right' },
+    ],
+    { sets: 2, reps: 9, weight_kg: 22, effort: 'hard' },
+  )
+  assert.deepEqual(
+    result.map((entry) => entry.side),
+    ['left', 'right', 'left', 'right'],
+    'per-side table edits preserve the left/right pair structure',
+  )
+  assert.deepEqual(
+    result.map((entry) => entry.reps),
+    [8, 8, 9, 9],
+    'per-side table edits apply edited reps to the last pair only',
+  )
+  assert.deepEqual(
+    result.map((entry) => entry.weight_kg),
+    [20, 20, 22, 22],
+    'per-side table edits apply edited weight to the last pair only',
+  )
+}
+
 function testGetCarryForwardDefaultsFromLoggedSets() {
   const plan = { name: 'Back Squat', sets: 3, reps: 8, weight_kg: 60, alternatives: [] }
   const logged: SetEntry[] = [
@@ -218,11 +297,14 @@ function testGetCarryForwardDefaultsPerSideFallsBackToPlan() {
 testStraightSets()
 testSupersetRounds()
 testDeriveAggregates()
+testDeriveExerciseAggregatesPerSide()
 testPerSideStraightQueue()
+testResumeIndexPerSide()
 testPerSideSupersetQueue()
 testApplyTableEditToSetLogPads()
 testApplyTableEditToSetLogTruncates()
 testApplyTableEditToSetLogFromEmpty()
+testApplyExerciseTableEditToSetLogPerSide()
 testGetCarryForwardDefaultsFromLoggedSets()
 testGetCarryForwardDefaultsFromPlan()
 testGetCarryForwardDefaultsPerSideFiltersBySide()

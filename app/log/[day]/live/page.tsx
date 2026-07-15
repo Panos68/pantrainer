@@ -6,17 +6,17 @@ import Link from 'next/link'
 import RestTimer from '@/components/RestTimer'
 import ExerciseTimer from '@/components/ExerciseTimer'
 import ExerciseDemo from '@/components/ExerciseDemo'
-import { buildLiveQueue, getCarryForwardDefaults, parseTimedSeconds, type LiveStep } from '@/lib/liveSession'
+import {
+  buildLiveQueue,
+  deriveExerciseAggregates,
+  getCarryForwardDefaults,
+  getResumeIndex,
+  parseTimedSeconds,
+  type LiveStep,
+} from '@/lib/liveSession'
 import { useGarminSync } from '@/lib/useGarminSync'
 import { requestNotificationPermission } from '@/lib/notify'
 import type { Session, SetEntry } from '@/lib/schema'
-
-function resumeIndex(queue: LiveStep[], loggedSets: Record<number, SetEntry[]>): number {
-  const firstIncomplete = queue.findIndex(
-    (s) => s.kind === 'set' && (loggedSets[s.exerciseIndex]?.length ?? 0) < s.setNumber,
-  )
-  return firstIncomplete === -1 ? 0 : firstIncomplete
-}
 
 function sideLabel(side?: 'left' | 'right'): string {
   if (side === 'left') return 'Left'
@@ -231,7 +231,7 @@ export default function LiveSessionPage() {
         const queue = buildLiveQueue(data)
         setSession(data)
         setLoggedSets(initial)
-        setStepIndex(resumeIndex(queue, initial))
+        setStepIndex(getResumeIndex(queue, initial))
         if (data.rpe != null) setRpe(String(data.rpe))
       })
   }, [day])
@@ -279,10 +279,30 @@ export default function LiveSessionPage() {
     if (!session) return
     setCompleting(true)
     try {
+      const exercises = session.exercises.map((ex, i) => {
+        const log = loggedSets[i] ?? ex.set_log ?? []
+        if (log.length === 0) return ex
+        const derived = deriveExerciseAggregates(ex, log)
+        return {
+          ...ex,
+          set_log: log,
+          actual_sets: derived.actual_sets,
+          actual_reps: derived.actual_reps,
+          actual_weight_kg: derived.actual_weight_kg,
+          effort: derived.effort,
+        }
+      })
+      let globalIndex = 0
+      const exercise_groups = session.exercise_groups?.map((group) => ({
+        ...group,
+        exercises: group.exercises.map(() => exercises[globalIndex++]),
+      }))
       const res = await fetch(`/api/session/${day}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          exercises,
+          ...(exercise_groups ? { exercise_groups } : {}),
           status: 'completed',
           rpe: rpe !== '' ? Number(rpe) : null,
           garmin_activity_id: garminSync?.garmin_activity_id ?? session.garmin_activity_id ?? null,

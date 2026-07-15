@@ -7,7 +7,7 @@ import type { Session, GarminRecoveryDay, ExerciseGroup, SetEntry } from '@/lib/
 import GarminRecoveryCard from '@/components/GarminRecoveryCard'
 import MuscleMap from '@/components/MuscleMap'
 import ExerciseDemo from '@/components/ExerciseDemo'
-import { deriveAggregates, applyTableEditToSetLog, parseTimedSeconds } from '@/lib/liveSession'
+import { deriveExerciseAggregates, applyExerciseTableEditToSetLog, parseTimedSeconds } from '@/lib/liveSession'
 
 // ─── Type colors ─────────────────────────────────────────────────────────
 
@@ -396,7 +396,7 @@ export default function LogDayPage() {
   const buildPayload = useCallback(() => {
     function mergeActualIntoExercise(ex: Session['exercises'][number], i: number) {
       const log = setLogEdits[i] ?? []
-      const derived = log.length > 0 ? deriveAggregates(log) : null
+      const derived = log.length > 0 ? deriveExerciseAggregates(ex, log) : null
       const altIndex = swappedExercises[i]
       const alt = altIndex != null ? ex.alternatives[altIndex] : null
       return {
@@ -819,7 +819,7 @@ export default function LogDayPage() {
           function getRowDisplay(ex: Session['exercises'][number], i: number) {
             const log = setLogEdits[i] ?? []
             if (log.length > 0) {
-              const derived = deriveAggregates(log)
+              const derived = deriveExerciseAggregates(ex, log)
               return {
                 sets: derived.actual_sets.toString(),
                 reps: derived.actual_reps.toString(),
@@ -871,7 +871,7 @@ export default function LogDayPage() {
                   : currentWeightNum
                 : currentWeightNum
 
-            const updated = applyTableEditToSetLog(existingLog, {
+            const updated = applyExerciseTableEditToSetLog(ex, existingLog, {
               sets: setsNum,
               reps: repsNum,
               weight_kg: weightNum,
@@ -894,7 +894,7 @@ export default function LogDayPage() {
             // See updateRowField: preserve timed reps (e.g. "45s") as seconds instead of 0.
             const repsNum = Number(current.reps) || parseTimedSeconds(current.reps) || 0
             const weightNum = current.weight_kg === '' ? null : Number(current.weight_kg)
-            const updated = applyTableEditToSetLog(existingLog, {
+            const updated = applyExerciseTableEditToSetLog(ex, existingLog, {
               sets: setsNum,
               reps: repsNum,
               weight_kg: weightNum,

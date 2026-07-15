@@ -29,21 +29,23 @@ export default function RestTimer({
   onSkip: () => void
   onAddSeconds: (delta: number) => void
 }) {
-  const endAtRef = useRef(Date.now() + seconds * 1000)
+  const endAtRef = useRef<number | null>(null)
   const [remaining, setRemaining] = useState(seconds)
   const hasBeepedAt5 = useRef(false)
   const hasBeepedAt0 = useRef(false)
   const hasNotified = useRef(false)
 
   useEffect(() => {
+    endAtRef.current = Date.now() + seconds * 1000
     const tick = () => {
-      const next = Math.max(0, Math.round((endAtRef.current - Date.now()) / 1000))
+      const endAt = endAtRef.current ?? Date.now()
+      const next = Math.max(0, Math.round((endAt - Date.now()) / 1000))
       setRemaining(next)
     }
     tick()
     const id = setInterval(tick, 250)
     return () => clearInterval(id)
-  }, [])
+  }, [seconds])
 
   useEffect(() => {
     if (remaining === 5 && !hasBeepedAt5.current) {
@@ -67,7 +69,11 @@ export default function RestTimer({
       <div className="flex gap-3">
         <button
           type="button"
-          onClick={() => { endAtRef.current += 30000; setRemaining((r) => r + 30); onAddSeconds(30) }}
+          onClick={() => {
+            endAtRef.current = (endAtRef.current ?? Date.now()) + 30000
+            setRemaining((r) => r + 30)
+            onAddSeconds(30)
+          }}
           className="px-4 py-2 rounded bg-zinc-800 text-zinc-200 text-sm"
         >
           +30s
