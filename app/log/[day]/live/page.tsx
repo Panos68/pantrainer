@@ -8,6 +8,7 @@ import ExerciseTimer from '@/components/ExerciseTimer'
 import ExerciseDemo from '@/components/ExerciseDemo'
 import { buildLiveQueue, getCarryForwardDefaults, parseTimedSeconds, type LiveStep } from '@/lib/liveSession'
 import { useGarminSync } from '@/lib/useGarminSync'
+import { requestNotificationPermission } from '@/lib/notify'
 import type { Session, SetEntry } from '@/lib/schema'
 
 function resumeIndex(queue: LiveStep[], loggedSets: Record<number, SetEntry[]>): number {
@@ -219,6 +220,7 @@ export default function LiveSessionPage() {
 
   useEffect(() => {
     if (!day) return
+    requestNotificationPermission()
     fetch(`/api/session/${day}`)
       .then((r) => r.json())
       .then((data: Session) => {
