@@ -96,7 +96,11 @@ export default function ExerciseDemo({ name, inline = false }: { name: string; i
   }
 
   return (
-    <div ref={ref} className={inline ? 'shrink-0 w-full' : 'relative shrink-0'} onClick={(e) => e.stopPropagation()}>
+    <div
+      ref={ref}
+      className={inline ? 'shrink-0 w-full flex justify-center' : 'relative shrink-0'}
+      onClick={(e) => e.stopPropagation()}
+    >
       {!inline && (
         <button
           type="button"
