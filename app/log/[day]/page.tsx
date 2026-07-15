@@ -3,11 +3,11 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import type { Session, GarminRecoveryDay, ExerciseGroup } from '@/lib/schema'
+import type { Session, GarminRecoveryDay, ExerciseGroup, SetEntry } from '@/lib/schema'
 import GarminRecoveryCard from '@/components/GarminRecoveryCard'
 import MuscleMap from '@/components/MuscleMap'
 import ExerciseDemo from '@/components/ExerciseDemo'
-import { deriveAggregates } from '@/lib/liveSession'
+import { deriveAggregates, applyTableEditToSetLog } from '@/lib/liveSession'
 
 // ─── Type colors ─────────────────────────────────────────────────────────
 
@@ -56,14 +56,6 @@ function todayIsoLocal(): string {
   const m = String(now.getMonth() + 1).padStart(2, '0')
   const d = String(now.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
-}
-
-function parseOptionalNumber(value?: string): number | undefined {
-  if (value == null) return undefined
-  const trimmed = value.trim()
-  if (!trimmed) return undefined
-  const parsed = Number(trimmed)
-  return Number.isFinite(parsed) ? parsed : undefined
 }
 
 // ─── Read-only view ──────────────────────────────────────────────────────
@@ -242,34 +234,11 @@ export default function LogDayPage() {
   const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [loadingProposedDay, setLoadingProposedDay] = useState(false)
 
-  // Exercise actuals state (indexed to match session.exercises)
-  type ExerciseActual = { sets: string; reps: string; weight_kg: string; effort: 'easy' | 'perfect' | 'hard' | null; note: string }
-
-  function planToActualPreset(
-    ex: Session['exercises'][number],
-    altIndex?: number,
-  ): ExerciseActual {
-    const alt = altIndex != null ? ex.alternatives[altIndex] : null
-    return {
-      sets: alt?.sets?.toString() ?? ex.sets?.toString() ?? '',
-      reps:
-        alt?.reps != null
-          ? alt.reps.toString()
-          : typeof ex.reps === 'number'
-          ? ex.reps.toString()
-          : ex.reps ?? '',
-      weight_kg:
-        alt?.weight_kg != null
-          ? alt.weight_kg.toString()
-          : ex.weight_kg != null
-          ? ex.weight_kg.toString()
-          : '',
-      effort: null,
-      note: '',
-    }
-  }
-
-  const [exerciseActuals, setExerciseActuals] = useState<ExerciseActual[]>([])
+  // set_log-backed exercise actuals state (indexed to match flattened session.exercises).
+  // Sets/reps/weight/effort are derived from `set_log` via `deriveAggregates`; edits go
+  // through `applyTableEditToSetLog`. `actual_note` remains a separate top-level field.
+  const [setLogEdits, setSetLogEdits] = useState<Record<number, SetEntry[]>>({})
+  const [actualNotes, setActualNotes] = useState<Record<number, string>>({})
   const [openNotes, setOpenNotes] = useState<Record<number, boolean>>({})
   const [swappedExercises, setSwappedExercises] = useState<Record<number, number>>({}) // index → alt index
   const [openSwapMenu, setOpenSwapMenu] = useState<number | null>(null)
@@ -398,38 +367,17 @@ export default function LogDayPage() {
           })
         }
 
-        // Initialize exercise actuals from planned values (or existing actuals if in_progress)
-        // When exercise_groups exist, flatten them to build the actuals array
+        // Seed setLogEdits/actualNotes from the session's raw data (indexed to match the
+        // flattened exercises array). Rows with no set_log yet fall back at display time
+        // (see getRowDisplay) to plan-derived defaults — nothing to seed here for those.
         const flatExercises = sessionData.exercise_groups
           ? sessionData.exercise_groups.flatMap((g) => g.exercises)
           : (sessionData.exercises ?? [])
-        setExerciseActuals(
-          flatExercises.map((ex) => {
-            if (ex.set_log && ex.set_log.length > 0) {
-              const derived = deriveAggregates(ex.set_log)
-              return {
-                sets: derived.actual_sets.toString(),
-                reps: derived.actual_reps.toString(),
-                weight_kg: derived.actual_weight_kg?.toString() ?? '',
-                effort: derived.effort,
-                note: ex.actual_note ?? '',
-              }
-            }
-            return {
-              sets: ex.actual_sets?.toString() ?? ex.sets?.toString() ?? '',
-              reps:
-                ex.actual_reps?.toString() ??
-                (typeof ex.reps === 'number' ? ex.reps.toString() : ex.reps ?? ''),
-              weight_kg:
-                ex.actual_weight_kg != null
-                  ? ex.actual_weight_kg.toString()
-                  : ex.weight_kg != null
-                  ? ex.weight_kg.toString()
-                  : '',
-              effort: ex.effort ?? null,
-              note: ex.actual_note ?? '',
-            }
-          })
+        setSetLogEdits(
+          Object.fromEntries(flatExercises.map((ex, i) => [i, ex.set_log ?? []])),
+        )
+        setActualNotes(
+          Object.fromEntries(flatExercises.map((ex, i) => [i, ex.actual_note ?? ''])),
         )
 
         // Auto-fetch if no Garmin match yet — regardless of status
@@ -447,7 +395,8 @@ export default function LogDayPage() {
 
   const buildPayload = useCallback(() => {
     function mergeActualIntoExercise(ex: Session['exercises'][number], i: number) {
-      const actual = exerciseActuals[i]
+      const log = setLogEdits[i] ?? []
+      const derived = log.length > 0 ? deriveAggregates(log) : null
       const altIndex = swappedExercises[i]
       const alt = altIndex != null ? ex.alternatives[altIndex] : null
       return {
@@ -456,16 +405,12 @@ export default function LogDayPage() {
         sets: alt?.sets ?? ex.sets,
         reps: alt?.reps ?? ex.reps,
         weight_kg: alt?.weight_kg ?? ex.weight_kg,
-        actual_sets: parseOptionalNumber(actual?.sets),
-        actual_reps:
-          actual?.reps !== ''
-            ? isNaN(Number(actual?.reps))
-              ? actual?.reps
-              : Number(actual?.reps)
-            : undefined,
-        actual_weight_kg: parseOptionalNumber(actual?.weight_kg),
-        effort: actual?.effort ?? null,
-        actual_note: actual?.note?.trim() || null,
+        actual_sets: derived ? derived.actual_sets : ex.actual_sets ?? null,
+        actual_reps: derived ? derived.actual_reps : ex.actual_reps ?? null,
+        actual_weight_kg: derived ? derived.actual_weight_kg : ex.actual_weight_kg ?? null,
+        effort: derived ? derived.effort : ex.effort ?? null,
+        actual_note: actualNotes[i]?.trim() || null,
+        set_log: log,
       }
     }
 
@@ -502,7 +447,7 @@ export default function LogDayPage() {
       training_stress_score: garminTraining.training_stress_score ?? null,
       hr_zones: garminTraining.hr_zones ?? null,
     }
-  }, [type, subtype, duration, avgHr, calories, rpe, notes, photos, exerciseActuals, session, swappedExercises, garminSynced, garminTraining])
+  }, [type, subtype, duration, avgHr, calories, rpe, notes, photos, setLogEdits, actualNotes, session, swappedExercises, garminSynced, garminTraining])
 
   const mergeGarminIntoPayload = useCallback((
     payload: ReturnType<typeof buildPayload>,
@@ -869,6 +814,92 @@ export default function LogDayPage() {
             cooldown: 'text-emerald-400 border-emerald-400/30 bg-emerald-400/10',
           }
 
+          // Displayed sets/reps/weight/effort for a row: derived from set_log when present,
+          // else the plan-derived fallback used for rows never touched by the live flow.
+          function getRowDisplay(ex: Session['exercises'][number], i: number) {
+            const log = setLogEdits[i] ?? []
+            if (log.length > 0) {
+              const derived = deriveAggregates(log)
+              return {
+                sets: derived.actual_sets.toString(),
+                reps: derived.actual_reps.toString(),
+                weight_kg: derived.actual_weight_kg?.toString() ?? '',
+                effort: derived.effort,
+              }
+            }
+            return {
+              sets: ex.actual_sets?.toString() ?? ex.sets?.toString() ?? '',
+              reps:
+                ex.actual_reps?.toString() ??
+                (typeof ex.reps === 'number' ? ex.reps.toString() : ex.reps ?? ''),
+              weight_kg:
+                ex.actual_weight_kg != null
+                  ? ex.actual_weight_kg.toString()
+                  : ex.weight_kg != null
+                  ? ex.weight_kg.toString()
+                  : '',
+              effort: ex.effort ?? null,
+            }
+          }
+
+          // Applies a single-field edit (sets/reps/weight_kg) on top of the row's current
+          // displayed values, then runs the result through applyTableEditToSetLog to produce
+          // an updated set_log array for that index.
+          function updateRowField(
+            ex: Session['exercises'][number],
+            i: number,
+            field: 'sets' | 'reps' | 'weight_kg',
+            value: string,
+          ) {
+            const current = getRowDisplay(ex, i)
+            const existingLog = setLogEdits[i] ?? []
+            const currentSetsNum = Number(current.sets) || existingLog.length
+            const currentRepsNum = Number(current.reps) || 0
+            const currentWeightNum = current.weight_kg === '' ? null : Number(current.weight_kg)
+
+            const parsed = Number(value)
+            const setsNum = field === 'sets' ? (Number.isFinite(parsed) ? parsed : currentSetsNum) : currentSetsNum
+            const repsNum = field === 'reps' ? (Number.isFinite(parsed) ? parsed : currentRepsNum) : currentRepsNum
+            const weightNum =
+              field === 'weight_kg'
+                ? value === ''
+                  ? null
+                  : Number.isFinite(parsed)
+                  ? parsed
+                  : currentWeightNum
+                : currentWeightNum
+
+            const updated = applyTableEditToSetLog(existingLog, {
+              sets: setsNum,
+              reps: repsNum,
+              weight_kg: weightNum,
+              effort: current.effort,
+            })
+            setSetLogEdits((prev) => ({ ...prev, [i]: updated }))
+          }
+
+          // Toggles an effort level for a row (mirrors the old exerciseActuals effort toggle),
+          // writing the change onto the last set_log entry via applyTableEditToSetLog.
+          function toggleRowEffort(
+            ex: Session['exercises'][number],
+            i: number,
+            level: 'easy' | 'perfect' | 'hard',
+          ) {
+            const current = getRowDisplay(ex, i)
+            const existingLog = setLogEdits[i] ?? []
+            const nextEffort = current.effort === level ? null : level
+            const setsNum = Number(current.sets) || existingLog.length
+            const repsNum = Number(current.reps) || 0
+            const weightNum = current.weight_kg === '' ? null : Number(current.weight_kg)
+            const updated = applyTableEditToSetLog(existingLog, {
+              sets: setsNum,
+              reps: repsNum,
+              weight_kg: weightNum,
+              effort: nextEffort,
+            })
+            setSetLogEdits((prev) => ({ ...prev, [i]: updated }))
+          }
+
           const renderExerciseRow = (ex: Session['exercises'][number], globalIndex: number, totalExercises: number) => {
             const openUp = globalIndex >= totalExercises - 2
             const selectedAltIndex = swappedExercises[globalIndex]
@@ -904,7 +935,8 @@ export default function LogDayPage() {
                           type="button"
                           onClick={() => {
                             setSwappedExercises((prev) => { const n = { ...prev }; delete n[i]; return n })
-                            setExerciseActuals((prev) => prev.map((a, j) => (j === i ? planToActualPreset(ex) : a)))
+                            setSetLogEdits((prev) => ({ ...prev, [i]: [] }))
+                            setActualNotes((prev) => ({ ...prev, [i]: '' }))
                             setOpenSwapMenu(null)
                           }}
                           className={`w-full text-left px-3 py-2 text-xs font-mono hover:bg-zinc-800 transition-colors ${swappedExercises[i] == null ? 'text-lime-400' : 'text-zinc-400'}`}
@@ -915,7 +947,8 @@ export default function LogDayPage() {
                             type="button"
                             onClick={() => {
                               setSwappedExercises((prev) => ({ ...prev, [i]: ai }))
-                              setExerciseActuals((prev) => prev.map((a, j) => j === i ? { ...planToActualPreset(ex, ai) } : a))
+                              setSetLogEdits((prev) => ({ ...prev, [i]: [] }))
+                              setActualNotes((prev) => ({ ...prev, [i]: '' }))
                               setOpenSwapMenu(null)
                             }}
                             className={`w-full text-left px-3 py-2 text-xs font-mono hover:bg-zinc-800 transition-colors border-t border-zinc-800/60 ${swappedExercises[i] === ai ? 'text-amber-400' : 'text-zinc-400'}`}
@@ -933,30 +966,30 @@ export default function LogDayPage() {
                   {showWeightCol && (
                     <div className="bg-zinc-950 py-2.5 text-zinc-500 text-xs font-mono text-center">{plannedWeight != null ? plannedWeight : '—'}</div>
                   )}
-                  <input type="number" inputMode="numeric" value={exerciseActuals[i]?.sets ?? ''} onChange={(e) => setExerciseActuals((prev) => prev.map((a, j) => (j === i ? { ...a, sets: e.target.value } : a)))} className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full" placeholder="—" />
-                  <input type="text" inputMode="decimal" value={exerciseActuals[i]?.reps ?? ''} onChange={(e) => setExerciseActuals((prev) => prev.map((a, j) => (j === i ? { ...a, reps: e.target.value } : a)))} className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full" placeholder="—" />
+                  <input type="number" inputMode="numeric" value={getRowDisplay(ex, i).sets} onChange={(e) => updateRowField(ex, i, 'sets', e.target.value)} className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full" placeholder="—" />
+                  <input type="text" inputMode="decimal" value={getRowDisplay(ex, i).reps} onChange={(e) => updateRowField(ex, i, 'reps', e.target.value)} className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full" placeholder="—" />
                   {showWeightCol && (
-                    <input type="number" inputMode="decimal" value={exerciseActuals[i]?.weight_kg ?? ''} onChange={(e) => setExerciseActuals((prev) => prev.map((a, j) => (j === i ? { ...a, weight_kg: e.target.value } : a)))} className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full" placeholder="—" />
+                    <input type="number" inputMode="decimal" value={getRowDisplay(ex, i).weight_kg} onChange={(e) => updateRowField(ex, i, 'weight_kg', e.target.value)} className="bg-zinc-900 py-2.5 text-violet-400 text-xs font-mono text-center focus:outline-none focus:bg-zinc-800 w-full" placeholder="—" />
                   )}
                 </div>
                 {type !== 'Recovery' && (
                   <div className="flex gap-1.5 px-3 py-2 bg-zinc-950 border-t border-zinc-800/40">
                     {(['easy', 'perfect', 'hard'] as const).map((level) => {
-                      const selected = exerciseActuals[i]?.effort === level
+                      const selected = getRowDisplay(ex, i).effort === level
                       const colors: Record<string, string> = {
                         easy: selected ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' : 'text-zinc-600 border-zinc-800 hover:border-zinc-700 hover:text-zinc-400',
                         perfect: selected ? 'bg-blue-500/20 text-blue-400 border-blue-500/40' : 'text-zinc-600 border-zinc-800 hover:border-zinc-700 hover:text-zinc-400',
                         hard: selected ? 'bg-red-500/20 text-red-400 border-red-500/40' : 'text-zinc-600 border-zinc-800 hover:border-zinc-700 hover:text-zinc-400',
                       }
                       return (
-                        <button key={level} type="button" onClick={() => setExerciseActuals((prev) => prev.map((a, j) => j === i ? { ...a, effort: a.effort === level ? null : level } : a))} className={`flex-1 py-1 text-[10px] font-mono tracking-widest uppercase rounded border transition-colors ${colors[level]}`}>{level}</button>
+                        <button key={level} type="button" onClick={() => toggleRowEffort(ex, i, level)} className={`flex-1 py-1 text-[10px] font-mono tracking-widest uppercase rounded border transition-colors ${colors[level]}`}>{level}</button>
                       )
                     })}
                   </div>
                 )}
                 <div className="px-3 pb-2 bg-zinc-950 border-t border-zinc-800/40">
-                  {openNotes[i] || exerciseActuals[i]?.note ? (
-                    <input type="text" value={exerciseActuals[i]?.note ?? ''} onChange={(e) => setExerciseActuals((prev) => prev.map((a, j) => (j === i ? { ...a, note: e.target.value } : a)))} placeholder="Note…" className="w-full mt-1.5 bg-zinc-900 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-700" />
+                  {openNotes[i] || actualNotes[i] ? (
+                    <input type="text" value={actualNotes[i] ?? ''} onChange={(e) => setActualNotes((prev) => ({ ...prev, [i]: e.target.value }))} placeholder="Note…" className="w-full mt-1.5 bg-zinc-900 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-700" />
                   ) : (
                     <button type="button" onClick={() => setOpenNotes((prev) => ({ ...prev, [i]: true }))} className="mt-1.5 text-zinc-600 hover:text-zinc-400 text-[10px] font-mono transition-colors">+ note</button>
                   )}
