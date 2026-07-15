@@ -392,7 +392,7 @@ export default function LiveSessionPage() {
   }
 
   const canSwap = (loggedSets[step.exerciseIndex]?.length ?? 0) === 0
-  const carryForwardRaw = getCarryForwardDefaults(loggedSets[step.exerciseIndex] ?? [], step.exercise)
+  const carryForwardRaw = getCarryForwardDefaults(loggedSets[step.exerciseIndex] ?? [], step.exercise, step.side)
   const carryForward = {
     reps: carryForwardRaw.reps != null ? String(carryForwardRaw.reps) : '',
     weight_kg: carryForwardRaw.weight_kg != null ? String(carryForwardRaw.weight_kg) : '',
