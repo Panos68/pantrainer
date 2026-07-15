@@ -9,28 +9,30 @@ import { requestNotificationPermission, notifyTimerDone } from './notify'
 
 function withStubbedGlobals<T>(stubs: Record<string, unknown>, fn: () => T): T {
   const originals: Record<string, unknown> = {}
+  const globals = globalThis as typeof globalThis & Record<string, unknown>
   for (const key of Object.keys(stubs)) {
-    originals[key] = (globalThis as any)[key]
-    ;(globalThis as any)[key] = stubs[key]
+    originals[key] = globals[key]
+    globals[key] = stubs[key]
   }
   try {
     return fn()
   } finally {
     for (const key of Object.keys(stubs)) {
-      if (originals[key] === undefined) delete (globalThis as any)[key]
-      else (globalThis as any)[key] = originals[key]
+      if (originals[key] === undefined) delete globals[key]
+      else globals[key] = originals[key]
     }
   }
 }
 
 function testRequestPermissionNoopsWithoutWindow() {
-  delete (globalThis as any).window
-  assert.doesNotThrow(() => requestNotificationPermission())
+  withStubbedGlobals({ window: undefined }, () => {
+    assert.doesNotThrow(() => requestNotificationPermission())
+  })
 }
 
 function testRequestPermissionCallsWhenDefault() {
   let requested = false
-  const NotificationStub: any = {
+  const NotificationStub = {
     permission: 'default',
     requestPermission: () => {
       requested = true
@@ -45,7 +47,7 @@ function testRequestPermissionCallsWhenDefault() {
 
 function testRequestPermissionSkipsWhenAlreadyDecided() {
   let requested = false
-  const NotificationStub: any = {
+  const NotificationStub = {
     permission: 'denied',
     requestPermission: () => {
       requested = true

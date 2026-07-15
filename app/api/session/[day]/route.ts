@@ -1,4 +1,5 @@
 import { readCurrentWeekDirect, writeCurrentWeek } from '@/lib/data'
+import { deriveExerciseAggregates } from '@/lib/liveSession'
 import { updateLiftProgression } from '@/lib/progression'
 import type { Session, WeekSummary } from '@/lib/schema'
 
@@ -31,6 +32,43 @@ function recalculateLiftProgression(sessions: Session[]): Record<string, string 
     progression = updateLiftProgression(s.exercises, progression)
   }
   return progression
+}
+
+function hydrateExerciseAggregates(session: Session): Session {
+  function hydrateExercise(ex: Session['exercises'][number]): Session['exercises'][number] {
+    const log = ex.set_log ?? []
+    if (log.length === 0) return ex
+    const derived = deriveExerciseAggregates(ex, log)
+    return {
+      ...ex,
+      actual_sets: derived.actual_sets,
+      actual_reps: derived.actual_reps,
+      actual_weight_kg: derived.actual_weight_kg,
+      effort: derived.effort,
+    }
+  }
+
+  if (session.exercise_groups && session.exercise_groups.length > 0) {
+    const sourceExercises = session.exercises ?? []
+    let globalIndex = 0
+    const exercise_groups = session.exercise_groups.map((group) => ({
+      ...group,
+      exercises: group.exercises.map((ex) => {
+        const source = sourceExercises[globalIndex++]
+        return hydrateExercise(source ?? ex)
+      }),
+    }))
+    return {
+      ...session,
+      exercise_groups,
+      exercises: exercise_groups.flatMap((group) => group.exercises),
+    }
+  }
+
+  return {
+    ...session,
+    exercises: session.exercises.map(hydrateExercise),
+  }
 }
 
 export async function GET(
@@ -85,7 +123,7 @@ export async function PATCH(
     )
   }
 
-  const updatedSession: Session = { ...session, ...body }
+  const updatedSession: Session = hydrateExerciseAggregates({ ...session, ...body })
   week.sessions[sessionIndex] = updatedSession
 
   week.week_summary = recalculateWeekSummary(week.sessions)

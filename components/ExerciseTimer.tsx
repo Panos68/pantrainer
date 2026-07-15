@@ -23,7 +23,7 @@ function formatMmSs(totalSeconds: number): string {
 export default function ExerciseTimer({ seconds, onSkip }: { seconds: number; onSkip?: () => void }) {
   const [remaining, setRemaining] = useState(seconds)
   const [running, setRunning] = useState(false)
-  const endAtRef = useRef(Date.now() + seconds * 1000)
+  const endAtRef = useRef<number | null>(null)
   const hasBeepedAt5 = useRef(false)
   const hasBeepedAt0 = useRef(false)
   const hasNotified = useRef(false)
@@ -31,7 +31,8 @@ export default function ExerciseTimer({ seconds, onSkip }: { seconds: number; on
   useEffect(() => {
     if (!running) return
     const tick = () => {
-      const next = Math.max(0, Math.round((endAtRef.current - Date.now()) / 1000))
+      const endAt = endAtRef.current ?? Date.now()
+      const next = Math.max(0, Math.round((endAt - Date.now()) / 1000))
       setRemaining(next)
       if (next <= 0) setRunning(false)
     }

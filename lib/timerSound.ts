@@ -3,7 +3,8 @@
  */
 export function playBeep(freq: number, durationMs: number): void {
   if (typeof window === 'undefined') return
-  const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext
+  const audioWindow = window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }
+  const AudioContextCtor = audioWindow.AudioContext || audioWindow.webkitAudioContext
   if (!AudioContextCtor) return
 
   const ctx = new AudioContextCtor()

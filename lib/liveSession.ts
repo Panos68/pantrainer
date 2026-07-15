@@ -124,6 +124,16 @@ export function buildLiveQueue(session: Session): LiveStep[] {
   return steps
 }
 
+export function getResumeIndex(queue: LiveStep[], loggedSets: Record<number, SetEntry[]>): number {
+  const firstIncomplete = queue.findIndex((s) => {
+    if (s.kind !== 'set') return false
+    const log = loggedSets[s.exerciseIndex] ?? []
+    const matchingSets = s.side != null ? log.filter((entry) => entry.side === s.side) : log
+    return matchingSets.length < s.setNumber
+  })
+  return firstIncomplete === -1 ? queue.length : firstIncomplete
+}
+
 export const EFFORT_RANK: Record<Exclude<SetEntry['effort'], null>, number> = { perfect: 0, easy: 1, hard: 2 }
 
 export function deriveAggregates(sets: SetEntry[]): {
@@ -160,6 +170,32 @@ export function deriveAggregatesPerSide(sets: SetEntry[]): {
   }
 }
 
+export function deriveExerciseAggregates(exercise: Exercise, sets: SetEntry[]): ReturnType<typeof deriveAggregates> {
+  if (!exercise.per_side) return deriveAggregates(sets)
+
+  const perSide = deriveAggregatesPerSide(sets)
+  const sides = [perSide.left, perSide.right].filter((side) => side != null)
+  if (sides.length === 0) return deriveAggregates(sets)
+
+  const last = sets[sets.length - 1]
+  const weightValues = sides
+    .map((side) => side.actual_weight_kg)
+    .filter((weight): weight is number => weight != null)
+
+  return {
+    actual_sets: Math.max(...sides.map((side) => side.actual_sets)),
+    actual_reps: last.reps,
+    actual_weight_kg: weightValues.length > 0 ? Math.min(...weightValues) : null,
+    effort: sides.reduce(
+      (acc, side) =>
+        side.effort != null && (acc == null || EFFORT_RANK[side.effort] > EFFORT_RANK[acc])
+          ? side.effort
+          : acc,
+      null as SetEntry['effort'],
+    ),
+  }
+}
+
 // Applies a direct edit of the Sets/Reps/Weight/Effort table cells to the underlying
 // set_log — the reverse direction of the live flow. Pads/truncates `existing` to match
 // the requested set count, applies the edited values to the *last* entry (matching the
@@ -192,6 +228,59 @@ export function applyTableEditToSetLog(
   }
 
   return result
+}
+
+export function applyPerSideTableEditToSetLog(
+  existing: SetEntry[],
+  edit: { sets: number; reps: number; weight_kg: number | null; effort: SetEntry['effort'] },
+): SetEntry[] {
+  const targetCount = Math.max(0, Math.floor(edit.sets))
+  const now = new Date().toISOString()
+  const bySide = {
+    left: existing.filter((s) => s.side === 'left'),
+    right: existing.filter((s) => s.side === 'right'),
+  }
+
+  function resizeSide(side: 'left' | 'right'): SetEntry[] {
+    const sideEntries = bySide[side].slice(0, targetCount).map((s) => ({ ...s, side }))
+    while (sideEntries.length < targetCount) {
+      const template = sideEntries[sideEntries.length - 1] ?? bySide[side][bySide[side].length - 1]
+      sideEntries.push(
+        template
+          ? { ...template, side }
+          : { reps: edit.reps, weight_kg: edit.weight_kg, effort: edit.effort, completed_at: now, side },
+      )
+    }
+    if (sideEntries.length > 0) {
+      const lastIndex = sideEntries.length - 1
+      sideEntries[lastIndex] = {
+        ...sideEntries[lastIndex],
+        reps: edit.reps,
+        weight_kg: edit.weight_kg,
+        effort: edit.effort,
+        side,
+      }
+    }
+    return sideEntries
+  }
+
+  const left = resizeSide('left')
+  const right = resizeSide('right')
+  const result: SetEntry[] = []
+  for (let i = 0; i < targetCount; i++) {
+    result.push(left[i], right[i])
+  }
+  return result
+}
+
+export function applyExerciseTableEditToSetLog(
+  exercise: Exercise,
+  existing: SetEntry[],
+  edit: { sets: number; reps: number; weight_kg: number | null; effort: SetEntry['effort'] },
+): SetEntry[] {
+  return exercise.per_side
+    ? applyPerSideTableEditToSetLog(existing, edit)
+    : applyTableEditToSetLog(existing, edit)
 }
 
 function planDefaultReps(plan: Exercise): number {
