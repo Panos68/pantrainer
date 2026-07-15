@@ -6,7 +6,7 @@ export const SessionStatusSchema = z.enum(['planned', 'in_progress', 'completed'
 export const SetEntrySchema = z.object({
   reps: z.number(),
   weight_kg: z.number().nullable(),
-  effort: z.enum(['easy', 'perfect', 'hard']),
+  effort: z.enum(['easy', 'perfect', 'hard']).nullable(),
   completed_at: z.string(),
 })
 

@@ -27,8 +27,8 @@ function youtubeSearchUrl(name: string) {
   return `https://www.youtube.com/results?search_query=${encodeURIComponent(`how to ${name}`)}`
 }
 
-export default function ExerciseDemo({ name }: { name: string }) {
-  const [open, setOpen] = useState(false)
+export default function ExerciseDemo({ name, inline = false }: { name: string; inline?: boolean }) {
+  const [open, setOpen] = useState(inline)
   const [match, setMatch] = useState<WorkoutExercise | null | undefined>(undefined)
   const [videoFailed, setVideoFailed] = useState(false)
   const [youtubeFailed, setYoutubeFailed] = useState(false)
@@ -44,13 +44,13 @@ export default function ExerciseDemo({ name }: { name: string }) {
   }, [open, name, match])
 
   useEffect(() => {
-    if (!open) return
+    if (!open || inline) return
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [open])
+  }, [open, inline])
 
   useEffect(() => {
     return () => {
@@ -96,22 +96,30 @@ export default function ExerciseDemo({ name }: { name: string }) {
   }
 
   return (
-    <div ref={ref} className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
-      <button
-        type="button"
-        onClick={() => {
-          setVideoFailed(false)
-          setYoutubeFailed(false)
-          setOpen((v) => !v)
-        }}
-        className="text-zinc-700 hover:text-zinc-400 transition-colors text-[10px]"
-        title="How to perform"
-      >
-        ↗
-      </button>
+    <div ref={ref} className={inline ? 'shrink-0 w-full' : 'relative shrink-0'} onClick={(e) => e.stopPropagation()}>
+      {!inline && (
+        <button
+          type="button"
+          onClick={() => {
+            setVideoFailed(false)
+            setYoutubeFailed(false)
+            setOpen((v) => !v)
+          }}
+          className="text-zinc-700 hover:text-zinc-400 transition-colors text-[10px]"
+          title="How to perform"
+        >
+          ↗
+        </button>
+      )}
 
       {open && (
-        <div className="absolute left-0 top-full mt-1 z-30 w-64 rounded-xl border border-zinc-700 bg-zinc-900 shadow-xl overflow-hidden">
+        <div
+          className={
+            inline
+              ? 'w-full max-w-xs rounded-xl border border-zinc-800 bg-zinc-900 shadow-xl overflow-hidden'
+              : 'absolute left-0 top-full mt-1 z-30 w-64 rounded-xl border border-zinc-700 bg-zinc-900 shadow-xl overflow-hidden'
+          }
+        >
           {isLoading && (
             <div className="p-3 text-zinc-500 text-[10px] font-mono">Loading…</div>
           )}
