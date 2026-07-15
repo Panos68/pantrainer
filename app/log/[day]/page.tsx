@@ -7,7 +7,7 @@ import type { Session, GarminRecoveryDay, ExerciseGroup, SetEntry } from '@/lib/
 import GarminRecoveryCard from '@/components/GarminRecoveryCard'
 import MuscleMap from '@/components/MuscleMap'
 import ExerciseDemo from '@/components/ExerciseDemo'
-import { deriveAggregates, applyTableEditToSetLog } from '@/lib/liveSession'
+import { deriveAggregates, applyTableEditToSetLog, parseTimedSeconds } from '@/lib/liveSession'
 
 // ─── Type colors ─────────────────────────────────────────────────────────
 
@@ -854,7 +854,9 @@ export default function LogDayPage() {
             const current = getRowDisplay(ex, i)
             const existingLog = setLogEdits[i] ?? []
             const currentSetsNum = Number(current.sets) || existingLog.length
-            const currentRepsNum = Number(current.reps) || 0
+            // current.reps may be a timed string (e.g. "45s") for timed exercises — don't let
+            // Number(...) silently collapse it to 0 when editing an unrelated field (sets/weight).
+            const currentRepsNum = Number(current.reps) || parseTimedSeconds(current.reps) || 0
             const currentWeightNum = current.weight_kg === '' ? null : Number(current.weight_kg)
 
             const parsed = Number(value)
@@ -889,7 +891,8 @@ export default function LogDayPage() {
             const existingLog = setLogEdits[i] ?? []
             const nextEffort = current.effort === level ? null : level
             const setsNum = Number(current.sets) || existingLog.length
-            const repsNum = Number(current.reps) || 0
+            // See updateRowField: preserve timed reps (e.g. "45s") as seconds instead of 0.
+            const repsNum = Number(current.reps) || parseTimedSeconds(current.reps) || 0
             const weightNum = current.weight_kg === '' ? null : Number(current.weight_kg)
             const updated = applyTableEditToSetLog(existingLog, {
               sets: setsNum,
