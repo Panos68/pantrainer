@@ -25,13 +25,13 @@ function sideLabel(side?: 'left' | 'right'): string {
 }
 
 // Persistent header shown across every render state of the live page — lets the
-// athlete peek at the rest of the week without losing progress. Safe to navigate
+// athlete peek at the full day plan without losing progress. Safe to navigate
 // away and back because every set is persisted immediately via persist().
 function LiveHeader({ day }: { day: string }) {
   return (
     <div className="w-full max-w-sm flex items-center justify-between px-1 pb-4">
-      <Link href="/" className="text-zinc-500 hover:text-zinc-300 text-xs font-mono tracking-widest uppercase transition-colors">
-        ← Week
+      <Link href={`/log/${day}`} className="text-zinc-500 hover:text-zinc-300 text-xs font-mono tracking-widest uppercase transition-colors">
+        ← Day
       </Link>
       <span className="text-zinc-700 text-xs font-mono">{day}</span>
     </div>
