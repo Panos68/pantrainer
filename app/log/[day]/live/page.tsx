@@ -212,6 +212,8 @@ export default function LiveSessionPage() {
   const [loggedSets, setLoggedSets] = useState<Record<number, SetEntry[]>>({})
   const [stepIndex, setStepIndex] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+  const [loadAttempt, setLoadAttempt] = useState(0)
 
   // End-of-queue review screen state
   const [rpe, setRpe] = useState('')
@@ -221,8 +223,12 @@ export default function LiveSessionPage() {
   useEffect(() => {
     if (!day) return
     requestNotificationPermission()
+    Promise.resolve().then(() => setLoadError(false))
     fetch(`/api/session/${day}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Failed to load session (${r.status})`)
+        return r.json()
+      })
       .then((data: Session) => {
         const initial: Record<number, SetEntry[]> = {}
         data.exercises.forEach((ex, i) => {
@@ -234,7 +240,8 @@ export default function LiveSessionPage() {
         setStepIndex(getResumeIndex(queue, initial))
         if (data.rpe != null) setRpe(String(data.rpe))
       })
-  }, [day])
+      .catch(() => setLoadError(true))
+  }, [day, loadAttempt])
 
   const queue = useMemo<LiveStep[]>(() => (session ? buildLiveQueue(session) : []), [session])
   const step = stepIndex != null ? queue[stepIndex] ?? null : null
@@ -279,6 +286,7 @@ export default function LiveSessionPage() {
     if (!session) return
     setCompleting(true)
     try {
+      const sync = garminSync ?? (await syncGarmin(session.date, session.type))
       const exercises = session.exercises.map((ex, i) => {
         const log = loggedSets[i] ?? ex.set_log ?? []
         if (log.length === 0) return ex
@@ -305,11 +313,11 @@ export default function LiveSessionPage() {
           ...(exercise_groups ? { exercise_groups } : {}),
           status: 'completed',
           rpe: rpe !== '' ? Number(rpe) : null,
-          garmin_activity_id: garminSync?.garmin_activity_id ?? session.garmin_activity_id ?? null,
-          aerobic_training_effect: garminSync?.aerobic_training_effect ?? session.aerobic_training_effect ?? null,
-          anaerobic_training_effect: garminSync?.anaerobic_training_effect ?? session.anaerobic_training_effect ?? null,
-          training_stress_score: garminSync?.training_stress_score ?? session.training_stress_score ?? null,
-          hr_zones: garminSync?.hr_zones ?? session.hr_zones ?? null,
+          garmin_activity_id: sync?.garmin_activity_id ?? session.garmin_activity_id ?? null,
+          aerobic_training_effect: sync?.aerobic_training_effect ?? session.aerobic_training_effect ?? null,
+          anaerobic_training_effect: sync?.anaerobic_training_effect ?? session.anaerobic_training_effect ?? null,
+          training_stress_score: sync?.training_stress_score ?? session.training_stress_score ?? null,
+          hr_zones: sync?.hr_zones ?? session.hr_zones ?? null,
         }),
       })
       if (res.ok) {
@@ -318,6 +326,22 @@ export default function LiveSessionPage() {
     } finally {
       setCompleting(false)
     }
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-zinc-950 text-zinc-100 p-6">
+        <LiveHeader day={day} />
+        <div className="text-red-400 font-mono text-sm">Couldn&apos;t load this session.</div>
+        <button
+          type="button"
+          onClick={() => setLoadAttempt((n) => n + 1)}
+          className="px-4 py-2 rounded bg-zinc-800 text-zinc-200 text-sm font-mono"
+        >
+          Retry
+        </button>
+      </div>
+    )
   }
 
   if (!session || stepIndex == null) {
@@ -372,7 +396,7 @@ export default function LiveSessionPage() {
 
         <button
           type="button"
-          disabled={completing}
+          disabled={completing || garminSyncing}
           onClick={handleCompleteSession}
           className="w-full max-w-sm h-12 rounded-xl bg-lime-400 hover:bg-lime-300 text-zinc-950 font-black text-xs tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
         >
@@ -385,28 +409,52 @@ export default function LiveSessionPage() {
   if (step.kind === 'rest') {
     const nextStep = queue[stepIndex + 1]
     const nextSet = nextStep && nextStep.kind === 'set' ? nextStep : null
+    // If the upcoming set is part of a multi-exercise superset round, collect every
+    // exercise in that same round so the athlete can see the whole superset in advance
+    // instead of just the single next exercise.
+    const upcomingGroup: Extract<LiveStep, { kind: 'set' }>[] = []
+    if (nextSet && nextSet.groupId != null && nextSet.roundNumber != null) {
+      let i = stepIndex + 1
+      const seenExercises = new Set<number>()
+      while (i < queue.length) {
+        const s = queue[i]
+        if (s.kind !== 'set' || s.groupId !== nextSet.groupId || s.roundNumber !== nextSet.roundNumber) break
+        if (!seenExercises.has(s.exerciseIndex)) {
+          seenExercises.add(s.exerciseIndex)
+          upcomingGroup.push(s)
+        }
+        i++
+      }
+    } else if (nextSet) {
+      upcomingGroup.push(nextSet)
+    }
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-zinc-950 p-6">
         <LiveHeader day={day} />
         <RestTimer
           key={stepIndex}
           seconds={step.seconds}
+          storageKey={`rest-timer:${day}:${stepIndex}`}
           onDone={() => setStepIndex(stepIndex + 1)}
           onSkip={() => setStepIndex(stepIndex + 1)}
           onAddSeconds={() => {}}
         />
-        {nextSet && (
+        {upcomingGroup.length > 0 && (
           <div className="flex flex-col items-center gap-2 mt-4">
             <div className="text-zinc-500 text-[10px] font-mono tracking-widest uppercase">
-              Up next
+              {upcomingGroup.length > 1 ? 'Up next — superset' : 'Up next'}
             </div>
-            <div className="text-zinc-300 text-sm font-mono">
-              {nextSet.exercise.name}
-              {nextSet.side && ` — ${sideLabel(nextSet.side)}`}
-            </div>
-            <div className="max-w-[140px]">
-              <ExerciseDemo key={nextSet.exercise.name} name={nextSet.exercise.name} inline />
-            </div>
+            {upcomingGroup.map((s) => (
+              <div key={`${s.exerciseIndex}-${s.side ?? ''}`} className="flex flex-col items-center gap-2">
+                <div className="text-zinc-300 text-sm font-mono">
+                  {s.exercise.name}
+                  {s.side && ` — ${sideLabel(s.side)}`}
+                </div>
+                <div className="max-w-[140px]">
+                  <ExerciseDemo key={s.exercise.name} name={s.exercise.name} inline />
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

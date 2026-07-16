@@ -14,20 +14,27 @@ function formatMmSs(totalSeconds: number): string {
  * Render with a `key` that changes per rest period (e.g. the queue step index)
  * so remaining-time state resets via remount instead of a synced effect.
  *
- * Countdown is timestamp-based (endAt = Date.now() + seconds*1000, stored in a
- * ref) rather than accumulated per-second decrements, so it self-corrects
- * after the tab is backgrounded/throttled instead of drifting or freezing.
+ * Countdown is timestamp-based (endAt = Date.now() + seconds*1000) rather than
+ * accumulated per-second decrements, so it self-corrects after the tab is
+ * backgrounded/throttled instead of drifting or freezing.
+ *
+ * When `storageKey` is provided, the endAt timestamp is persisted to
+ * localStorage so navigating away from the live page and back (which
+ * unmounts/remounts this component) resumes the same countdown instead of
+ * restarting it from `seconds`.
  */
 export default function RestTimer({
   seconds,
   onDone,
   onSkip,
   onAddSeconds,
+  storageKey,
 }: {
   seconds: number
   onDone: () => void
   onSkip: () => void
   onAddSeconds: (delta: number) => void
+  storageKey?: string
 }) {
   const endAtRef = useRef<number | null>(null)
   const [remaining, setRemaining] = useState(seconds)
@@ -36,16 +43,19 @@ export default function RestTimer({
   const hasNotified = useRef(false)
 
   useEffect(() => {
-    endAtRef.current = Date.now() + seconds * 1000
+    const stored = storageKey ? Number(localStorage.getItem(storageKey)) : null
+    const endAt = stored && stored > Date.now() ? stored : Date.now() + seconds * 1000
+    endAtRef.current = endAt
+    if (storageKey) localStorage.setItem(storageKey, String(endAt))
     const tick = () => {
-      const endAt = endAtRef.current ?? Date.now()
-      const next = Math.max(0, Math.round((endAt - Date.now()) / 1000))
+      const currentEndAt = endAtRef.current ?? Date.now()
+      const next = Math.max(0, Math.round((currentEndAt - Date.now()) / 1000))
       setRemaining(next)
     }
     tick()
     const id = setInterval(tick, 250)
     return () => clearInterval(id)
-  }, [seconds])
+  }, [seconds, storageKey])
 
   useEffect(() => {
     if (remaining === 5 && !hasBeepedAt5.current) {
@@ -59,9 +69,10 @@ export default function RestTimer({
         hasNotified.current = true
         notifyTimerDone('Rest timer done')
       }
+      if (storageKey) localStorage.removeItem(storageKey)
       onDone()
     }
-  }, [remaining, onDone])
+  }, [remaining, onDone, storageKey])
 
   return (
     <div className="flex flex-col items-center gap-4">
@@ -70,7 +81,9 @@ export default function RestTimer({
         <button
           type="button"
           onClick={() => {
-            endAtRef.current = (endAtRef.current ?? Date.now()) + 30000
+            const nextEndAt = (endAtRef.current ?? Date.now()) + 30000
+            endAtRef.current = nextEndAt
+            if (storageKey) localStorage.setItem(storageKey, String(nextEndAt))
             setRemaining((r) => r + 30)
             onAddSeconds(30)
           }}
@@ -80,7 +93,10 @@ export default function RestTimer({
         </button>
         <button
           type="button"
-          onClick={onSkip}
+          onClick={() => {
+            if (storageKey) localStorage.removeItem(storageKey)
+            onSkip()
+          }}
           className="px-4 py-2 rounded bg-zinc-800 text-zinc-200 text-sm"
         >
           Skip rest
