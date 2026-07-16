@@ -1,10 +1,10 @@
 import { format, parseISO } from 'date-fns'
-import { readCurrentWeek } from '@/lib/data'
+import { readCurrentWeekDirect } from '@/lib/data'
 import { buildExport } from '@/lib/export'
 import { buildExportBundleResponse } from '@/lib/export-bundle'
 
 export async function POST(request: Request) {
-  const currentWeek = await readCurrentWeek()
+  const currentWeek = await readCurrentWeekDirect()
   if (!currentWeek) {
     return Response.json({ error: 'No current week found' }, { status: 404 })
   }

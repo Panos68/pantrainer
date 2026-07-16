@@ -8,6 +8,7 @@ export const SetEntrySchema = z.object({
   weight_kg: z.number().nullable(),
   effort: z.enum(['easy', 'perfect', 'hard']).nullable(),
   completed_at: z.string(),
+  side: z.enum(['left', 'right']).nullable().optional(),
 })
 
 // Planned exercise within a session
@@ -23,6 +24,7 @@ export const ExerciseSchema = z.object({
   effort: z.enum(['easy', 'perfect', 'hard']).nullable().optional(),
   actual_note: z.string().nullable().optional(),
   set_log: z.array(SetEntrySchema).optional(),
+  per_side: z.boolean().optional(),
   alternatives: z.array(z.object({
     name: z.string(),
     sets: z.number().nullable().optional(),
