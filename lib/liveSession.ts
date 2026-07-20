@@ -294,8 +294,16 @@ function planDefaultReps(plan: Exercise): number {
   return 0
 }
 
+const WEIGHT_STEP_KG = 2.5
+const TIME_STEP_SEC = 5
+const REP_STEP = 2
+
 // Returns defaults to pre-fill the next set during the live flow: the previous logged
-// set's reps/weight if one exists, else a default derived from today's plan.
+// set's reps/weight if one exists, else a default derived from today's plan. When the
+// previous set was rated 'easy' or 'hard', nudges the suggestion by a fixed step instead
+// of repeating it verbatim — weight for weighted exercises, seconds for timed exercises
+// (whose `reps` field holds the seconds count), reps otherwise. 'perfect'/null effort and
+// having no previous set at all both preserve the original repeat-verbatim behavior.
 export function getCarryForwardDefaults(
   loggedSets: SetEntry[],
   plan: Exercise,
@@ -303,10 +311,22 @@ export function getCarryForwardDefaults(
 ): { reps: number; weight_kg: number | null } {
   const candidates = side != null ? loggedSets.filter((s) => s.side === side) : loggedSets
   const prev = candidates[candidates.length - 1]
-  if (prev) {
+  if (!prev) {
+    return { reps: planDefaultReps(plan), weight_kg: plan.weight_kg ?? null }
+  }
+
+  const direction = prev.effort === 'easy' ? 1 : prev.effort === 'hard' ? -1 : 0
+  if (direction === 0) {
     return { reps: prev.reps, weight_kg: prev.weight_kg }
   }
-  return { reps: planDefaultReps(plan), weight_kg: plan.weight_kg ?? null }
+
+  if (prev.weight_kg != null) {
+    return { reps: prev.reps, weight_kg: Math.max(0, prev.weight_kg + direction * WEIGHT_STEP_KG) }
+  }
+  if (parseTimedSeconds(plan.reps) != null) {
+    return { reps: Math.max(5, prev.reps + direction * TIME_STEP_SEC), weight_kg: null }
+  }
+  return { reps: Math.max(1, prev.reps + direction * REP_STEP), weight_kg: null }
 }
 
 // Matches strings like "30 sec", "45sec", "1 min" used for timed exercises (e.g. dead hang, plank).

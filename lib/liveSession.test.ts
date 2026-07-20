@@ -245,10 +245,10 @@ function testGetCarryForwardDefaultsFromLoggedSets() {
   const plan = { name: 'Back Squat', sets: 3, reps: 8, weight_kg: 60, alternatives: [] }
   const logged: SetEntry[] = [
     { reps: 8, weight_kg: 60, effort: 'perfect', completed_at: 't1' },
-    { reps: 7, weight_kg: 62.5, effort: 'hard', completed_at: 't2' },
+    { reps: 7, weight_kg: 62.5, effort: 'perfect', completed_at: 't2' },
   ]
   const defaults = getCarryForwardDefaults(logged, plan)
-  assert.deepEqual(defaults, { reps: 7, weight_kg: 62.5 }, 'uses the previous logged set when present')
+  assert.deepEqual(defaults, { reps: 7, weight_kg: 62.5 }, 'perfect effort repeats the previous logged set verbatim')
 }
 
 function testGetCarryForwardDefaultsFromPlan() {
@@ -265,8 +265,8 @@ function testGetCarryForwardDefaultsPerSideFiltersBySide() {
   const plan = { name: 'DB Curl', sets: 3, reps: 10, weight_kg: 10, alternatives: [], per_side: true }
   const logged: SetEntry[] = [
     { reps: 10, weight_kg: 10, effort: 'perfect', completed_at: 't1', side: 'left' },
-    { reps: 10, weight_kg: 12, effort: 'hard', completed_at: 't2', side: 'right' },
-    { reps: 9, weight_kg: 10, effort: 'easy', completed_at: 't3', side: 'left' },
+    { reps: 10, weight_kg: 12, effort: 'perfect', completed_at: 't2', side: 'right' },
+    { reps: 9, weight_kg: 10, effort: 'perfect', completed_at: 't3', side: 'left' },
   ]
   const leftDefaults = getCarryForwardDefaults(logged, plan, 'left')
   assert.deepEqual(
@@ -294,6 +294,82 @@ function testGetCarryForwardDefaultsPerSideFallsBackToPlan() {
   )
 }
 
+function testGetCarryForwardDefaultsStepsUpOnEasyWeighted() {
+  const plan = { name: 'Back Squat', sets: 3, reps: 8, weight_kg: 60, alternatives: [] }
+  const logged: SetEntry[] = [{ reps: 8, weight_kg: 60, effort: 'easy', completed_at: 't1' }]
+  const defaults = getCarryForwardDefaults(logged, plan)
+  assert.deepEqual(defaults, { reps: 8, weight_kg: 62.5 }, 'easy weighted set steps weight up by 2.5kg, reps unchanged')
+}
+
+function testGetCarryForwardDefaultsStepsDownOnHardWeighted() {
+  const plan = { name: 'Back Squat', sets: 3, reps: 8, weight_kg: 60, alternatives: [] }
+  const logged: SetEntry[] = [{ reps: 8, weight_kg: 60, effort: 'hard', completed_at: 't1' }]
+  const defaults = getCarryForwardDefaults(logged, plan)
+  assert.deepEqual(defaults, { reps: 8, weight_kg: 57.5 }, 'hard weighted set steps weight down by 2.5kg, reps unchanged')
+}
+
+function testGetCarryForwardDefaultsWeightFloorsAtZero() {
+  const plan = { name: 'Light Curl', sets: 3, reps: 10, weight_kg: 1, alternatives: [] }
+  const logged: SetEntry[] = [{ reps: 10, weight_kg: 1, effort: 'hard', completed_at: 't1' }]
+  const defaults = getCarryForwardDefaults(logged, plan)
+  assert.deepEqual(defaults, { reps: 10, weight_kg: 0 }, 'weight step-down floors at 0, never negative')
+}
+
+function testGetCarryForwardDefaultsStepsUpOnEasyTimed() {
+  const plan = { name: 'Plank', sets: 3, reps: '45 sec', weight_kg: null, alternatives: [] }
+  const logged: SetEntry[] = [{ reps: 45, weight_kg: null, effort: 'easy', completed_at: 't1' }]
+  const defaults = getCarryForwardDefaults(logged, plan)
+  assert.deepEqual(defaults, { reps: 50, weight_kg: null }, 'easy timed set steps seconds up by 5')
+}
+
+function testGetCarryForwardDefaultsStepsDownOnHardTimed() {
+  const plan = { name: 'Plank', sets: 3, reps: '45 sec', weight_kg: null, alternatives: [] }
+  const logged: SetEntry[] = [{ reps: 45, weight_kg: null, effort: 'hard', completed_at: 't1' }]
+  const defaults = getCarryForwardDefaults(logged, plan)
+  assert.deepEqual(defaults, { reps: 40, weight_kg: null }, 'hard timed set steps seconds down by 5')
+}
+
+function testGetCarryForwardDefaultsTimedFloorsAtFive() {
+  const plan = { name: 'Plank', sets: 3, reps: '8 sec', weight_kg: null, alternatives: [] }
+  const logged: SetEntry[] = [{ reps: 8, weight_kg: null, effort: 'hard', completed_at: 't1' }]
+  const defaults = getCarryForwardDefaults(logged, plan)
+  assert.deepEqual(defaults, { reps: 5, weight_kg: null }, 'timed step-down floors at 5 seconds')
+}
+
+function testGetCarryForwardDefaultsStepsUpOnEasyBodyweight() {
+  const plan = { name: 'Push Up', sets: 3, reps: 12, weight_kg: null, alternatives: [] }
+  const logged: SetEntry[] = [{ reps: 12, weight_kg: null, effort: 'easy', completed_at: 't1' }]
+  const defaults = getCarryForwardDefaults(logged, plan)
+  assert.deepEqual(defaults, { reps: 14, weight_kg: null }, 'easy bodyweight set steps reps up by 2')
+}
+
+function testGetCarryForwardDefaultsStepsDownOnHardBodyweight() {
+  const plan = { name: 'Push Up', sets: 3, reps: 12, weight_kg: null, alternatives: [] }
+  const logged: SetEntry[] = [{ reps: 12, weight_kg: null, effort: 'hard', completed_at: 't1' }]
+  const defaults = getCarryForwardDefaults(logged, plan)
+  assert.deepEqual(defaults, { reps: 10, weight_kg: null }, 'hard bodyweight set steps reps down by 2')
+}
+
+function testGetCarryForwardDefaultsBodyweightRepsFloorsAtOne() {
+  const plan = { name: 'Pistol Squat', sets: 3, reps: 2, weight_kg: null, alternatives: [] }
+  const logged: SetEntry[] = [{ reps: 2, weight_kg: null, effort: 'hard', completed_at: 't1' }]
+  const defaults = getCarryForwardDefaults(logged, plan)
+  assert.deepEqual(defaults, { reps: 1, weight_kg: null }, 'bodyweight step-down floors at 1 rep')
+}
+
+function testGetCarryForwardDefaultsPerSideStepIsIndependent() {
+  const plan = { name: 'DB Curl', sets: 3, reps: 10, weight_kg: 10, alternatives: [], per_side: true }
+  const logged: SetEntry[] = [
+    { reps: 10, weight_kg: 10, effort: 'easy', completed_at: 't1', side: 'left' },
+    { reps: 10, weight_kg: 10, effort: 'hard', completed_at: 't2', side: 'right' },
+  ]
+  const leftDefaults = getCarryForwardDefaults(logged, plan, 'left')
+  assert.deepEqual(leftDefaults, { reps: 10, weight_kg: 12.5 }, 'left side steps up from its own easy rating')
+
+  const rightDefaults = getCarryForwardDefaults(logged, plan, 'right')
+  assert.deepEqual(rightDefaults, { reps: 10, weight_kg: 7.5 }, 'right side steps down from its own hard rating, independent of left')
+}
+
 testStraightSets()
 testSupersetRounds()
 testDeriveAggregates()
@@ -309,4 +385,14 @@ testGetCarryForwardDefaultsFromLoggedSets()
 testGetCarryForwardDefaultsFromPlan()
 testGetCarryForwardDefaultsPerSideFiltersBySide()
 testGetCarryForwardDefaultsPerSideFallsBackToPlan()
+testGetCarryForwardDefaultsStepsUpOnEasyWeighted()
+testGetCarryForwardDefaultsStepsDownOnHardWeighted()
+testGetCarryForwardDefaultsWeightFloorsAtZero()
+testGetCarryForwardDefaultsStepsUpOnEasyTimed()
+testGetCarryForwardDefaultsStepsDownOnHardTimed()
+testGetCarryForwardDefaultsTimedFloorsAtFive()
+testGetCarryForwardDefaultsStepsUpOnEasyBodyweight()
+testGetCarryForwardDefaultsStepsDownOnHardBodyweight()
+testGetCarryForwardDefaultsBodyweightRepsFloorsAtOne()
+testGetCarryForwardDefaultsPerSideStepIsIndependent()
 console.log('lib/liveSession.test.ts: all assertions passed')
