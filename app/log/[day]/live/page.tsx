@@ -46,6 +46,7 @@ function SetEntryForm({
   carryForward,
   isLastSet,
   initialNote,
+  supersetPeers,
   onLog,
 }: {
   day: string
@@ -55,6 +56,7 @@ function SetEntryForm({
   carryForward: { reps: string; weight_kg: string }
   isLastSet: boolean
   initialNote: string
+  supersetPeers: string[]
   onLog: (reps: string, weight: string, effort: SetEntry['effort'], note: string | undefined) => void
 }) {
   const [altIndex, setAltIndex] = useState<number | null>(null)
@@ -95,6 +97,11 @@ function SetEntryForm({
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-zinc-950 text-zinc-100 p-6">
       <LiveHeader day={day} />
+      {supersetPeers.length > 0 && (
+        <div className="px-2 py-1 rounded bg-amber-400/10 border border-amber-400/30 text-amber-400 text-[10px] font-mono tracking-widest uppercase">
+          Superset — also: {supersetPeers.join(', ')}
+        </div>
+      )}
       {roundLabel && <div className="text-xs text-zinc-500 font-mono">{roundLabel}</div>}
       <div className="text-2xl font-mono">{activeExercise.name}</div>
       <ExerciseDemo key={activeExercise.name} name={activeExercise.name} inline />
@@ -258,6 +265,17 @@ export default function LiveSessionPage() {
 
   const queue = useMemo<LiveStep[]>(() => (session ? buildLiveQueue(session) : []), [session])
   const step = stepIndex != null ? queue[stepIndex] ?? null : null
+
+  // Superset groups from the coach plan use rest_between_exercises_sec: 0 between their
+  // exercises (the app default and what real plans consistently send), so that rest step
+  // has zero seconds and RestTimer auto-advances past it almost instantly — no one ever
+  // sees a "coming up" screen rendered there. Skip those zero-length rest steps outright
+  // instead of relying on RestTimer to self-skip, so no dead render happens.
+  useEffect(() => {
+    if (step && step.kind === 'rest' && step.seconds <= 0 && stepIndex != null) {
+      Promise.resolve().then(() => setStepIndex(stepIndex + 1))
+    }
+  }, [step, stepIndex])
 
   async function persist(exerciseIndex: number, updates: Partial<Session['exercises'][number]>) {
     if (!session) return
@@ -486,6 +504,27 @@ export default function LiveSessionPage() {
   const isLastSet = !nextQueueStep || nextQueueStep.kind !== 'set' || nextQueueStep.exerciseIndex !== step.exerciseIndex
   const initialNote = session.exercises[step.exerciseIndex]?.actual_note ?? ''
 
+  // Persistent superset indicator on the exercise screen itself — the rest-based "Up
+  // next" preview never gets seen for real superset data, since rest_between_exercises_sec
+  // is 0 there (see the zero-length-rest skip above). Every other exercise sharing this
+  // step's groupId+roundNumber is a peer in the same superset round.
+  const supersetPeers =
+    step.groupId != null && step.roundNumber != null
+      ? Array.from(
+          new Set(
+            queue
+              .filter(
+                (s): s is Extract<LiveStep, { kind: 'set' }> =>
+                  s.kind === 'set' &&
+                  s.groupId === step.groupId &&
+                  s.roundNumber === step.roundNumber &&
+                  s.exerciseIndex !== step.exerciseIndex,
+              )
+              .map((s) => s.exercise.name),
+          ),
+        )
+      : []
+
   return (
     <SetEntryForm
       key={stepIndex}
@@ -496,6 +535,7 @@ export default function LiveSessionPage() {
       carryForward={carryForward}
       isLastSet={isLastSet}
       initialNote={initialNote}
+      supersetPeers={supersetPeers}
       onLog={logCurrentSet}
     />
   )
