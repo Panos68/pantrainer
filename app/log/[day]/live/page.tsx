@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import RestTimer from '@/components/RestTimer'
@@ -220,6 +220,19 @@ export default function LiveSessionPage() {
   const [completing, setCompleting] = useState(false)
   const { syncing: garminSyncing, lastSync: garminSync, syncGarmin } = useGarminSync()
 
+  // Every PATCH to /api/session/[day] is chained through this ref so writes always reach
+  // the server in the order they were issued. The PATCH handler does a naive read-merge-
+  // write with no locking, so two concurrent requests (e.g. the last logCurrentSet's
+  // exercises-only PATCH still in flight when handleCompleteSession's status/rpe/garmin
+  // PATCH fires) can complete out of order and the older, narrower request silently
+  // reverts fields the newer one just wrote. Serializing here closes that race.
+  const writeQueue = useRef<Promise<unknown>>(Promise.resolve())
+  function enqueueWrite<T>(run: () => Promise<T>): Promise<T> {
+    const result = writeQueue.current.then(run)
+    writeQueue.current = result.catch(() => {})
+    return result
+  }
+
   useEffect(() => {
     if (!day) return
     requestNotificationPermission()
@@ -253,11 +266,13 @@ export default function LiveSessionPage() {
       i === exerciseIndex ? { ...ex, ...updates } : ex,
     )
     setSession({ ...session, exercises: nextExercises })
-    await fetch(`/api/session/${day}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ exercises: nextExercises }),
-    })
+    await enqueueWrite(() =>
+      fetch(`/api/session/${day}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exercises: nextExercises }),
+      }),
+    )
     setSaving(false)
   }
 
@@ -305,7 +320,7 @@ export default function LiveSessionPage() {
         ...group,
         exercises: group.exercises.map(() => exercises[globalIndex++]),
       }))
-      const res = await fetch(`/api/session/${day}`, {
+      const res = await enqueueWrite(() => fetch(`/api/session/${day}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -319,7 +334,7 @@ export default function LiveSessionPage() {
           training_stress_score: sync?.training_stress_score ?? session.training_stress_score ?? null,
           hr_zones: sync?.hr_zones ?? session.hr_zones ?? null,
         }),
-      })
+      }))
       if (res.ok) {
         router.push(`/log/${day}`)
       }
