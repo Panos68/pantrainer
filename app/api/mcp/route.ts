@@ -5,14 +5,12 @@ import {
   readAutomationNotes,
   readProposedPlan,
   writeProposedPlan,
-  readDailyReadiness,
-  writeDailyReadiness,
   readArchivedWeeks,
   readAllArchivedWeeks,
 } from '@/lib/data'
 import { buildExportV2 } from '@/lib/export'
 import { validateImport } from '@/lib/import'
-import { SessionSchema, ProposedPlanRunTypeSchema, DailyReadinessSchema } from '@/lib/schema'
+import { SessionSchema, ProposedPlanRunTypeSchema } from '@/lib/schema'
 import type { WeekDoc } from '@/lib/schema'
 
 // ---------------------------------------------------------------------------
@@ -78,16 +76,13 @@ const TOOLS = [
     },
   },
   {
-    name: 'log_daily_readiness',
+    name: 'get_garmin_recovery_freshness',
     description:
-      'Log or update the athlete\'s subjective daily readiness check-in (energy, sleep quality, mood) for an explicit date. Writes immediately to the current week — no review step — so it reflects what the athlete just told you, not stale/delayed Garmin sync data. date is required. On an existing entry for that date, any field you omit keeps its previous value.',
+      'Check whether cached Garmin recovery data (sleep, resting HR) for a given date is actually present and current, before using the daily recovery score to give advice. Returns the raw cached values, when they were fetched, and an explicit warning when sleep is missing or the data looks stale — use this before trusting a recovery/readiness score.',
     inputSchema: {
       type: 'object',
       properties: {
-        date: { type: 'string', description: 'ISO date (YYYY-MM-DD) the check-in applies to. Required.' },
-        energy_level: { type: 'number', description: '1-5.' },
-        sleep_quality: { type: 'number', description: '1-5.' },
-        mood: { type: 'number', description: '1-5.' },
+        date: { type: 'string', description: 'ISO date (YYYY-MM-DD) to check. Required.' },
       },
       required: ['date'],
     },
@@ -274,38 +269,47 @@ async function handleSubmitProposalByDate(args: Record<string, unknown>) {
   }
 }
 
-async function handleLogDailyReadiness(args: Record<string, unknown>) {
+async function handleGetGarminRecoveryFreshness(args: Record<string, unknown>) {
   const date = args.date
   if (typeof date !== 'string' || date.trim().length === 0) {
     return { ok: false, error: 'date is required (YYYY-MM-DD)' }
   }
 
-  const existing = await readDailyReadiness(date)
-
-  const energy_level =
-    typeof args.energy_level === 'number' ? args.energy_level : existing?.energy_level
-  const sleep_quality =
-    typeof args.sleep_quality === 'number' ? args.sleep_quality : existing?.sleep_quality
-  const mood = typeof args.mood === 'number' ? args.mood : existing?.mood
-
-  const parsed = DailyReadinessSchema.safeParse({
-    date,
-    energy_level,
-    sleep_quality,
-    mood,
-    logged_at: new Date().toISOString(),
-  })
-  if (!parsed.success) {
-    return {
-      ok: false,
-      error: 'Invalid readiness values',
-      errors: parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`),
-    }
+  const currentWeek = await readCurrentWeekDirect()
+  if (!currentWeek) {
+    return { ok: false, error: 'No current week found' }
   }
 
-  await writeDailyReadiness(parsed.data)
+  const recovery = currentWeek.garmin_recovery?.[date] ?? null
+  const serverNow = new Date()
+  const fetchedHoursAgo =
+    recovery?.fetched_at != null
+      ? Math.round((serverNow.getTime() - new Date(recovery.fetched_at).getTime()) / (1000 * 60 * 60) * 10) / 10
+      : null
 
-  return { ok: true, readiness: parsed.data }
+  let warning: string | null = null
+  if (!recovery) {
+    warning = `No Garmin recovery data cached yet for ${date}. Don't assume poor recovery — it's simply unavailable, likely not synced yet.`
+  } else if (recovery.sleep_hours == null) {
+    warning = `Sleep hours are missing for ${date} (resting_hr_bpm may still be present). Likely not synced yet — don't infer poor sleep from this.`
+  } else if (fetchedHoursAgo != null && fetchedHoursAgo > 12) {
+    warning = `Cached data for ${date} was fetched ${fetchedHoursAgo}h ago. If this is today, it may predate a later sync — treat with caution.`
+  }
+
+  return {
+    ok: true,
+    date,
+    found: recovery !== null,
+    sleep_hours: recovery?.sleep_hours ?? null,
+    deep_sleep_hours: recovery?.deep_sleep_hours ?? null,
+    rem_sleep_hours: recovery?.rem_sleep_hours ?? null,
+    resting_hr_bpm: recovery?.resting_hr_bpm ?? null,
+    max_hr_bpm: recovery?.max_hr_bpm ?? null,
+    fetched_at: recovery?.fetched_at ?? null,
+    fetched_hours_ago: fetchedHoursAgo,
+    server_now: serverNow.toISOString(),
+    warning,
+  }
 }
 
 function matchesExerciseName(name: string, query: string): 'exact' | 'partial' | 'none' {
@@ -443,7 +447,7 @@ async function dispatch(req: McpRequest): Promise<Response> {
       let data: unknown
       if (name === 'submit_proposed_plan') data = await handleSubmitProposedPlan(args)
       else if (name === 'submit_proposal_by_date') data = await handleSubmitProposalByDate(args)
-      else if (name === 'log_daily_readiness') data = await handleLogDailyReadiness(args)
+      else if (name === 'get_garmin_recovery_freshness') data = await handleGetGarminRecoveryFreshness(args)
       else if (name === 'get_lift_history') data = await handleGetLiftHistory(args)
       else return mcpError(id, -32601, `Unknown tool: ${name}`)
       return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] })
