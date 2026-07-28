@@ -7,6 +7,7 @@ const PUBLIC_PATHS = [
   '/.well-known/',
   '/api/oauth/authorize',
   '/api/oauth/token',
+  '/api/oauth/register',
   '/api/mcp',
   '/api/automation',
   '/api/revalidate',
