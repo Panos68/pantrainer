@@ -1,15 +1,19 @@
 import { blobUrl } from '@/lib/blob-url'
-import { format } from 'date-fns'
 import { signPhotoUrl } from '@/app/api/photos/route'
 import {
   readCurrentWeekDirect,
   readAutomationNotes,
   readProposedPlan,
   writeProposedPlan,
+  readDailyReadiness,
+  writeDailyReadiness,
+  readArchivedWeeks,
+  readAllArchivedWeeks,
 } from '@/lib/data'
 import { buildExportV2 } from '@/lib/export'
 import { validateImport } from '@/lib/import'
-import { SessionSchema, ProposedPlanRunTypeSchema } from '@/lib/schema'
+import { SessionSchema, ProposedPlanRunTypeSchema, DailyReadinessSchema } from '@/lib/schema'
+import type { WeekDoc } from '@/lib/schema'
 
 // ---------------------------------------------------------------------------
 // MCP tool definitions
@@ -52,9 +56,9 @@ const TOOLS = [
     },
   },
   {
-    name: 'submit_today_session',
+    name: 'submit_proposal_by_date',
     description:
-      'Submit a proposed update for a single session (today by default). Merges into the current week and stores as a proposed plan for review.',
+      'Submit a proposed update for a single session on an explicit date. Merges into the current week (that one session only — every other day is left untouched) and stores as a proposed plan for review. target_date is required (no "today" default) to avoid timezone-driven date mixups; always pass the exact YYYY-MM-DD date of the session you mean to change.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -64,13 +68,44 @@ const TOOLS = [
         },
         target_date: {
           type: 'string',
-          description: 'ISO date (YYYY-MM-DD) of the session to update. Defaults to today.',
+          description: 'ISO date (YYYY-MM-DD) of the session to update. Required.',
         },
         source: { type: 'string' },
         run_type: { type: 'string', enum: ['manual', 'daily', 'weekly'] },
         analysis_text: { type: 'string' },
       },
-      required: ['session'],
+      required: ['session', 'target_date'],
+    },
+  },
+  {
+    name: 'log_daily_readiness',
+    description:
+      'Log or update the athlete\'s subjective daily readiness check-in (energy, sleep quality, mood) for an explicit date. Writes immediately to the current week — no review step — so it reflects what the athlete just told you, not stale/delayed Garmin sync data. date is required. On an existing entry for that date, any field you omit keeps its previous value.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        date: { type: 'string', description: 'ISO date (YYYY-MM-DD) the check-in applies to. Required.' },
+        energy_level: { type: 'number', description: '1-5.' },
+        sleep_quality: { type: 'number', description: '1-5.' },
+        mood: { type: 'number', description: '1-5.' },
+      },
+      required: ['date'],
+    },
+  },
+  {
+    name: 'get_lift_history',
+    description:
+      'Get the history of actual weight/reps/effort logged for a specific exercise name across completed strength sessions (current week + archived weeks). Matches the exercise name exactly (case-insensitive) to avoid confusing similarly-named lifts (e.g. Pendlay row vs tricep extension); also reports other exercise names it found that partially match, so you can catch a wrong name before drawing conclusions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        exercise_name: { type: 'string', description: 'Exact exercise name to look up. Required.' },
+        weeks_back: {
+          type: 'number',
+          description: 'Limit to the N most recent archived weeks (plus current week). Omit to scan all archived weeks.',
+        },
+      },
+      required: ['exercise_name'],
     },
   },
 ]
@@ -167,7 +202,7 @@ async function handleSubmitProposedPlan(args: Record<string, unknown>) {
   return { ok: true, source, run_type, analysis_text }
 }
 
-async function handleSubmitTodaySession(args: Record<string, unknown>) {
+async function handleSubmitProposalByDate(args: Record<string, unknown>) {
   const sessionParsed = SessionSchema.safeParse(args.session)
   if (!sessionParsed.success) {
     return {
@@ -177,17 +212,23 @@ async function handleSubmitTodaySession(args: Record<string, unknown>) {
     }
   }
 
+  const targetDate = args.target_date
+  if (typeof targetDate !== 'string' || targetDate.trim().length === 0) {
+    return { ok: false, error: 'target_date is required (YYYY-MM-DD)' }
+  }
+
   const currentWeek = await readCurrentWeekDirect()
   if (!currentWeek) {
     return { ok: false, error: 'No current week found' }
   }
 
-  const targetDate =
-    typeof args.target_date === 'string' ? args.target_date : format(new Date(), 'yyyy-MM-dd')
-
   const targetIndex = currentWeek.sessions.findIndex((s) => s.date === targetDate)
   if (targetIndex === -1) {
-    return { ok: false, error: `No session found for ${targetDate}` }
+    return {
+      ok: false,
+      error: `No session found for ${targetDate}`,
+      available_dates: currentWeek.sessions.map((s) => `${s.date} (${s.day})`),
+    }
   }
 
   const existing = currentWeek.sessions[targetIndex]
@@ -230,6 +271,104 @@ async function handleSubmitTodaySession(args: Record<string, unknown>) {
     source,
     run_type,
     analysis_text,
+  }
+}
+
+async function handleLogDailyReadiness(args: Record<string, unknown>) {
+  const date = args.date
+  if (typeof date !== 'string' || date.trim().length === 0) {
+    return { ok: false, error: 'date is required (YYYY-MM-DD)' }
+  }
+
+  const existing = await readDailyReadiness(date)
+
+  const energy_level =
+    typeof args.energy_level === 'number' ? args.energy_level : existing?.energy_level
+  const sleep_quality =
+    typeof args.sleep_quality === 'number' ? args.sleep_quality : existing?.sleep_quality
+  const mood = typeof args.mood === 'number' ? args.mood : existing?.mood
+
+  const parsed = DailyReadinessSchema.safeParse({
+    date,
+    energy_level,
+    sleep_quality,
+    mood,
+    logged_at: new Date().toISOString(),
+  })
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: 'Invalid readiness values',
+      errors: parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`),
+    }
+  }
+
+  await writeDailyReadiness(parsed.data)
+
+  return { ok: true, readiness: parsed.data }
+}
+
+function matchesExerciseName(name: string, query: string): 'exact' | 'partial' | 'none' {
+  const a = name.trim().toLowerCase()
+  const b = query.trim().toLowerCase()
+  if (a === b) return 'exact'
+  if (a.includes(b) || b.includes(a)) return 'partial'
+  return 'none'
+}
+
+async function handleGetLiftHistory(args: Record<string, unknown>) {
+  const exerciseName = args.exercise_name
+  if (typeof exerciseName !== 'string' || exerciseName.trim().length === 0) {
+    return { ok: false, error: 'exercise_name is required' }
+  }
+
+  const weeksBack = typeof args.weeks_back === 'number' ? args.weeks_back : null
+
+  const [currentWeek, archivedWeeks] = await Promise.all([
+    readCurrentWeekDirect(),
+    weeksBack ? readArchivedWeeks(weeksBack) : readAllArchivedWeeks(),
+  ])
+
+  const allWeeks: WeekDoc[] = [...archivedWeeks, ...(currentWeek ? [currentWeek] : [])]
+
+  const history: Array<{
+    date: string
+    day: string
+    weight_kg: number | null
+    reps: number | string | null
+    effort: 'easy' | 'perfect' | 'hard' | null
+    notes: string | null
+  }> = []
+  const otherNamesSeen = new Set<string>()
+
+  for (const week of allWeeks) {
+    for (const session of week.sessions) {
+      if (session.status !== 'completed' || session.type !== 'Strength') continue
+      for (const ex of session.exercises) {
+        const match = matchesExerciseName(ex.name, exerciseName)
+        if (match === 'exact') {
+          history.push({
+            date: session.date,
+            day: session.day,
+            weight_kg: ex.actual_weight_kg ?? ex.weight_kg ?? null,
+            reps: ex.actual_reps ?? ex.reps ?? null,
+            effort: ex.effort ?? null,
+            notes: ex.actual_note ?? null,
+          })
+        } else if (match === 'partial') {
+          otherNamesSeen.add(ex.name)
+        }
+      }
+    }
+  }
+
+  history.sort((a, b) => a.date.localeCompare(b.date))
+
+  return {
+    ok: true,
+    exercise_name: exerciseName,
+    history,
+    other_similar_exercises: [...otherNamesSeen],
   }
 }
 
@@ -303,7 +442,9 @@ async function dispatch(req: McpRequest): Promise<Response> {
 
       let data: unknown
       if (name === 'submit_proposed_plan') data = await handleSubmitProposedPlan(args)
-      else if (name === 'submit_today_session') data = await handleSubmitTodaySession(args)
+      else if (name === 'submit_proposal_by_date') data = await handleSubmitProposalByDate(args)
+      else if (name === 'log_daily_readiness') data = await handleLogDailyReadiness(args)
+      else if (name === 'get_lift_history') data = await handleGetLiftHistory(args)
       else return mcpError(id, -32601, `Unknown tool: ${name}`)
       return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] })
     } catch (err) {
