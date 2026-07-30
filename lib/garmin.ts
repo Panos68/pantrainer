@@ -86,7 +86,7 @@ export type GarminHRResult = {
 }
 
 export async function fetchActivitiesForDate(date: string): Promise<{ activities: GarminActivityRaw[]; client: unknown }> {
-  const client = await createClient()
+  const client: any = await createClient()
   const all: GarminActivityRaw[] = await client.getActivities(0, 20)
   return { activities: all.filter((a) => a.startTimeLocal?.startsWith(date)), client }
 }
@@ -142,11 +142,11 @@ export type GarminBodyBatteryResult = {
 
 export async function fetchBodyBattery(date: string): Promise<GarminBodyBatteryResult | null> {
   try {
-    const client = await createClient()
+    const client: any = await createClient()
     const base = client.url.GC_API
-    const raw = await client.client.get<Array<{ charged?: number; drained?: number }>>(
+    const raw = await client.client.get(
       `${base}/wellness-service/wellness/bodyBattery/reports/daily?startDate=${date}&endDate=${date}`
-    )
+    ) as Array<{ charged?: number; drained?: number }>
     const entry = Array.isArray(raw) ? raw[0] : null
     if (!entry) return null
     return {
@@ -165,11 +165,11 @@ export type GarminStressResult = {
 
 export async function fetchStress(date: string): Promise<GarminStressResult | null> {
   try {
-    const client = await createClient()
+    const client: any = await createClient()
     const base = client.url.GC_API
-    const raw = await client.client.get<{ avgStressLevel?: number; maxStressLevel?: number }>(
+    const raw = await client.client.get(
       `${base}/wellness-service/wellness/dailyStress/${date}`
-    )
+    ) as { avgStressLevel?: number; maxStressLevel?: number }
     if (!raw) return null
     return {
       avg_stress_level: typeof raw.avgStressLevel === 'number' && raw.avgStressLevel >= 0 ? raw.avgStressLevel : null,
@@ -192,12 +192,12 @@ function subtractDays(date: string, days: number): string {
 
 export async function fetchVO2Max(date: string): Promise<GarminVo2MaxResult | null> {
   try {
-    const client = await createClient()
+    const client: any = await createClient()
     const base = client.url.GC_API
     const startDate = subtractDays(date, 90)
-    const raw = await client.client.get<Array<{ calendarDate?: string; generic?: { vo2MaxValue?: number | null } }>>(
+    const raw = await client.client.get(
       `${base}/metrics-service/metrics/maxmet/daily/${startDate}/${date}`
-    )
+    ) as Array<{ calendarDate?: string; generic?: { vo2MaxValue?: number | null } }>
     if (!Array.isArray(raw) || raw.length === 0) return null
     const withValue = raw.filter((entry) => typeof entry.generic?.vo2MaxValue === 'number')
     if (withValue.length === 0) return null
@@ -215,11 +215,11 @@ export type GarminFitnessAgeResult = {
 
 export async function fetchFitnessAge(date: string): Promise<GarminFitnessAgeResult | null> {
   try {
-    const client = await createClient()
+    const client: any = await createClient()
     const base = client.url.GC_API
-    const raw = await client.client.get<{ fitnessAge?: number | null; achievableFitnessAge?: number | null }>(
+    const raw = await client.client.get(
       `${base}/fitnessage-service/fitnessage/${date}`
-    )
+    ) as { fitnessAge?: number | null; achievableFitnessAge?: number | null }
     if (!raw) return null
     return {
       fitness_age: typeof raw.fitnessAge === 'number' ? raw.fitnessAge : null,
