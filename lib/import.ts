@@ -3,6 +3,7 @@ import { WeekDocSchema } from './schema'
 import type { WeekDoc } from './schema'
 import { archiveWeek, clearPendingWeek, readCurrentWeek, writeCurrentWeek, writePendingWeek } from './data'
 import { rollDeloadCounterOnWeekAdvance } from './state'
+import { todayIsoInAppTimeZone } from './app-timezone'
 import { addDays, format, parseISO } from 'date-fns'
 
 
@@ -245,12 +246,7 @@ export async function applyImport(importedDoc: WeekDoc): Promise<WeekDoc> {
   const currentWeek = await readCurrentWeek()
   const { importedMonday, mode } = validateAndDecideMode(currentWeek, normalizedImport)
   const importedWeekStartIso = importedMonday.toISOString().slice(0, 10)
-  const todayIso = new Intl.DateTimeFormat('en-CA', {
-    timeZone: process.env.APP_TIMEZONE ?? 'Europe/Athens',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
+  const todayIso = todayIsoInAppTimeZone()
 
   const importedByDay: Record<string, WeekDoc['sessions'][number]> = {}
   for (const s of normalizedImport.sessions) {

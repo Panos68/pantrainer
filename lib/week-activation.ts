@@ -1,18 +1,9 @@
 import { archiveWeek, clearPendingWeek, readCurrentWeek, readPendingWeek, writeCurrentWeek } from './data'
 import { rollDeloadCounterOnWeekAdvance } from './state'
+import { todayIsoInAppTimeZone } from './app-timezone'
 import type { WeekDoc } from './schema'
 
 const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-const APP_TIMEZONE = process.env.APP_TIMEZONE ?? 'Europe/Athens'
-
-function todayIsoInTimeZone(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: APP_TIMEZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
-}
 
 function parseDateAtNoon(date: string): Date | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
@@ -45,7 +36,7 @@ export async function isPendingWeekDue(): Promise<boolean> {
   if (!pending) return false
   const pendingStart = weekStartIso(pending)
   if (!pendingStart) return false
-  return pendingStart <= todayIsoInTimeZone()
+  return pendingStart <= todayIsoInAppTimeZone()
 }
 
 export async function activatePendingWeekIfDue(): Promise<{
@@ -64,7 +55,7 @@ export async function activatePendingWeekIfDue(): Promise<{
     return { activated: false, reason: 'invalid_pending_week', currentWeek: await readCurrentWeek() }
   }
 
-  const todayIso = todayIsoInTimeZone()
+  const todayIso = todayIsoInAppTimeZone()
   if (pendingStart > todayIso) {
     return { activated: false, reason: 'pending_not_due', currentWeek: await readCurrentWeek() }
   }

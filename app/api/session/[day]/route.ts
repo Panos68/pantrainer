@@ -1,17 +1,10 @@
 import { readCurrentWeekDirect, writeCurrentWeek } from '@/lib/data'
 import { deriveExerciseAggregates } from '@/lib/liveSession'
 import { updateLiftProgression } from '@/lib/progression'
+import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
 import type { Session, WeekSummary } from '@/lib/schema'
 
 export const dynamic = 'force-dynamic'
-
-function todayIsoLocal(): string {
-  const now = new Date()
-  const y = now.getFullYear()
-  const m = String(now.getMonth() + 1).padStart(2, '0')
-  const d = String(now.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
 
 function recalculateWeekSummary(sessions: Session[]): WeekSummary {
   const completed = sessions.filter((s) => s.status === 'completed')
@@ -113,7 +106,7 @@ export async function PATCH(
 
   const body = await req.json() as Partial<Session>
   const nextStatus = body.status ?? session.status
-  const sessionIsFuture = session.date > todayIsoLocal()
+  const sessionIsFuture = session.date > todayIsoInAppTimeZone()
   const isLoggingAction =
     nextStatus === 'in_progress' || nextStatus === 'completed' || nextStatus === 'skipped'
   if (sessionIsFuture && isLoggingAction) {

@@ -1,4 +1,5 @@
 import type { Session } from './schema'
+import { todayIsoInAppTimeZone } from './app-timezone'
 
 export type LoadSource = 'garmin_tss' | 'trimp' | 'hr_duration'
 
@@ -53,9 +54,7 @@ export function calcLoad(
 }
 
 export function sessionToLoadPoint(s: Session, athlete?: AthleteLoadParams): TrainingLoadPoint | null {
-  const now = new Date()
-  const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-  if (s.date > todayIso) return null
+  if (s.date > todayIsoInAppTimeZone()) return null
   if (s.status !== 'completed') return null
   const result = calcLoad(s, athlete)
   if (!result) return null

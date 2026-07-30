@@ -4,14 +4,14 @@ import { DailyReadinessSchema } from '@/lib/schema'
 import { calcRecoveryScore } from '@/lib/recovery-score'
 import { computeDailyScore, calcACWR } from '@/lib/daily-score'
 import { sessionToLoadPoint } from '@/lib/training-load'
-import { format } from 'date-fns'
+import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
 
 export const dynamic = 'force-dynamic'
 
 const NO_STORE_HEADERS = { 'Cache-Control': 'no-store, max-age=0' }
 
 export async function GET(req: NextRequest) {
-  const date = req.nextUrl.searchParams.get('date') ?? format(new Date(), 'yyyy-MM-dd')
+  const date = req.nextUrl.searchParams.get('date') ?? todayIsoInAppTimeZone()
 
   const [week, profile, readiness, archivedWeeks] = await Promise.all([
     readCurrentWeek(),

@@ -10,6 +10,7 @@ import {
 } from '@/lib/data'
 import { buildExportV2 } from '@/lib/export'
 import { validateImport } from '@/lib/import'
+import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
 import { SessionSchema, ProposedPlanRunTypeSchema } from '@/lib/schema'
 import type { WeekDoc } from '@/lib/schema'
 
@@ -319,13 +320,7 @@ async function handleGetGarminRecoveryFreshness(args: Record<string, unknown>) {
   // which aren't computed daily at all).
   // Compared in APP_TIMEZONE, not UTC — a UTC comparison would misjudge
   // "today" near midnight the same way the old submit_today_session bug did.
-  const todayInAppTimeZone = new Intl.DateTimeFormat('en-CA', {
-    timeZone: process.env.APP_TIMEZONE ?? 'Europe/Athens',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(serverNow)
-  const isSameDay = date === todayInAppTimeZone
+  const isSameDay = date === todayIsoInAppTimeZone()
   const sameDayCaveat = (fieldName: string) =>
     `This date is still in progress — ${fieldName} is a cumulative/point-in-time metric that will keep changing until the day ends. Current value reflects the day so far, not a final total.`
 

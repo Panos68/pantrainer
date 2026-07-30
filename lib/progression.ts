@@ -1,4 +1,5 @@
 import type { Exercise, LiftProgression, Session } from './schema'
+import { todayIsoInAppTimeZone } from './app-timezone'
 
 // Maps exercise names (lowercase, partial) to the canonical lift_progression keys
 // used by the charts. More-specific patterns must come before generic ones.
@@ -57,8 +58,7 @@ export function updateLiftProgression(
 }
 
 export function progressionFromCompletedStrengthSessions(sessions: Session[]): LiftProgression {
-  const now = new Date()
-  const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const todayIso = todayIsoInAppTimeZone()
   let progression: LiftProgression = {}
   for (const session of sessions) {
     if (session.date > todayIso) continue
