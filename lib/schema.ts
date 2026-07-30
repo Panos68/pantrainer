@@ -93,6 +93,13 @@ export const GarminRecoveryDaySchema = z.object({
   rem_sleep_hours: z.number().nullable().optional(),
   resting_hr_bpm: z.number().nullable().optional(),
   max_hr_bpm: z.number().nullable().optional(),
+  body_battery_charged: z.number().nullable().optional(),
+  body_battery_drained: z.number().nullable().optional(),
+  avg_stress_level: z.number().nullable().optional(),
+  max_stress_level: z.number().nullable().optional(),
+  vo2max: z.number().nullable().optional(),
+  fitness_age: z.number().nullable().optional(),
+  achievable_fitness_age: z.number().nullable().optional(),
   fetched_at: z.string().optional(),
 })
 

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { ExerciseSchema, SessionSchema } from './schema'
+import { ExerciseSchema, SessionSchema, GarminRecoveryDaySchema } from './schema'
 
 function run() {
   {
@@ -62,6 +62,37 @@ function run() {
       ],
     })
     assert.equal(result.success, true, 'accepts per_side exercise with side-tagged set_log entries')
+  }
+  {
+    const result = GarminRecoveryDaySchema.safeParse({
+      sleep_hours: 7.5,
+      body_battery_charged: 51,
+      body_battery_drained: 3,
+      avg_stress_level: 17,
+      max_stress_level: 69,
+      vo2max: 57,
+      fitness_age: 24.9,
+      achievable_fitness_age: 27,
+    })
+    assert.equal(result.success, true, 'accepts a recovery day with all new extended metric fields populated')
+    assert.equal(result.success && result.data.body_battery_charged, 51, 'body_battery_charged round-trips through the schema')
+    assert.equal(result.success && result.data.vo2max, 57, 'vo2max round-trips through the schema')
+  }
+  {
+    const result = GarminRecoveryDaySchema.safeParse({
+      sleep_hours: 7.5,
+    })
+    assert.equal(result.success, true, 'accepts a recovery day with none of the new fields present (backward compatibility)')
+  }
+  {
+    const result = GarminRecoveryDaySchema.safeParse({
+      sleep_hours: 7.5,
+      body_battery_charged: null,
+      avg_stress_level: null,
+      vo2max: null,
+      fitness_age: null,
+    })
+    assert.equal(result.success, true, 'accepts explicit null for any new field (genuinely-no-data case)')
   }
   console.log('lib/schema.test.ts: all assertions passed')
 }
