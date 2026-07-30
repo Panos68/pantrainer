@@ -260,9 +260,14 @@ export default function RecoveryScorePanel() {
 
   if (loading) {
     return (
-      <div className="w-full md:flex-1 animate-pulse space-y-2">
-        <div className="h-4 bg-zinc-800 rounded w-32" />
-        <div className="h-10 bg-zinc-800 rounded w-20" />
+      <div className="w-full md:flex-1 min-h-32 sm:min-h-52 animate-pulse flex items-center gap-3 sm:gap-4">
+        <div className="flex-1 min-w-0 space-y-2">
+          <div className="h-2 bg-zinc-800 rounded" />
+          <div className="h-2 bg-zinc-800 rounded" />
+          <div className="h-2 bg-zinc-800 rounded" />
+          <div className="h-2 bg-zinc-800 rounded" />
+        </div>
+        <div className="shrink-0 w-20 h-20 sm:w-36 sm:h-36 rounded-full bg-zinc-800" />
       </div>
     )
   }
