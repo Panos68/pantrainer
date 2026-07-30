@@ -1,45 +1,17 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { format } from 'date-fns'
-import { calcAdaptiveAlert, type AdaptiveAlert } from '@/lib/adaptive-alert'
-import { getReadinessCache } from './RecoveryScorePanel'
+import type { AdaptiveAlert } from '@/lib/adaptive-alert'
 
-interface SessionApiResponse {
-  type: string
-  subtype: string | null
-  status: string
-}
-
-export default function AdaptiveAlertBanner() {
-  const today = format(new Date(), 'yyyy-MM-dd')
-  const dayName = format(new Date(), 'EEEE').toLowerCase()
-  const [alert, setAlert] = useState<AdaptiveAlert | null>(null)
+export default function AdaptiveAlertBanner({ alert, today }: { alert: AdaptiveAlert | null; today: string }) {
   const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
     const storageKey = `alert-dismissed-${today}`
     if (sessionStorage.getItem(storageKey)) {
       setDismissed(true)
-      return
     }
-
-    Promise.all([
-      Promise.resolve(getReadinessCache(today) ?? fetch(`/api/readiness?date=${today}`).then((r) => r.json())),
-      fetch(`/api/session/${dayName}`).then((r) => r.json() as Promise<SessionApiResponse>),
-    ])
-      .then(([recovery, session]) => {
-        if (!recovery.score || !session.type) return
-        const result = calcAdaptiveAlert(
-          recovery.score.total,
-          session.type,
-          session.subtype,
-          session.status,
-        )
-        setAlert(result)
-      })
-      .catch(() => {})
-  }, [today, dayName])
+  }, [today])
 
   function dismiss() {
     sessionStorage.setItem(`alert-dismissed-${today}`, '1')

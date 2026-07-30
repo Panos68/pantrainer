@@ -6,6 +6,9 @@ import Link from 'next/link'
 import { readAthleteProfile, readCurrentWeek, readAppState, readArchivedWeeks, readPendingWeek } from '@/lib/data'
 import { isPendingWeekDue } from '@/lib/week-activation'
 import { sessionToLoadPoint } from '@/lib/training-load'
+import { computeDailyScore } from '@/lib/daily-score'
+import { calcAdaptiveAlert } from '@/lib/adaptive-alert'
+import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
 import GymWeekBadge from '@/components/GymWeekBadge'
 import NewWeekButton from '@/components/NewWeekButton'
 import WeekBrowser from '@/components/WeekBrowser'
@@ -33,7 +36,7 @@ export default async function Home() {
     readArchivedWeeks(12),
     readPendingWeek(),
   ])
-  const todayISO = format(new Date(), 'yyyy-MM-dd')
+  const todayISO = todayIsoInAppTimeZone()
   const athlete = { rhr: profile.rhr_bpm, maxHr: 220 - profile.age }
 
   if (!week) {
@@ -117,6 +120,12 @@ export default async function Home() {
     : acwr > 1.3 ? { label: 'High Risk', color: 'text-red-400' }
     : { label: 'Low', color: 'text-zinc-400' }
 
+  const todaySession = week.sessions.find((s) => s.date === todayISO) ?? null
+  const todayScore = week.daily_scores?.[todayISO] ?? computeDailyScore(todayISO, week, archivedWeeks)
+  const adaptiveAlert = todaySession
+    ? calcAdaptiveAlert(todayScore.total, todaySession.type, todaySession.subtype, todaySession.status)
+    : null
+
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-50">
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-8 space-y-6">
@@ -146,6 +155,8 @@ export default async function Home() {
           healthFlags={week.health_flags}
           calories={weekCalories}
           durationLabel={formatDuration(weekDurationMin)}
+          adaptiveAlert={adaptiveAlert}
+          today={todayISO}
         />
 
         <div className="animate-fade-in-up" style={{ animationDelay: '40ms' }}>

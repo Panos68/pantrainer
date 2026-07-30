@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion'
 import type { HealthFlag } from '@/lib/schema'
+import type { AdaptiveAlert } from '@/lib/adaptive-alert'
 import RecoveryScorePanel from './RecoveryScorePanel'
 import AdaptiveAlertBanner from './AdaptiveAlertBanner'
 import HealthFlagsBanner from './HealthFlagsBanner'
@@ -15,6 +16,8 @@ interface HomeHeroProps {
   healthFlags: HealthFlag[]
   calories: number
   durationLabel: string
+  adaptiveAlert: AdaptiveAlert | null
+  today: string
 }
 
 function StatMini({ label, value }: { label: string; value: string }) {
@@ -26,7 +29,7 @@ function StatMini({ label, value }: { label: string; value: string }) {
   )
 }
 
-function WeekStatsRow({ weekLoad, loadDelta, acwr, loadZone, calories, durationLabel }: Omit<HomeHeroProps, 'healthFlags'>) {
+function WeekStatsRow({ weekLoad, loadDelta, acwr, loadZone, calories, durationLabel }: Omit<HomeHeroProps, 'healthFlags' | 'adaptiveAlert' | 'today'>) {
   const displayLoad = useCountUp(weekLoad)
   const displayAcwrHundredths = useCountUp(acwr != null ? Math.round(acwr * 100) : 0)
 
@@ -59,7 +62,7 @@ function WeekStatsRow({ weekLoad, loadDelta, acwr, loadZone, calories, durationL
   )
 }
 
-export default function HomeHero({ weekLoad, loadDelta, acwr, loadZone, healthFlags, calories, durationLabel }: HomeHeroProps) {
+export default function HomeHero({ weekLoad, loadDelta, acwr, loadZone, healthFlags, calories, durationLabel, adaptiveAlert, today }: HomeHeroProps) {
   const hasActiveFlags = healthFlags.some((f) => !f.cleared)
 
   return (
@@ -87,7 +90,7 @@ export default function HomeHero({ weekLoad, loadDelta, acwr, loadZone, healthFl
         />
       </div>
       <div className="relative space-y-4">
-        <AdaptiveAlertBanner />
+        <AdaptiveAlertBanner alert={adaptiveAlert} today={today} />
         {hasActiveFlags && <HealthFlagsBanner flags={healthFlags} />}
       </div>
     </motion.div>
