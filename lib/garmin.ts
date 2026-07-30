@@ -179,3 +179,53 @@ export async function fetchStress(date: string): Promise<GarminStressResult | nu
     return null
   }
 }
+
+export type GarminVo2MaxResult = {
+  vo2max: number | null
+}
+
+function subtractDays(date: string, days: number): string {
+  const d = new Date(date + 'T12:00:00')
+  d.setDate(d.getDate() - days)
+  return d.toISOString().split('T')[0]
+}
+
+export async function fetchVO2Max(date: string): Promise<GarminVo2MaxResult | null> {
+  try {
+    const client = await createClient()
+    const base = client.url.GC_API
+    const startDate = subtractDays(date, 90)
+    const raw = await client.client.get<Array<{ calendarDate?: string; generic?: { vo2MaxValue?: number | null } }>>(
+      `${base}/metrics-service/metrics/maxmet/daily/${startDate}/${date}`
+    )
+    if (!Array.isArray(raw) || raw.length === 0) return null
+    const withValue = raw.filter((entry) => typeof entry.generic?.vo2MaxValue === 'number')
+    if (withValue.length === 0) return null
+    const latest = withValue[withValue.length - 1]
+    return { vo2max: latest.generic?.vo2MaxValue ?? null }
+  } catch {
+    return null
+  }
+}
+
+export type GarminFitnessAgeResult = {
+  fitness_age: number | null
+  achievable_fitness_age: number | null
+}
+
+export async function fetchFitnessAge(date: string): Promise<GarminFitnessAgeResult | null> {
+  try {
+    const client = await createClient()
+    const base = client.url.GC_API
+    const raw = await client.client.get<{ fitnessAge?: number | null; achievableFitnessAge?: number | null }>(
+      `${base}/fitnessage-service/fitnessage/${date}`
+    )
+    if (!raw) return null
+    return {
+      fitness_age: typeof raw.fitnessAge === 'number' ? raw.fitnessAge : null,
+      achievable_fitness_age: typeof raw.achievableFitnessAge === 'number' ? raw.achievableFitnessAge : null,
+    }
+  } catch {
+    return null
+  }
+}

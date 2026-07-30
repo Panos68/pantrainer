@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 // being callable — full live-API testing isn't feasible here (see plan notes on
 // no test runner / unofficial API), so this test asserts the module's public
 // surface and a date-format guard, not live Garmin data.
-import { fetchBodyBattery, fetchStress } from './garmin'
+import { fetchBodyBattery, fetchStress, fetchVO2Max, fetchFitnessAge } from './garmin'
 
 async function run() {
   {
@@ -27,6 +27,20 @@ async function run() {
   {
     const result = await fetchStress('2026-07-30')
     assert.equal(result, null, 'fetchStress resolves null (not throws) when credentials are missing')
+  }
+  {
+    assert.equal(typeof fetchVO2Max, 'function', 'fetchVO2Max is exported as a function')
+  }
+  {
+    assert.equal(typeof fetchFitnessAge, 'function', 'fetchFitnessAge is exported as a function')
+  }
+  {
+    const result = await fetchVO2Max('2026-07-30')
+    assert.equal(result, null, 'fetchVO2Max resolves null (not throws) when credentials are missing')
+  }
+  {
+    const result = await fetchFitnessAge('2026-07-30')
+    assert.equal(result, null, 'fetchFitnessAge resolves null (not throws) when credentials are missing')
   }
   console.log('lib/garmin.test.ts: all assertions passed')
 }
