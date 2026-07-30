@@ -192,7 +192,9 @@ export default function ActivityTrendChart({ weeks, athlete }: ActivityTrendChar
                         {p.type}{p.subtype ? ` · ${p.subtype}` : ''}
                       </p>
                       <p style={{ marginBottom: 2 }}>⏱ {p.duration_min} min</p>
-                      <p style={{ marginBottom: 2 }}>❤️ {p.avg_hr_bpm} bpm</p>
+                      {p.avg_hr_bpm != null && (
+                        <p style={{ marginBottom: 2 }}>❤️ {p.avg_hr_bpm} bpm</p>
+                      )}
                       {p.total_calories != null && (
                         <p style={{ marginBottom: 2 }}>🔥 {p.total_calories} kcal</p>
                       )}

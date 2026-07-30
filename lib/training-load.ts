@@ -1,7 +1,7 @@
 import type { Session } from './schema'
 import { todayIsoInAppTimeZone } from './app-timezone'
 
-export type LoadSource = 'garmin_tss' | 'trimp' | 'hr_duration'
+export type LoadSource = 'garmin_tss' | 'srpe' | 'trimp' | 'hr_duration'
 
 export interface AthleteLoadParams {
   rhr: number
@@ -13,7 +13,7 @@ export interface TrainingLoadPoint {
   type: string
   subtype: string | null
   duration_min: number
-  avg_hr_bpm: number
+  avg_hr_bpm: number | null
   total_calories: number | null
   training_load: number
   load_source: LoadSource
@@ -29,6 +29,16 @@ function calcTrimp(durationMin: number, avgHr: number, rhr: number, maxHr: numbe
   return Math.round(trimp)
 }
 
+// Session-RPE (Foster method): duration_min * RPE (0-10 CR10 scale).
+// HR-average-derived load can't tell a steady moderate effort from a
+// stop-start-sprint-drift one of the same duration/avg HR — RPE captures the
+// athlete's actual perceived effort instead. Divided by 4 to sit on the same
+// ~1-2/min scale as TRIMP/Garmin TSS, so acute:chronic sums stay comparable
+// across sessions that used different load sources.
+function calcSessionRpeLoad(durationMin: number, rpe: number): number {
+  return Math.round((durationMin * rpe) / 4)
+}
+
 export function calcLoad(
   s: Session,
   athlete?: AthleteLoadParams,
@@ -36,6 +46,10 @@ export function calcLoad(
   // Garmin TSS is authoritative when available
   if (s.training_stress_score != null && s.training_stress_score > 0) {
     return { load: s.training_stress_score, source: 'garmin_tss' }
+  }
+
+  if (s.rpe != null && s.rpe > 0 && s.duration_min != null && s.duration_min > 0) {
+    return { load: calcSessionRpeLoad(s.duration_min, s.rpe), source: 'srpe' }
   }
 
   if (s.avg_hr_bpm != null && s.avg_hr_bpm > 0 && s.duration_min != null && s.duration_min > 0) {
@@ -63,7 +77,7 @@ export function sessionToLoadPoint(s: Session, athlete?: AthleteLoadParams): Tra
     type: s.type,
     subtype: s.subtype ?? null,
     duration_min: s.duration_min!,
-    avg_hr_bpm: s.avg_hr_bpm!,
+    avg_hr_bpm: s.avg_hr_bpm ?? null,
     total_calories: s.total_calories ?? null,
     training_load: result.load,
     load_source: result.source,
