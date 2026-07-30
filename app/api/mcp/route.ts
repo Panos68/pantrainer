@@ -78,7 +78,7 @@ const TOOLS = [
   {
     name: 'get_garmin_recovery_freshness',
     description:
-      'Check whether cached Garmin recovery data for a given date is actually present and current, before using it to give advice. Returns sleep, resting/max HR, Body Battery, Stress, VO2 max, and Fitness Age (whichever are cached), the recovery score breakdown is NOT included here — use the score directly from the week doc if needed. Includes an explicit warning when data is missing or stale, plus a per-field field_warnings object distinguishing "not synced yet" from "Garmin genuinely has no data for this field on this date" (e.g. VO2 max is only recomputed periodically, not daily) — use this before trusting any of these numbers.',
+      'Check whether cached Garmin recovery data for a given date is actually present and current, before using it to give advice. Returns sleep, resting/max HR, Body Battery, Stress, VO2 max, and Fitness Age (whichever are cached), the recovery score breakdown is NOT included here — use the score directly from the week doc if needed. Includes an explicit warning when data is missing or stale, a same_day flag, and a per-field field_warnings object distinguishing "not synced yet", "Garmin genuinely has no data for this field on this date" (e.g. VO2 max is only recomputed periodically, not daily), and — for Body Battery/Stress specifically when same_day is true — "still accumulating, not a final total yet" (sleep/RHR are overnight-derived and already final by morning, so this third case never applies to them). Use this before trusting any of these numbers.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -312,9 +312,30 @@ async function handleGetGarminRecoveryFreshness(args: Record<string, unknown>) {
     return null
   }
 
+  // Body Battery and Stress are cumulative, waking-hours metrics — same-day
+  // values are a live snapshot of the day so far, not a final total. Sleep/RHR
+  // are overnight-derived and already final by morning even on the current
+  // day, so this caveat must not apply to them (or to VO2 max/Fitness Age,
+  // which aren't computed daily at all).
+  // Compared in APP_TIMEZONE, not UTC — a UTC comparison would misjudge
+  // "today" near midnight the same way the old submit_today_session bug did.
+  const todayInAppTimeZone = new Intl.DateTimeFormat('en-CA', {
+    timeZone: process.env.APP_TIMEZONE ?? 'Europe/Athens',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(serverNow)
+  const isSameDay = date === todayInAppTimeZone
+  const sameDayCaveat = (fieldName: string) =>
+    `This date is still in progress — ${fieldName} is a cumulative/point-in-time metric that will keep changing until the day ends. Current value reflects the day so far, not a final total.`
+
   const field_warnings = {
-    body_battery: fieldWarning('Body Battery', recovery?.body_battery_charged, 'likely the watch wasn\'t worn that day'),
-    stress: fieldWarning('Stress', recovery?.avg_stress_level, 'likely the watch wasn\'t worn that day'),
+    body_battery:
+      fieldWarning('Body Battery', recovery?.body_battery_charged, 'likely the watch wasn\'t worn that day') ??
+      (isSameDay && recovery?.body_battery_charged != null ? sameDayCaveat('Body Battery') : null),
+    stress:
+      fieldWarning('Stress', recovery?.avg_stress_level, 'likely the watch wasn\'t worn that day') ??
+      (isSameDay && recovery?.avg_stress_level != null ? sameDayCaveat('Stress') : null),
     vo2max: fieldWarning('VO2 max', recovery?.vo2max, 'Garmin only recomputes this periodically, not every day'),
     fitness_age: fieldWarning('Fitness Age', recovery?.fitness_age, 'Garmin only recomputes this periodically, not every day'),
   }
@@ -322,6 +343,7 @@ async function handleGetGarminRecoveryFreshness(args: Record<string, unknown>) {
   return {
     ok: true,
     date,
+    same_day: isSameDay,
     found: recovery !== null,
     sleep_hours: recovery?.sleep_hours ?? null,
     deep_sleep_hours: recovery?.deep_sleep_hours ?? null,
