@@ -210,41 +210,53 @@ export async function archiveWeek(week: WeekDoc): Promise<void> {
   revalidateTag('current-week', { expire: 0 })
 }
 
-const _listArchivedWeekIds = unstable_cache(
+// Archived week _ids aren't reliably sortable as strings — the DB has a mix
+// of the current 'archive-<yyyy-ww>' scheme and legacy 'archive-week-<yyyy-ww>'
+// docs from an earlier version, and '2' sorts before 'w' regardless of actual
+// date. Sorting by each week's own earliest session date is correct
+// regardless of what naming scheme (past or future) produced the _id.
+const _listArchivedWeekIdsByDate = unstable_cache(
   async () => {
     const db = await getDb()
     const docs = await db
       .collection('weeks')
       .find({ _id: { $regex: '^archive-' } as never })
-      .sort({ _id: 1 })
-      .project({ _id: 1 })
+      .project({ _id: 1, 'value.sessions.date': 1 })
       .toArray()
-    return docs.map((d) => d._id as unknown as string)
+    return docs
+      .map((d) => {
+        const dates = (d as { value?: { sessions?: { date: string }[] } }).value?.sessions?.map((s) => s.date) ?? []
+        const earliestDate = dates.length > 0 ? [...dates].sort()[0] : (d._id as unknown as string)
+        return { id: d._id as unknown as string, earliestDate }
+      })
+      .sort((a, b) => a.earliestDate.localeCompare(b.earliestDate))
+      .map((d) => d.id)
   },
-  ['archived-week-ids'],
+  ['archived-week-ids-by-date'],
   { tags: ['archived-weeks'], revalidate: 86400 }
 )
 
-export async function readArchivedWeeks(n: number): Promise<WeekDoc[]> {
-  const ids = await _listArchivedWeekIds()
-  const slice = ids.slice(-n)
+async function readWeeksByIds(ids: string[]): Promise<WeekDoc[]> {
   const db = await getDb()
   const docs = await db
     .collection('weeks')
-    .find({ _id: { $in: slice } as never })
-    .sort({ _id: 1 })
+    .find({ _id: { $in: ids } as never })
     .toArray()
-  return docs.map((d) => WeekDocSchema.parse(d.value))
+  const byId = new Map(docs.map((d) => [d._id as unknown as string, d]))
+  return ids
+    .map((id) => byId.get(id))
+    .filter((d): d is NonNullable<typeof d> => d != null)
+    .map((d) => WeekDocSchema.parse(d.value))
+}
+
+export async function readArchivedWeeks(n: number): Promise<WeekDoc[]> {
+  const ids = await _listArchivedWeekIdsByDate()
+  return readWeeksByIds(ids.slice(-n))
 }
 
 export async function readAllArchivedWeeks(): Promise<WeekDoc[]> {
-  const db = await getDb()
-  const docs = await db
-    .collection('weeks')
-    .find({ _id: { $regex: '^archive-' } as never })
-    .sort({ _id: 1 })
-    .toArray()
-  return docs.map((d) => WeekDocSchema.parse(d.value))
+  const ids = await _listArchivedWeekIdsByDate()
+  return readWeeksByIds(ids)
 }
 
 // ─── Daily readiness ──────────────────────────────────────────────────────────
