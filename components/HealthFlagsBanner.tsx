@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import type { HealthFlag } from '@/lib/schema'
 
 interface HealthFlagsBannerProps {
@@ -7,6 +8,7 @@ interface HealthFlagsBannerProps {
 }
 
 export default function HealthFlagsBanner({ flags }: HealthFlagsBannerProps) {
+  const router = useRouter()
   const activeFlags = flags.filter((f) => !f.cleared)
   if (activeFlags.length === 0) return null
 
@@ -19,7 +21,7 @@ export default function HealthFlagsBanner({ flags }: HealthFlagsBannerProps) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ health_flags: updatedFlags }),
     })
-    window.location.reload()
+    router.refresh()
   }
 
   // Determine severity — red if any critical, amber otherwise
