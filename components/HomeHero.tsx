@@ -1,6 +1,5 @@
 'use client'
 
-import { motion } from 'framer-motion'
 import type { HealthFlag } from '@/lib/schema'
 import type { AdaptiveAlert } from '@/lib/adaptive-alert'
 import type { ReadinessSnapshot } from '@/lib/readiness'
@@ -68,12 +67,7 @@ export default function HomeHero({ weekLoad, loadDelta, acwr, loadZone, healthFl
   const hasActiveFlags = healthFlags.some((f) => !f.cleared)
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: 'easeOut' }}
-      className="relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 p-5 space-y-4"
-    >
+    <div className="animate-fade-in-up relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 p-5 space-y-4">
       <div
         className="pointer-events-none absolute inset-0"
         style={{ background: 'radial-gradient(ellipse 50% 40% at 100% 0%, rgba(34,211,238,0.06) 0%, transparent 70%)' }}
@@ -95,6 +89,6 @@ export default function HomeHero({ weekLoad, loadDelta, acwr, loadZone, healthFl
         <AdaptiveAlertBanner alert={adaptiveAlert} today={today} />
         {hasActiveFlags && <HealthFlagsBanner flags={healthFlags} />}
       </div>
-    </motion.div>
+    </div>
   )
 }

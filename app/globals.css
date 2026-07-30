@@ -145,6 +145,16 @@
   animation: fade-in-up 0.4s ease-out both;
 }
 
+/* Mobile ("the app" — matches MobileBottomNav's md:hidden breakpoint):
+   pull-to-refresh is a full document reload, replaying this on-mount fade
+   every time and reading as a blink rather than a load-in flourish. Desktop
+   ("the web") doesn't have that gesture, so it keeps the animation. */
+@media (max-width: 767px) {
+  .animate-fade-in-up {
+    animation: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-in-up {
     animation: none;
