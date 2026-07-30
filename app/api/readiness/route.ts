@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { readCurrentWeek, readCurrentWeekDirect, readDailyReadiness, readAthleteProfile, readArchivedWeeks, writeCurrentWeek } from '@/lib/data'
+import { readCurrentWeek, readCurrentWeekDirect, readAthleteProfile, readArchivedWeeks, writeCurrentWeek } from '@/lib/data'
 import { DailyReadinessSchema } from '@/lib/schema'
-import { calcRecoveryScore } from '@/lib/recovery-score'
-import { computeDailyScore, calcACWR } from '@/lib/daily-score'
-import { sessionToLoadPoint } from '@/lib/training-load'
+import { computeDailyScore } from '@/lib/daily-score'
+import { buildReadinessSnapshot } from '@/lib/readiness'
 import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
 
 export const dynamic = 'force-dynamic'
@@ -13,10 +12,9 @@ const NO_STORE_HEADERS = { 'Cache-Control': 'no-store, max-age=0' }
 export async function GET(req: NextRequest) {
   const date = req.nextUrl.searchParams.get('date') ?? todayIsoInAppTimeZone()
 
-  const [week, profile, readiness, archivedWeeks] = await Promise.all([
+  const [week, profile, archivedWeeks] = await Promise.all([
     readCurrentWeek(),
     readAthleteProfile(),
-    readDailyReadiness(date),
     readArchivedWeeks(8),
   ])
 
@@ -27,30 +25,8 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  const garmin = week.garmin_recovery?.[date] ?? null
-
-  const savedScore = week.daily_scores?.[date]
-  const score = savedScore ?? (() => {
-    const allSessions = [...archivedWeeks.flatMap((w) => w.sessions), ...week.sessions]
-    const athlete = { rhr: profile.rhr_bpm, maxHr: 220 - profile.age }
-    const loadPoints = allSessions
-      .filter((s) => s.status === 'completed' && s.date <= date)
-      .map((s) => sessionToLoadPoint(s, athlete))
-      .filter((p): p is NonNullable<typeof p> => p !== null)
-    const acwr = calcACWR(loadPoints)
-    return calcRecoveryScore(garmin, profile.rhr_bpm, acwr, readiness)
-  })()
-
-  // 7-day average sleep from current week's Garmin recovery data
-  const sleepValues = Object.values(week.garmin_recovery ?? {})
-    .map((r) => r.sleep_hours)
-    .filter((v): v is number => typeof v === 'number' && v > 0)
-  const sleep_avg_7d = sleepValues.length > 0
-    ? Math.round((sleepValues.reduce((a, b) => a + b, 0) / sleepValues.length) * 10) / 10
-    : null
-
   return NextResponse.json(
-    { date, score, readiness, garmin, sleep_avg_7d, has_garmin_sleep: garmin?.sleep_hours != null },
+    buildReadinessSnapshot(date, week, profile, archivedWeeks),
     { headers: NO_STORE_HEADERS },
   )
 }

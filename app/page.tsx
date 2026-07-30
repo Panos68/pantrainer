@@ -6,8 +6,8 @@ import Link from 'next/link'
 import { readAthleteProfile, readCurrentWeek, readAppState, readArchivedWeeks, readPendingWeek } from '@/lib/data'
 import { isPendingWeekDue } from '@/lib/week-activation'
 import { sessionToLoadPoint } from '@/lib/training-load'
-import { computeDailyScore } from '@/lib/daily-score'
 import { calcAdaptiveAlert } from '@/lib/adaptive-alert'
+import { buildReadinessSnapshot } from '@/lib/readiness'
 import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
 import GymWeekBadge from '@/components/GymWeekBadge'
 import NewWeekButton from '@/components/NewWeekButton'
@@ -121,9 +121,9 @@ export default async function Home() {
     : { label: 'Low', color: 'text-zinc-400' }
 
   const todaySession = week.sessions.find((s) => s.date === todayISO) ?? null
-  const todayScore = week.daily_scores?.[todayISO] ?? computeDailyScore(todayISO, week, archivedWeeks)
+  const readinessSnapshot = buildReadinessSnapshot(todayISO, week, profile, archivedWeeks)
   const adaptiveAlert = todaySession
-    ? calcAdaptiveAlert(todayScore.total, todaySession.type, todaySession.subtype, todaySession.status)
+    ? calcAdaptiveAlert(readinessSnapshot.score.total, todaySession.type, todaySession.subtype, todaySession.status)
     : null
 
   return (
@@ -157,6 +157,7 @@ export default async function Home() {
           durationLabel={formatDuration(weekDurationMin)}
           adaptiveAlert={adaptiveAlert}
           today={todayISO}
+          initialReadiness={readinessSnapshot}
         />
 
         <div className="animate-fade-in-up" style={{ animationDelay: '40ms' }}>

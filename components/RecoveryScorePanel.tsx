@@ -1,39 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { format } from 'date-fns'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useCountUp } from '@/lib/useCountUp'
-
-interface ScoreBreakdown {
-  total: number
-  sleep: number
-  rhr: number
-  load: number
-  subjective: number
-  label: 'Ready' | 'Moderate' | 'Rest'
-  color: 'green' | 'amber' | 'red'
-}
-
-interface ReadinessData {
-  energy_level: number
-  sleep_quality: number
-  mood: number
-}
-
-interface GarminData {
-  sleep_hours: number | null
-  resting_hr_bpm: number | null
-}
-
-export interface ReadinessApiResponse {
-  date: string
-  score: ScoreBreakdown
-  readiness: ReadinessData | null
-  sleep_avg_7d: number | null
-  has_garmin_sleep: boolean
-  garmin: GarminData | null
-}
+import type { ReadinessSnapshot } from '@/lib/readiness'
 
 const EMOJI_SCALE = ['😴', '😕', '😐', '🙂', '⚡']
 
@@ -50,30 +20,12 @@ const BAR_COLORS = {
   subjective: 'bg-emerald-400',
 }
 
-function cacheKey(date: string) { return `readiness-cache-${date}` }
-
-export function getReadinessCache(date: string): ReadinessApiResponse | null {
-  try {
-    const raw = localStorage.getItem(cacheKey(date))
-    return raw ? JSON.parse(raw) : null
-  } catch { return null }
-}
-
-function setReadinessCache(date: string, data: ReadinessApiResponse) {
-  try { localStorage.setItem(cacheKey(date), JSON.stringify(data)) } catch { /* noop */ }
-}
-
-function clearReadinessCache(date: string) {
-  try { localStorage.removeItem(cacheKey(date)) } catch { /* noop */ }
-}
-
-async function fetchReadiness(date: string, cacheBust = false): Promise<ReadinessApiResponse> {
+async function fetchReadiness(date: string, cacheBust = false): Promise<ReadinessSnapshot> {
   const suffix = cacheBust ? `&_ts=${Date.now()}` : ''
   const res = await fetch(`/api/readiness?date=${date}${suffix}`, { cache: 'no-store' })
   if (!res.ok) throw new Error(`Readiness fetch failed (${res.status})`)
-  return res.json() as Promise<ReadinessApiResponse>
+  return res.json() as Promise<ReadinessSnapshot>
 }
-
 
 function ScoreRing({ total, color }: { total: number; color: 'green' | 'amber' | 'red' }) {
   const prefersReducedMotion = useReducedMotion()
@@ -172,55 +124,31 @@ function EmojiPicker({ label, value, onChange }: { label: string; value: number;
   )
 }
 
-export default function RecoveryScorePanel() {
-  const today = format(new Date(), 'yyyy-MM-dd')
-  const [data, setData] = useState<ReadinessApiResponse | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [checkinOpen, setCheckinOpen] = useState(false)
+export default function RecoveryScorePanel({ today, initialData }: { today: string; initialData: ReadinessSnapshot }) {
+  const [data, setData] = useState<ReadinessSnapshot>(initialData)
+  const [checkinOpen, setCheckinOpen] = useState(!initialData.readiness)
   const [energy, setEnergy] = useState(3)
   const [sleepQ, setSleepQ] = useState(3)
   const [mood, setMood] = useState(3)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const displayScore = useCountUp(data?.score.total ?? 0)
+  const displayScore = useCountUp(data.score.total)
 
   useEffect(() => {
-    async function load() {
-      try {
-        const cached = getReadinessCache(today)
-        if (cached?.has_garmin_sleep) {
-          setData(cached)
-          if (!cached.readiness) setCheckinOpen(true)
-          return
-        }
-
-        let d = await fetchReadiness(today)
-        if (!d.has_garmin_sleep) {
-          // Don't block rendering waiting for Garmin — show what we have immediately.
-          // Sleep gets populated by the workout page's Garmin sync and will appear on
-          // the next home load or after cache invalidation.
-          fetch('/api/garmin/recovery', {
-            method: 'POST',
-            cache: 'no-store',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ date: today }),
-          }).then(() => fetchReadiness(today, true)).then((fresh) => {
-            if (fresh.has_garmin_sleep) {
-              setReadinessCache(today, fresh)
-              setData(fresh)
-            }
-          }).catch(() => {})
-        }
-        setReadinessCache(today, d)
-        setData(d)
-        if (!d.readiness) setCheckinOpen(true)
-      } catch (e) {
-        console.error(e)
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
+    if (initialData.has_garmin_sleep) return
+    // Don't block rendering waiting for Garmin — server-rendered initial data is
+    // already shown. Sleep gets populated by this background sync and appears
+    // once it resolves, or on the next full page load.
+    fetch('/api/garmin/recovery', {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: today }),
+    }).then(() => fetchReadiness(today, true)).then((fresh) => {
+      if (fresh.has_garmin_sleep) setData(fresh)
+    }).catch(() => {})
+    // Only re-run this sync if the day itself changes, not on every data update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [today])
 
   async function submitCheckin() {
@@ -236,43 +164,17 @@ export default function RecoveryScorePanel() {
       if (!saveRes.ok) {
         throw new Error(`Check-in save failed (${saveRes.status})`)
       }
-      // Use the readiness the server just persisted — no need to poll a potentially
-      // stale cache. Merge into current data so score/garmin fields stay intact.
       const { readiness } = await saveRes.json()
-      clearReadinessCache(today)
-      const updated = data ? { ...data, readiness } : null
-      if (updated) {
-        setReadinessCache(today, updated)
-        setData(updated)
-      }
+      setData((d) => ({ ...d, readiness }))
       setCheckinOpen(false)
       // Background refresh to recompute the recovery score with the new readiness
-      fetchReadiness(today, true).then((fresh) => {
-        setReadinessCache(today, fresh)
-        setData(fresh)
-      }).catch(() => {})
+      fetchReadiness(today, true).then(setData).catch(() => {})
     } catch {
       setSaveError('Save failed. Please try once more.')
     } finally {
       setSaving(false)
     }
   }
-
-  if (loading) {
-    return (
-      <div className="w-full md:flex-1 min-h-32 sm:min-h-52 animate-pulse flex items-center gap-3 sm:gap-4">
-        <div className="flex-1 min-w-0 space-y-2">
-          <div className="h-2 bg-zinc-800 rounded" />
-          <div className="h-2 bg-zinc-800 rounded" />
-          <div className="h-2 bg-zinc-800 rounded" />
-          <div className="h-2 bg-zinc-800 rounded" />
-        </div>
-        <div className="shrink-0 w-20 h-20 sm:w-36 sm:h-36 rounded-full bg-zinc-800" />
-      </div>
-    )
-  }
-
-  if (!data) return null
 
   const { score, garmin } = data
   const noSleep = !garmin || garmin.sleep_hours == null

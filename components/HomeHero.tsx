@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion'
 import type { HealthFlag } from '@/lib/schema'
 import type { AdaptiveAlert } from '@/lib/adaptive-alert'
+import type { ReadinessSnapshot } from '@/lib/readiness'
 import RecoveryScorePanel from './RecoveryScorePanel'
 import AdaptiveAlertBanner from './AdaptiveAlertBanner'
 import HealthFlagsBanner from './HealthFlagsBanner'
@@ -18,6 +19,7 @@ interface HomeHeroProps {
   durationLabel: string
   adaptiveAlert: AdaptiveAlert | null
   today: string
+  initialReadiness: ReadinessSnapshot
 }
 
 function StatMini({ label, value }: { label: string; value: string }) {
@@ -29,7 +31,7 @@ function StatMini({ label, value }: { label: string; value: string }) {
   )
 }
 
-function WeekStatsRow({ weekLoad, loadDelta, acwr, loadZone, calories, durationLabel }: Omit<HomeHeroProps, 'healthFlags' | 'adaptiveAlert' | 'today'>) {
+function WeekStatsRow({ weekLoad, loadDelta, acwr, loadZone, calories, durationLabel }: Omit<HomeHeroProps, 'healthFlags' | 'adaptiveAlert' | 'today' | 'initialReadiness'>) {
   const displayLoad = useCountUp(weekLoad)
   const displayAcwrHundredths = useCountUp(acwr != null ? Math.round(acwr * 100) : 0)
 
@@ -62,7 +64,7 @@ function WeekStatsRow({ weekLoad, loadDelta, acwr, loadZone, calories, durationL
   )
 }
 
-export default function HomeHero({ weekLoad, loadDelta, acwr, loadZone, healthFlags, calories, durationLabel, adaptiveAlert, today }: HomeHeroProps) {
+export default function HomeHero({ weekLoad, loadDelta, acwr, loadZone, healthFlags, calories, durationLabel, adaptiveAlert, today, initialReadiness }: HomeHeroProps) {
   const hasActiveFlags = healthFlags.some((f) => !f.cleared)
 
   return (
@@ -77,7 +79,7 @@ export default function HomeHero({ weekLoad, loadDelta, acwr, loadZone, healthFl
         style={{ background: 'radial-gradient(ellipse 50% 40% at 100% 0%, rgba(34,211,238,0.06) 0%, transparent 70%)' }}
       />
       <div className="relative">
-        <RecoveryScorePanel />
+        <RecoveryScorePanel today={today} initialData={initialReadiness} />
       </div>
       <div className="relative border-t border-zinc-800 pt-4">
         <WeekStatsRow
