@@ -1,9 +1,10 @@
-import pkg from 'garmin-connect'
+import { createRequire } from 'module'
 import { getDb } from './mongodb'
 
+const require = createRequire(import.meta.url)
 // garmin-connect is CJS — cast to any to avoid type issues
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { GarminConnect } = pkg as any
+const { GarminConnect } = require('garmin-connect') as any
 
 const TOKEN_KEY = 'garmin-tokens'
 
@@ -131,5 +132,50 @@ export async function fetchHRData(date: string): Promise<GarminHRResult> {
   return {
     resting_hr_bpm: raw?.restingHeartRate ?? null,
     max_hr_bpm: raw?.maxHeartRate ?? null,
+  }
+}
+
+export type GarminBodyBatteryResult = {
+  body_battery_charged: number | null
+  body_battery_drained: number | null
+}
+
+export async function fetchBodyBattery(date: string): Promise<GarminBodyBatteryResult | null> {
+  try {
+    const client = await createClient()
+    const base = client.url.GC_API
+    const raw = await client.client.get<Array<{ charged?: number; drained?: number }>>(
+      `${base}/wellness-service/wellness/bodyBattery/reports/daily?startDate=${date}&endDate=${date}`
+    )
+    const entry = Array.isArray(raw) ? raw[0] : null
+    if (!entry) return null
+    return {
+      body_battery_charged: typeof entry.charged === 'number' && entry.charged > 0 ? entry.charged : null,
+      body_battery_drained: typeof entry.drained === 'number' && entry.drained > 0 ? entry.drained : null,
+    }
+  } catch {
+    return null
+  }
+}
+
+export type GarminStressResult = {
+  avg_stress_level: number | null
+  max_stress_level: number | null
+}
+
+export async function fetchStress(date: string): Promise<GarminStressResult | null> {
+  try {
+    const client = await createClient()
+    const base = client.url.GC_API
+    const raw = await client.client.get<{ avgStressLevel?: number; maxStressLevel?: number }>(
+      `${base}/wellness-service/wellness/dailyStress/${date}`
+    )
+    if (!raw) return null
+    return {
+      avg_stress_level: typeof raw.avgStressLevel === 'number' && raw.avgStressLevel >= 0 ? raw.avgStressLevel : null,
+      max_stress_level: typeof raw.maxStressLevel === 'number' && raw.maxStressLevel >= 0 ? raw.maxStressLevel : null,
+    }
+  } catch {
+    return null
   }
 }
