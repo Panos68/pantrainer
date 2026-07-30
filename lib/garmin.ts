@@ -1,9 +1,10 @@
-import pkg from 'garmin-connect'
+import { createRequire } from 'module'
 import { getDb } from './mongodb'
 
+const require = createRequire(import.meta.url)
 // garmin-connect is CJS — cast to any to avoid type issues
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { GarminConnect } = pkg as any
+const { GarminConnect } = require('garmin-connect') as any
 
 const TOKEN_KEY = 'garmin-tokens'
 
@@ -85,7 +86,7 @@ export type GarminHRResult = {
 }
 
 export async function fetchActivitiesForDate(date: string): Promise<{ activities: GarminActivityRaw[]; client: unknown }> {
-  const client = await createClient()
+  const client: any = await createClient()
   const all: GarminActivityRaw[] = await client.getActivities(0, 20)
   return { activities: all.filter((a) => a.startTimeLocal?.startsWith(date)), client }
 }
@@ -131,5 +132,100 @@ export async function fetchHRData(date: string): Promise<GarminHRResult> {
   return {
     resting_hr_bpm: raw?.restingHeartRate ?? null,
     max_hr_bpm: raw?.maxHeartRate ?? null,
+  }
+}
+
+export type GarminBodyBatteryResult = {
+  body_battery_charged: number | null
+  body_battery_drained: number | null
+}
+
+export async function fetchBodyBattery(date: string): Promise<GarminBodyBatteryResult | null> {
+  try {
+    const client: any = await createClient()
+    const base = client.url.GC_API
+    const raw = await client.client.get(
+      `${base}/wellness-service/wellness/bodyBattery/reports/daily?startDate=${date}&endDate=${date}`
+    ) as Array<{ charged?: number; drained?: number }>
+    const entry = Array.isArray(raw) ? raw[0] : null
+    if (!entry) return null
+    return {
+      body_battery_charged: typeof entry.charged === 'number' && entry.charged > 0 ? entry.charged : null,
+      body_battery_drained: typeof entry.drained === 'number' && entry.drained > 0 ? entry.drained : null,
+    }
+  } catch {
+    return null
+  }
+}
+
+export type GarminStressResult = {
+  avg_stress_level: number | null
+  max_stress_level: number | null
+}
+
+export async function fetchStress(date: string): Promise<GarminStressResult | null> {
+  try {
+    const client: any = await createClient()
+    const base = client.url.GC_API
+    const raw = await client.client.get(
+      `${base}/wellness-service/wellness/dailyStress/${date}`
+    ) as { avgStressLevel?: number; maxStressLevel?: number }
+    if (!raw) return null
+    return {
+      avg_stress_level: typeof raw.avgStressLevel === 'number' && raw.avgStressLevel >= 0 ? raw.avgStressLevel : null,
+      max_stress_level: typeof raw.maxStressLevel === 'number' && raw.maxStressLevel >= 0 ? raw.maxStressLevel : null,
+    }
+  } catch {
+    return null
+  }
+}
+
+export type GarminVo2MaxResult = {
+  vo2max: number | null
+}
+
+function subtractDays(date: string, days: number): string {
+  const d = new Date(date + 'T12:00:00')
+  d.setDate(d.getDate() - days)
+  return d.toISOString().split('T')[0]
+}
+
+export async function fetchVO2Max(date: string): Promise<GarminVo2MaxResult | null> {
+  try {
+    const client: any = await createClient()
+    const base = client.url.GC_API
+    const startDate = subtractDays(date, 90)
+    const raw = await client.client.get(
+      `${base}/metrics-service/metrics/maxmet/daily/${startDate}/${date}`
+    ) as Array<{ calendarDate?: string; generic?: { vo2MaxValue?: number | null } }>
+    if (!Array.isArray(raw) || raw.length === 0) return null
+    const withValue = raw.filter((entry) => typeof entry.generic?.vo2MaxValue === 'number')
+    if (withValue.length === 0) return null
+    const latest = withValue[withValue.length - 1]
+    return { vo2max: latest.generic?.vo2MaxValue ?? null }
+  } catch {
+    return null
+  }
+}
+
+export type GarminFitnessAgeResult = {
+  fitness_age: number | null
+  achievable_fitness_age: number | null
+}
+
+export async function fetchFitnessAge(date: string): Promise<GarminFitnessAgeResult | null> {
+  try {
+    const client: any = await createClient()
+    const base = client.url.GC_API
+    const raw = await client.client.get(
+      `${base}/fitnessage-service/fitnessage/${date}`
+    ) as { fitnessAge?: number | null; achievableFitnessAge?: number | null }
+    if (!raw) return null
+    return {
+      fitness_age: typeof raw.fitnessAge === 'number' ? raw.fitnessAge : null,
+      achievable_fitness_age: typeof raw.achievableFitnessAge === 'number' ? raw.achievableFitnessAge : null,
+    }
+  } catch {
+    return null
   }
 }

@@ -1,4 +1,4 @@
-import { fetchSleepData, fetchHRData } from '@/lib/garmin'
+import { fetchSleepData, fetchHRData, fetchBodyBattery, fetchStress, fetchVO2Max, fetchFitnessAge } from '@/lib/garmin'
 import { readCurrentWeekDirect, writeCurrentWeek, readArchivedWeeks } from '@/lib/data'
 import { computeDailyScore } from '@/lib/daily-score'
 
@@ -12,6 +12,13 @@ function sanitizeRecovery(recovery: {
   rem_sleep_hours?: number | null
   resting_hr_bpm?: number | null
   max_hr_bpm?: number | null
+  body_battery_charged?: number | null
+  body_battery_drained?: number | null
+  avg_stress_level?: number | null
+  max_stress_level?: number | null
+  vo2max?: number | null
+  fitness_age?: number | null
+  achievable_fitness_age?: number | null
   fetched_at?: string
 }) {
   return {
@@ -20,6 +27,13 @@ function sanitizeRecovery(recovery: {
     rem_sleep_hours: positiveOrNull(recovery.rem_sleep_hours),
     resting_hr_bpm: positiveOrNull(recovery.resting_hr_bpm),
     max_hr_bpm: positiveOrNull(recovery.max_hr_bpm),
+    body_battery_charged: positiveOrNull(recovery.body_battery_charged),
+    body_battery_drained: positiveOrNull(recovery.body_battery_drained),
+    avg_stress_level: recovery.avg_stress_level != null && recovery.avg_stress_level >= 0 ? recovery.avg_stress_level : null,
+    max_stress_level: recovery.max_stress_level != null && recovery.max_stress_level >= 0 ? recovery.max_stress_level : null,
+    vo2max: positiveOrNull(recovery.vo2max),
+    fitness_age: positiveOrNull(recovery.fitness_age),
+    achievable_fitness_age: positiveOrNull(recovery.achievable_fitness_age),
     fetched_at: recovery.fetched_at ?? new Date().toISOString(),
   }
 }
@@ -30,13 +44,27 @@ function hasAnyRecoveryMetric(recovery: {
   rem_sleep_hours: number | null
   resting_hr_bpm: number | null
   max_hr_bpm: number | null
+  body_battery_charged: number | null
+  body_battery_drained: number | null
+  avg_stress_level: number | null
+  max_stress_level: number | null
+  vo2max: number | null
+  fitness_age: number | null
+  achievable_fitness_age: number | null
 }) {
   return (
     recovery.sleep_hours != null ||
     recovery.deep_sleep_hours != null ||
     recovery.rem_sleep_hours != null ||
     recovery.resting_hr_bpm != null ||
-    recovery.max_hr_bpm != null
+    recovery.max_hr_bpm != null ||
+    recovery.body_battery_charged != null ||
+    recovery.body_battery_drained != null ||
+    recovery.avg_stress_level != null ||
+    recovery.max_stress_level != null ||
+    recovery.vo2max != null ||
+    recovery.fitness_age != null ||
+    recovery.achievable_fitness_age != null
   )
 }
 
@@ -72,9 +100,13 @@ export async function POST(req: Request) {
   }
 
   try {
-    const [sleep, hr] = await Promise.allSettled([
+    const [sleep, hr, bodyBattery, stress, vo2max, fitnessAge] = await Promise.allSettled([
       fetchSleepData(date),
       fetchHRData(date),
+      fetchBodyBattery(date),
+      fetchStress(date),
+      fetchVO2Max(date),
+      fetchFitnessAge(date),
     ])
 
     const recovery = sanitizeRecovery({
@@ -83,6 +115,13 @@ export async function POST(req: Request) {
       rem_sleep_hours: sleep.status === 'fulfilled' ? (sleep.value?.rem_sleep_hours ?? null) : null,
       resting_hr_bpm: hr.status === 'fulfilled' ? hr.value.resting_hr_bpm : null,
       max_hr_bpm: hr.status === 'fulfilled' ? hr.value.max_hr_bpm : null,
+      body_battery_charged: bodyBattery.status === 'fulfilled' ? (bodyBattery.value?.body_battery_charged ?? null) : null,
+      body_battery_drained: bodyBattery.status === 'fulfilled' ? (bodyBattery.value?.body_battery_drained ?? null) : null,
+      avg_stress_level: stress.status === 'fulfilled' ? (stress.value?.avg_stress_level ?? null) : null,
+      max_stress_level: stress.status === 'fulfilled' ? (stress.value?.max_stress_level ?? null) : null,
+      vo2max: vo2max.status === 'fulfilled' ? (vo2max.value?.vo2max ?? null) : null,
+      fitness_age: fitnessAge.status === 'fulfilled' ? (fitnessAge.value?.fitness_age ?? null) : null,
+      achievable_fitness_age: fitnessAge.status === 'fulfilled' ? (fitnessAge.value?.achievable_fitness_age ?? null) : null,
       fetched_at: new Date().toISOString(),
     })
 
@@ -112,6 +151,10 @@ export async function POST(req: Request) {
         sleep_raw: sleep.status === 'fulfilled' ? sleep.value : String((sleep as PromiseRejectedResult).reason),
         hr_status: hr.status,
         hr_raw: hr.status === 'fulfilled' ? hr.value : String((hr as PromiseRejectedResult).reason),
+        body_battery_status: bodyBattery.status,
+        stress_status: stress.status,
+        vo2max_status: vo2max.status,
+        fitness_age_status: fitnessAge.status,
       },
     })
   } catch (err) {

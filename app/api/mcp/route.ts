@@ -78,7 +78,7 @@ const TOOLS = [
   {
     name: 'get_garmin_recovery_freshness',
     description:
-      'Check whether cached Garmin recovery data (sleep, resting HR) for a given date is actually present and current, before using the daily recovery score to give advice. Returns the raw cached values, when they were fetched, and an explicit warning when sleep is missing or the data looks stale — use this before trusting a recovery/readiness score.',
+      'Check whether cached Garmin recovery data for a given date is actually present and current, before using it to give advice. Returns sleep, resting/max HR, Body Battery, Stress, VO2 max, and Fitness Age (whichever are cached), the recovery score breakdown is NOT included here — use the score directly from the week doc if needed. Includes an explicit warning when data is missing or stale, plus a per-field field_warnings object distinguishing "not synced yet" from "Garmin genuinely has no data for this field on this date" (e.g. VO2 max is only recomputed periodically, not daily) — use this before trusting any of these numbers.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -296,6 +296,29 @@ async function handleGetGarminRecoveryFreshness(args: Record<string, unknown>) {
     warning = `Cached data for ${date} was fetched ${fetchedHoursAgo}h ago. If this is today, it may predate a later sync — treat with caution.`
   }
 
+  // Per-field freshness distinction: when the whole day was never synced, every
+  // extended field is "not synced yet". When the day WAS synced but a specific
+  // field is null, that means Garmin genuinely has no data for it (e.g. watch
+  // wasn't worn for Body Battery/Stress, or VO2 max simply wasn't recomputed on
+  // its slow cadence) — a different situation from staleness, and must not be
+  // read as a bad signal.
+  function fieldWarning(fieldName: string, value: number | null | undefined, notRecordedReason: string): string | null {
+    if (!recovery) {
+      return `${fieldName} not synced yet for ${date}.`
+    }
+    if (value == null) {
+      return `No ${fieldName} recorded for ${date} — ${notRecordedReason}. This is not a sync issue.`
+    }
+    return null
+  }
+
+  const field_warnings = {
+    body_battery: fieldWarning('Body Battery', recovery?.body_battery_charged, 'likely the watch wasn\'t worn that day'),
+    stress: fieldWarning('Stress', recovery?.avg_stress_level, 'likely the watch wasn\'t worn that day'),
+    vo2max: fieldWarning('VO2 max', recovery?.vo2max, 'Garmin only recomputes this periodically, not every day'),
+    fitness_age: fieldWarning('Fitness Age', recovery?.fitness_age, 'Garmin only recomputes this periodically, not every day'),
+  }
+
   return {
     ok: true,
     date,
@@ -305,10 +328,18 @@ async function handleGetGarminRecoveryFreshness(args: Record<string, unknown>) {
     rem_sleep_hours: recovery?.rem_sleep_hours ?? null,
     resting_hr_bpm: recovery?.resting_hr_bpm ?? null,
     max_hr_bpm: recovery?.max_hr_bpm ?? null,
+    body_battery_charged: recovery?.body_battery_charged ?? null,
+    body_battery_drained: recovery?.body_battery_drained ?? null,
+    avg_stress_level: recovery?.avg_stress_level ?? null,
+    max_stress_level: recovery?.max_stress_level ?? null,
+    vo2max: recovery?.vo2max ?? null,
+    fitness_age: recovery?.fitness_age ?? null,
+    achievable_fitness_age: recovery?.achievable_fitness_age ?? null,
     fetched_at: recovery?.fetched_at ?? null,
     fetched_hours_ago: fetchedHoursAgo,
     server_now: serverNow.toISOString(),
     warning,
+    field_warnings,
   }
 }
 

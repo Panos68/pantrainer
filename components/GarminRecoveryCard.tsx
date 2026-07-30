@@ -27,6 +27,12 @@ export default function GarminRecoveryCard({
   const remSleepHours = typeof data?.rem_sleep_hours === 'number' && data.rem_sleep_hours > 0 ? data.rem_sleep_hours : null
   const restingHr = typeof data?.resting_hr_bpm === 'number' && data.resting_hr_bpm > 0 ? data.resting_hr_bpm : null
   const maxHr = typeof data?.max_hr_bpm === 'number' && data.max_hr_bpm > 0 ? data.max_hr_bpm : null
+  const bodyBatteryCharged = typeof data?.body_battery_charged === 'number' && data.body_battery_charged > 0 ? data.body_battery_charged : null
+  const bodyBatteryDrained = typeof data?.body_battery_drained === 'number' && data.body_battery_drained > 0 ? data.body_battery_drained : null
+  const avgStress = typeof data?.avg_stress_level === 'number' && data.avg_stress_level >= 0 ? data.avg_stress_level : null
+  const maxStress = typeof data?.max_stress_level === 'number' && data.max_stress_level >= 0 ? data.max_stress_level : null
+  const vo2max = typeof data?.vo2max === 'number' && data.vo2max > 0 ? data.vo2max : null
+  const fitnessAge = typeof data?.fitness_age === 'number' && data.fitness_age > 0 ? data.fitness_age : null
 
   async function fetchRecovery(force = false) {
     setLoading(true)
@@ -131,6 +137,42 @@ export default function GarminRecoveryCard({
               <div className="text-zinc-500 text-[9px] font-mono tracking-widest uppercase mb-0.5">Max HR</div>
               <div className="text-amber-400 text-lg font-mono font-black leading-none">{maxHr}</div>
               <div className="text-zinc-600 text-[9px] font-mono mt-0.5">bpm</div>
+            </div>
+          )}
+          {bodyBatteryCharged != null && (
+            <div>
+              <div className="text-zinc-500 text-[9px] font-mono tracking-widest uppercase mb-0.5">Body Battery</div>
+              <div className="text-emerald-400 text-lg font-mono font-black leading-none">+{bodyBatteryCharged}</div>
+              {bodyBatteryDrained != null && (
+                <div className="text-zinc-600 text-[9px] font-mono mt-0.5">
+                  -{bodyBatteryDrained} drained
+                </div>
+              )}
+            </div>
+          )}
+          {avgStress != null && (
+            <div>
+              <div className="text-zinc-500 text-[9px] font-mono tracking-widest uppercase mb-0.5">Stress</div>
+              <div className="text-orange-400 text-lg font-mono font-black leading-none">{avgStress}</div>
+              {maxStress != null && (
+                <div className="text-zinc-600 text-[9px] font-mono mt-0.5">
+                  max {maxStress}
+                </div>
+              )}
+            </div>
+          )}
+          {vo2max != null && (
+            <div>
+              <div className="text-zinc-500 text-[9px] font-mono tracking-widest uppercase mb-0.5">VO2 Max</div>
+              <div className="text-cyan-400 text-lg font-mono font-black leading-none">{vo2max}</div>
+              <div className="text-zinc-600 text-[9px] font-mono mt-0.5">ml/kg/min</div>
+            </div>
+          )}
+          {fitnessAge != null && (
+            <div>
+              <div className="text-zinc-500 text-[9px] font-mono tracking-widest uppercase mb-0.5">Fitness Age</div>
+              <div className="text-violet-400 text-lg font-mono font-black leading-none">{Math.round(fitnessAge)}</div>
+              <div className="text-zinc-600 text-[9px] font-mono mt-0.5">years</div>
             </div>
           )}
         </div>
