@@ -114,7 +114,7 @@ export default function PmcChart({ data }: Props) {
         </LineChart>
       </ResponsiveContainer>
       <p className="text-[10px] font-mono text-zinc-600">
-        TSB &gt; 0 = fresh · TSB &lt; −10 = accumulated fatigue · TSB &lt; −30 = overreaching · ACWR 0.8–1.3 = optimal
+        CTL/ATL/TSB are a rough trend guide, not a precise threshold — the fresh/overreaching cutoffs come from cycling power-based TSS and do not calibrate cleanly to session-RPE-scored strength/conditioning training. ACWR 0.8–1.3 = optimal.
       </p>
     </div>
   )
