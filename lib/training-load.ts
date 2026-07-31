@@ -17,6 +17,7 @@ export interface TrainingLoadPoint {
   total_calories: number | null
   training_load: number
   load_source: LoadSource
+  rpe: number | null
 }
 
 // TRIMP (Training Impulse) — Bannister formula.
@@ -81,5 +82,6 @@ export function sessionToLoadPoint(s: Session, athlete?: AthleteLoadParams): Tra
     total_calories: s.total_calories ?? null,
     training_load: result.load,
     load_source: result.source,
+    rpe: s.rpe ?? null,
   }
 }
