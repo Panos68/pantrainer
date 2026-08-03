@@ -1,7 +1,7 @@
 import type { Session } from './schema'
 import { todayIsoInAppTimeZone } from './app-timezone'
 
-export type LoadSource = 'garmin_tss' | 'srpe' | 'trimp' | 'hr_duration'
+export type LoadSource = 'garmin_tss' | 'blended' | 'srpe' | 'trimp' | 'hr_duration'
 
 export interface AthleteLoadParams {
   rhr: number
@@ -40,6 +40,16 @@ function calcSessionRpeLoad(durationMin: number, rpe: number): number {
   return Math.round((durationMin * rpe) / 4)
 }
 
+function calcHrLoad(durationMin: number, avgHr: number, athlete?: AthleteLoadParams): number {
+  if (athlete) {
+    // TRIMP with known resting/max HR — comparable scale to TSS
+    return calcTrimp(durationMin, avgHr, athlete.rhr, athlete.maxHr)
+  }
+  // Normalized fallback when athlete params unavailable: duration × (hr/170)
+  // Produces ~30–80 per session — reasonable relative values, not TSS-accurate
+  return Math.round(durationMin * (avgHr / 170))
+}
+
 export function calcLoad(
   s: Session,
   athlete?: AthleteLoadParams,
@@ -49,20 +59,25 @@ export function calcLoad(
     return { load: s.training_stress_score, source: 'garmin_tss' }
   }
 
-  if (s.rpe != null && s.rpe > 0 && s.duration_min != null && s.duration_min > 0) {
-    return { load: calcSessionRpeLoad(s.duration_min, s.rpe), source: 'srpe' }
+  const hasRpe = s.rpe != null && s.rpe > 0 && s.duration_min != null && s.duration_min > 0
+  const hasHr = s.avg_hr_bpm != null && s.avg_hr_bpm > 0 && s.duration_min != null && s.duration_min > 0
+
+  // RPE captures perceived effort HR alone can miss (resistance work, stop-start
+  // efforts); HR captures physiological strain RPE can under/over-report. Blend
+  // both when available so neither signal alone determines the number.
+  if (hasRpe && hasHr) {
+    const rpeLoad = calcSessionRpeLoad(s.duration_min!, s.rpe!)
+    const hrLoad = calcHrLoad(s.duration_min!, s.avg_hr_bpm!, athlete)
+    return { load: Math.round((rpeLoad + hrLoad) / 2), source: 'blended' }
   }
 
-  if (s.avg_hr_bpm != null && s.avg_hr_bpm > 0 && s.duration_min != null && s.duration_min > 0) {
-    if (athlete) {
-      // TRIMP with known resting/max HR — comparable scale to TSS
-      const load = calcTrimp(s.duration_min, s.avg_hr_bpm, athlete.rhr, athlete.maxHr)
-      return { load, source: 'trimp' }
-    }
-    // Normalized fallback when athlete params unavailable: duration × (hr/170)
-    // Produces ~30–80 per session — reasonable relative values, not TSS-accurate
-    const load = Math.round(s.duration_min * (s.avg_hr_bpm / 170))
-    return { load, source: 'hr_duration' }
+  if (hasRpe) {
+    return { load: calcSessionRpeLoad(s.duration_min!, s.rpe!), source: 'srpe' }
+  }
+
+  if (hasHr) {
+    const source: LoadSource = athlete ? 'trimp' : 'hr_duration'
+    return { load: calcHrLoad(s.duration_min!, s.avg_hr_bpm!, athlete), source }
   }
 
   return null
