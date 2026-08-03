@@ -275,13 +275,28 @@ export async function pushWorkoutToGarmin(session: Session): Promise<PushResult>
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const client: any = await createClient()
-  const created = await client.addWorkout(payload)
-
-  // Puts the workout directly on the right calendar day, not just in the
-  // workout library — confirmed via python-garminconnect's schedule_workout,
-  // since the npm client has no wrapper for this endpoint.
   const base = client.url.GC_API
-  await client.client.post(`${base}/workout-service/schedule/${created.workoutId}`, { date: session.date })
 
-  return { workoutId: created.workoutId, skippedExercises, pushedExerciseOrder }
+  let workoutId: number
+  if (session.garmin_workout_id) {
+    // Edit the existing workout in place (confirmed live, 2026-08-03: PUT
+    // replaces content but keeps the workoutId, so any calendar schedule
+    // pointing at it stays valid) — avoids piling up a new workout + a new
+    // schedule entry every week just because a weight target changed.
+    workoutId = session.garmin_workout_id
+    await client.client.put(`${base}/workout-service/workout/${workoutId}`, {
+      ...payload,
+      workoutId,
+    })
+  } else {
+    const created = await client.addWorkout(payload)
+    workoutId = created.workoutId
+    // Puts the workout directly on the right calendar day, not just in the
+    // workout library — confirmed via python-garminconnect's schedule_workout,
+    // since the npm client has no wrapper for this endpoint. Only needed on
+    // first creation — editing in place doesn't move or duplicate the schedule.
+    await client.client.post(`${base}/workout-service/schedule/${workoutId}`, { date: session.date })
+  }
+
+  return { workoutId, skippedExercises, pushedExerciseOrder }
 }
