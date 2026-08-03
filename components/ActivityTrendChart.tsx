@@ -204,7 +204,7 @@ export default function ActivityTrendChart({ weeks, athlete }: ActivityTrendChar
                       <p style={{ color: '#a3e635', marginTop: 6 }}>
                         Load: {p.training_load.toLocaleString()}
                         <span style={{ color: '#52525b', fontSize: 10, marginLeft: 4 }}>
-                          ({p.load_source === 'garmin_tss' ? 'Garmin TSS' : p.load_source === 'srpe' ? 'RPE×min' : p.load_source === 'trimp' ? 'TRIMP' : 'HR×min'})
+                          ({p.load_source === 'garmin_tss' ? 'Garmin TSS' : p.load_source === 'blended' ? 'RPE+HR' : p.load_source === 'srpe' ? 'RPE×min' : p.load_source === 'trimp' ? 'TRIMP' : 'HR×min'})
                         </span>
                       </p>
                     </div>
