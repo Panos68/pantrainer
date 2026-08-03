@@ -269,6 +269,8 @@ export default function LogDayPage() {
     hr_zones?: Array<{ zone_name: string; secs_in_zone: number; zone_high_boundary: number }> | null
   }>({})
   const [refreshingGarmin, setRefreshingGarmin] = useState(false)
+  const [garminPushing, setGarminPushing] = useState(false)
+  const [garminPushMessage, setGarminPushMessage] = useState<string | null>(null)
   const isFutureSession = session != null && session.date > todayIsoLocal()
 
   const refreshFromGarmin = useCallback(async (
@@ -339,6 +341,42 @@ export default function LogDayPage() {
     return matchedSync
   }, [])
 
+  // If the session was pushed to Garmin and the actual workout is now synced,
+  // pull real per-set weight/reps back and re-seed the set-log rows from it.
+  // RPE and per-set effort/notes stay manual — this only fills in the numbers.
+  const pullGarminSets = useCallback(async () => {
+    const res = await fetch(`/api/session/${day}/garmin-pull-sets`, { method: 'POST' })
+    if (!res.ok) return
+    const updated: Session = await res.json()
+    setSession(updated)
+    const flatExercises = updated.exercise_groups
+      ? updated.exercise_groups.flatMap((g) => g.exercises)
+      : (updated.exercises ?? [])
+    setSetLogEdits(Object.fromEntries(flatExercises.map((ex, i) => [i, ex.set_log ?? []])))
+  }, [day])
+
+  const pushToGarmin = useCallback(async () => {
+    setGarminPushing(true)
+    setGarminPushMessage(null)
+    try {
+      const res = await fetch(`/api/session/${day}/garmin-push`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        setGarminPushMessage(data.error ?? 'Push failed')
+        return
+      }
+      setSession(data as Session)
+      const skipped = (data.garmin_push_skipped ?? []) as string[]
+      setGarminPushMessage(
+        skipped.length > 0 ? `Sent to watch — skipped: ${skipped.join(', ')}` : 'Sent to watch'
+      )
+    } catch {
+      setGarminPushMessage('Push failed')
+    } finally {
+      setGarminPushing(false)
+    }
+  }, [day])
+
   // Load session and week data
   useEffect(() => {
     async function load() {
@@ -382,7 +420,21 @@ export default function LogDayPage() {
 
         // Auto-fetch if no Garmin match yet — regardless of status
         if (!sessionData.garmin_activity_id) {
-          void refreshFromGarmin({ date: sessionData.date, type: sessionData.type }, false)
+          void refreshFromGarmin({ date: sessionData.date, type: sessionData.type }, false).then(() => {
+            if (
+              sessionData.garmin_pushed_exercise_order &&
+              sessionData.garmin_pushed_exercise_order.length > 0 &&
+              sessionData.garmin_pull_status !== 'pulled'
+            ) {
+              void pullGarminSets()
+            }
+          })
+        } else if (
+          sessionData.garmin_pushed_exercise_order &&
+          sessionData.garmin_pushed_exercise_order.length > 0 &&
+          sessionData.garmin_pull_status !== 'pulled'
+        ) {
+          void pullGarminSets()
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load session')
@@ -391,7 +443,7 @@ export default function LogDayPage() {
       }
     }
     load()
-  }, [day, refreshFromGarmin])
+  }, [day, refreshFromGarmin, pullGarminSets])
 
   const buildPayload = useCallback(() => {
     function mergeActualIntoExercise(ex: Session['exercises'][number], i: number) {
@@ -743,6 +795,15 @@ export default function LogDayPage() {
             </h1>
           </div>
           <div className="flex items-center gap-3">
+            {session.type === 'Strength' && session.garmin_pull_status !== 'pulled' && (
+              <button
+                onClick={pushToGarmin}
+                disabled={garminPushing}
+                className="px-3 py-1.5 rounded-full bg-cyan-400/10 text-cyan-400 border border-cyan-400/30 text-xs font-mono font-bold tracking-widest uppercase transition-colors hover:bg-cyan-400/20 disabled:opacity-50"
+              >
+                {garminPushing ? 'Sending...' : 'Send to Watch'}
+              </button>
+            )}
             {!isFutureSession && ((session.exercises && session.exercises.length > 0) || (session.exercise_groups && session.exercise_groups.length > 0)) && (
               <Link
                 href={`/log/${day}/live`}
@@ -759,6 +820,14 @@ export default function LogDayPage() {
             </button>
           </div>
         </header>
+
+        {garminPushMessage && (
+          <div className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3">
+            <p className="text-cyan-300 text-xs font-mono tracking-widest uppercase">
+              {garminPushMessage}
+            </p>
+          </div>
+        )}
 
         {/* Coach guidance banner */}
         {session.subtype && (

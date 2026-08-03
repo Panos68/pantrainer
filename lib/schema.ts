@@ -71,6 +71,21 @@ export const SessionSchema = z.object({
   muscle_groups: z.array(z.string()).default([]),
   rpe: z.number().min(1).max(10).nullable().optional(),
   reasoning: z.string().nullable().optional(),
+  garmin_workout_id: z.number().nullable().optional(),
+  garmin_pushed_exercise_order: z.array(z.object({ name: z.string(), sets: z.number() })).nullable().optional(),
+  garmin_push_skipped: z.array(z.string()).optional(),
+  garmin_pull_status: z.enum(['not_pushed', 'pushed', 'pulled']).optional(),
+})
+
+// Mapping from an app exercise name to Garmin's structured-workout catalog entry
+export const GarminExerciseMapEntrySchema = z.object({
+  _id: z.string(), // normalized exercise name (lowercase, trimmed)
+  displayName: z.string(),
+  garminCategory: z.string(), // e.g. "BENCH_PRESS"
+  garminExerciseName: z.string(), // e.g. "BARBELL_BENCH_PRESS"
+  confidence: z.enum(['high', 'low']),
+  source: z.enum(['bootstrap', 'mcp_claude']),
+  updatedAt: z.string(),
 })
 
 // Week summary
@@ -245,6 +260,7 @@ export const ProposedPlanSchema = z.object({
 })
 
 // Export types
+export type GarminExerciseMapEntry = z.infer<typeof GarminExerciseMapEntrySchema>
 export type SetEntry = z.infer<typeof SetEntrySchema>
 export type Exercise = z.infer<typeof ExerciseSchema>
 export type ExerciseGroup = z.infer<typeof ExerciseGroupSchema>

@@ -28,7 +28,7 @@ async function saveCachedToken(token: unknown): Promise<void> {
   )
 }
 
-async function createClient() {
+export async function createClient() {
   const email = process.env.GARMIN_EMAIL
   const password = process.env.GARMIN_PASSWORD
   if (!email || !password) throw new Error('GARMIN_EMAIL and GARMIN_PASSWORD must be set')
@@ -109,6 +109,45 @@ export async function fetchActivityDetail(activityId: number, existingClient?: u
     }
   } catch {
     return { hrZones: null }
+  }
+}
+
+export type GarminStrengthSet = {
+  reps: number | null
+  weight_kg: number | null
+}
+
+// Confirmed live (Phase 0 spike, 2026-08-03): this endpoint is undocumented by
+// the npm client but returns true per-set data — reps, weight, ACTIVE/REST —
+// unlike `getActivity`/`getActivities`, which only expose aggregated
+// per-category summaries (`summarizedExerciseSets`).
+export async function fetchActivityStrengthSets(
+  activityId: number,
+  existingClient?: unknown
+): Promise<GarminStrengthSet[] | null> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const client: any = existingClient ?? await createClient()
+    const base = client.url.GC_API
+    const raw = await client.client.get(
+      `${base}/activity-service/activity/${activityId}/exerciseSets`
+    ) as {
+      exerciseSets?: Array<{
+        repetitionCount?: number | null
+        weight?: number | null
+        setType?: string
+      }>
+    }
+    const sets = raw?.exerciseSets
+    if (!sets?.length) return null
+    return sets
+      .filter((s) => s.setType === 'ACTIVE')
+      .map((s) => ({
+        reps: typeof s.repetitionCount === 'number' ? s.repetitionCount : null,
+        weight_kg: typeof s.weight === 'number' ? s.weight / 1000 : null,
+      }))
+  } catch {
+    return null
   }
 }
 

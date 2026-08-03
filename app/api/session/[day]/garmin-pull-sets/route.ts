@@ -1,0 +1,112 @@
+import { readCurrentWeekDirect, writeCurrentWeek } from '@/lib/data'
+import { fetchActivityStrengthSets } from '@/lib/garmin'
+import { deriveExerciseAggregates } from '@/lib/liveSession'
+import type { Exercise, ExerciseGroup, Session, SetEntry } from '@/lib/schema'
+
+export const dynamic = 'force-dynamic'
+
+function flattenExercises(session: Session): Exercise[] {
+  if (session.exercise_groups && session.exercise_groups.length > 0) {
+    return session.exercise_groups.flatMap((g: ExerciseGroup) => g.exercises)
+  }
+  return session.exercises
+}
+
+function applySetLog(exercise: Exercise, log: SetEntry[]): Exercise {
+  const derived = deriveExerciseAggregates(exercise, log)
+  return {
+    ...exercise,
+    set_log: log,
+    actual_sets: derived.actual_sets,
+    actual_reps: derived.actual_reps,
+    actual_weight_kg: derived.actual_weight_kg,
+    effort: derived.effort,
+  }
+}
+
+export async function POST(
+  _req: Request,
+  { params }: { params: Promise<{ day: string }> },
+) {
+  const { day } = await params
+  const week = await readCurrentWeekDirect()
+  if (!week) {
+    return Response.json({ error: 'No active week' }, { status: 404 })
+  }
+
+  const sessionIndex = week.sessions.findIndex(
+    (s) => s.day.toLowerCase() === day.toLowerCase(),
+  )
+  if (sessionIndex === -1) {
+    return Response.json({ error: 'Session not found' }, { status: 404 })
+  }
+
+  const session = week.sessions[sessionIndex]
+  const pushedOrder = session.garmin_pushed_exercise_order
+  if (!session.garmin_activity_id || !pushedOrder || pushedOrder.length === 0) {
+    return Response.json(
+      { error: 'Session has no linked Garmin activity or pushed-exercise order' },
+      { status: 400 },
+    )
+  }
+
+  const pulledSets = await fetchActivityStrengthSets(session.garmin_activity_id)
+  if (!pulledSets) {
+    return Response.json({ error: 'No strength set data found on the Garmin activity' }, { status: 404 })
+  }
+
+  // Match pushed exercises (a strict, ordered subsequence of the flattened
+  // session, since unmapped exercises were skipped at push time) back to
+  // their position in the session, then chunk the flat chronological set
+  // list by each exercise's known set count.
+  const flat = flattenExercises(session)
+  const matchedExercises: Exercise[] = []
+  let flatIdx = 0
+  for (const pushed of pushedOrder) {
+    while (flatIdx < flat.length && flat[flatIdx].name !== pushed.name) flatIdx++
+    if (flatIdx >= flat.length) break
+    matchedExercises.push(flat[flatIdx])
+    flatIdx++
+  }
+
+  const setLogsByExercise = new Map<Exercise, SetEntry[]>()
+  let cursor = 0
+  for (let i = 0; i < pushedOrder.length && i < matchedExercises.length; i++) {
+    const count = pushedOrder[i].sets
+    const chunk = pulledSets.slice(cursor, cursor + count)
+    cursor += count
+    setLogsByExercise.set(
+      matchedExercises[i],
+      chunk.map((s) => ({
+        reps: s.reps ?? 0,
+        weight_kg: s.weight_kg,
+        effort: null,
+        completed_at: new Date().toISOString(),
+      })),
+    )
+  }
+
+  function updateIfMatched(exercise: Exercise): Exercise {
+    const log = setLogsByExercise.get(exercise)
+    return log ? applySetLog(exercise, log) : exercise
+  }
+
+  const updatedSession: Session =
+    session.exercise_groups && session.exercise_groups.length > 0
+      ? (() => {
+          const exercise_groups = session.exercise_groups!.map((group) => ({
+            ...group,
+            exercises: group.exercises.map(updateIfMatched),
+          }))
+          return { ...session, exercise_groups, exercises: exercise_groups.flatMap((g) => g.exercises) }
+        })()
+      : { ...session, exercises: session.exercises.map(updateIfMatched) }
+
+  updatedSession.garmin_pull_status = 'pulled'
+  week.sessions[sessionIndex] = updatedSession
+  await writeCurrentWeek(week)
+
+  return Response.json(updatedSession, {
+    headers: { 'Cache-Control': 'no-store, max-age=0' },
+  })
+}

@@ -5,8 +5,17 @@ import {
   AppStateSchema,
   AutomationNotesSchema,
   ProposedPlanSchema,
+  GarminExerciseMapEntrySchema,
 } from './schema'
-import type { WeekDoc, AthleteProfile, AppState, AutomationNotes, ProposedPlan, DailyReadiness } from './schema'
+import type {
+  WeekDoc,
+  AthleteProfile,
+  AppState,
+  AutomationNotes,
+  ProposedPlan,
+  DailyReadiness,
+  GarminExerciseMapEntry,
+} from './schema'
 import { format, parseISO } from 'date-fns'
 import { getDb } from './mongodb'
 
@@ -271,4 +280,36 @@ export async function writeDailyReadiness(readiness: DailyReadiness): Promise<vo
   if (!week) throw new Error('No active week')
   week.daily_readiness = { ...week.daily_readiness, [readiness.date]: readiness }
   await writeCurrentWeek(week)
+}
+
+// ─── Garmin exercise mapping ───────────────────────────────────────────────────
+// Small collection (~dozens of rows): app exercise name → Garmin structured-workout
+// catalog entry (category/exerciseName). Read fully by the push route and by the
+// list_garmin_exercise_mappings MCP tool; written by the bootstrap step and by
+// the save_garmin_exercise_mapping MCP tool.
+
+export function normalizeExerciseName(name: string): string {
+  return name.trim().toLowerCase()
+}
+
+export async function readGarminExerciseMap(): Promise<Record<string, GarminExerciseMapEntry>> {
+  const db = await getDb()
+  const docs = await db.collection('exercise_garmin_map').find({}).toArray()
+  const entries = docs.map((d) => GarminExerciseMapEntrySchema.parse(d))
+  return Object.fromEntries(entries.map((e) => [e._id, e]))
+}
+
+export async function readGarminExerciseMapping(normalizedName: string): Promise<GarminExerciseMapEntry | null> {
+  const db = await getDb()
+  const doc = await db.collection('exercise_garmin_map').findOne({ _id: normalizedName as never })
+  return doc ? GarminExerciseMapEntrySchema.parse(doc) : null
+}
+
+export async function writeGarminExerciseMapping(entry: GarminExerciseMapEntry): Promise<void> {
+  const db = await getDb()
+  await db.collection('exercise_garmin_map').replaceOne(
+    { _id: entry._id as never },
+    entry,
+    { upsert: true }
+  )
 }
