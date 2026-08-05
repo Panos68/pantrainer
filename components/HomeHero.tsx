@@ -15,55 +15,65 @@ interface HomeHeroProps {
   loadZone: { label: string; color: string } | null
   healthFlags: HealthFlag[]
   calories: number
+  caloriesDelta: number | null
   durationLabel: string
+  durationDelta: number | null
   adaptiveAlert: AdaptiveAlert | null
   today: string
   initialReadiness: ReadinessSnapshot
 }
 
-function StatMini({ label, value }: { label: string; value: string }) {
+function pctLabel(delta: number | null): string | undefined {
+  if (delta == null) return undefined
+  return `${delta > 0 ? '+' : ''}${delta}% vs last wk`
+}
+
+function WeekTile({ label, value, valueClassName, interpretation }: { label: string; value: string; valueClassName?: string; interpretation?: string }) {
   return (
-    <div>
-      <p className="text-zinc-600 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-0.5">{label}</p>
-      <p className="text-zinc-300 text-lg font-bold tabular-nums leading-none">{value}</p>
+    <div className="bg-zinc-900 rounded-xl p-3 flex flex-col justify-between min-w-[7.5rem]">
+      <p className="text-zinc-500 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-1">{label}</p>
+      <span className={`font-display font-bold text-2xl leading-none tabular-nums ${valueClassName ?? 'text-zinc-100'}`}>
+        {value}
+      </span>
+      {interpretation && <p className="text-zinc-600 text-[10px] font-mono mt-1 truncate">{interpretation}</p>}
     </div>
   )
 }
 
-function WeekStatsRow({ weekLoad, loadDelta, acwr, loadZone, calories, durationLabel }: Omit<HomeHeroProps, 'healthFlags' | 'adaptiveAlert' | 'today' | 'initialReadiness'>) {
+function WeekStatsRow({ weekLoad, loadDelta, acwr, loadZone, calories, caloriesDelta, durationLabel, durationDelta }: Omit<HomeHeroProps, 'healthFlags' | 'adaptiveAlert' | 'today' | 'initialReadiness'>) {
   const displayLoad = useCountUp(weekLoad)
   const displayAcwrHundredths = useCountUp(acwr != null ? Math.round(acwr * 100) : 0)
 
+  const loadInterpretation = [
+    loadDelta != null ? `${loadDelta > 0 ? '+' : ''}${loadDelta}% vs last wk` : null,
+    loadZone && acwr != null ? `${(displayAcwrHundredths / 100).toFixed(2)} ${loadZone.label}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ') || 'Not enough history yet'
+
   return (
-    <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
-      <div>
-        <p className="text-zinc-500 text-[10px] font-mono font-bold tracking-[0.2em] uppercase mb-0.5">
-          This Week&rsquo;s Load
-        </p>
-        <div className="flex items-baseline gap-3">
-          <span className="font-display font-bold text-3xl text-cyan-400 leading-none tabular-nums">
-            {weekLoad > 0 ? displayLoad : '—'}
-          </span>
-          {loadDelta != null && (
-            <span className={`text-xs font-mono font-bold ${loadDelta > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
-              {loadDelta > 0 ? `+${loadDelta}%` : `${loadDelta}%`}
-            </span>
-          )}
-          {loadZone && acwr != null && (
-            <span className={`font-display font-bold text-sm ${loadZone.color}`}>
-              {(displayAcwrHundredths / 100).toFixed(2)}{' '}
-              <span className="text-[10px] font-mono uppercase tracking-widest">{loadZone.label}</span>
-            </span>
-          )}
-        </div>
-      </div>
-      <StatMini label="Calories" value={calories > 0 ? calories.toLocaleString() : '—'} />
-      <StatMini label="Time" value={durationLabel} />
+    <div className="grid grid-cols-3 gap-3">
+      <WeekTile
+        label="Week's Load"
+        value={weekLoad > 0 ? String(displayLoad) : '—'}
+        valueClassName="text-cyan-400"
+        interpretation={loadInterpretation}
+      />
+      <WeekTile
+        label="Week's Calories"
+        value={calories > 0 ? calories.toLocaleString() : '—'}
+        interpretation={pctLabel(caloriesDelta)}
+      />
+      <WeekTile
+        label="Week's Training Time"
+        value={durationLabel}
+        interpretation={pctLabel(durationDelta)}
+      />
     </div>
   )
 }
 
-export default function HomeHero({ weekLoad, loadDelta, acwr, loadZone, healthFlags, calories, durationLabel, adaptiveAlert, today, initialReadiness }: HomeHeroProps) {
+export default function HomeHero({ weekLoad, loadDelta, acwr, loadZone, healthFlags, calories, caloriesDelta, durationLabel, durationDelta, adaptiveAlert, today, initialReadiness }: HomeHeroProps) {
   const hasActiveFlags = healthFlags.some((f) => !f.cleared)
 
   return (
@@ -82,7 +92,9 @@ export default function HomeHero({ weekLoad, loadDelta, acwr, loadZone, healthFl
           acwr={acwr}
           loadZone={loadZone}
           calories={calories}
+          caloriesDelta={caloriesDelta}
           durationLabel={durationLabel}
+          durationDelta={durationDelta}
         />
       </div>
       <div className="relative space-y-4">
