@@ -67,37 +67,63 @@ function ScoreRing({ total, color }: { total: number; color: 'green' | 'amber' |
   )
 }
 
+function DeltaBadge({ delta }: { delta: number | null }) {
+  if (delta == null) return <span className="w-9 shrink-0" />
+  const positive = delta >= 0
+  return (
+    <span
+      className={`text-[10px] font-mono font-bold px-1 rounded w-9 text-center shrink-0 ${
+        positive ? 'bg-emerald-400 text-emerald-950' : 'bg-amber-400 text-amber-950'
+      }`}
+    >
+      {positive ? '+' : ''}
+      {delta}
+    </span>
+  )
+}
+
 function BreakdownBar({
   label,
   value,
   max,
   unavailable,
   barColor,
+  baseline,
 }: {
   label: string
   value: number
   max: number
   unavailable?: boolean
   barColor: string
+  baseline: number | null
 }) {
+  const delta = unavailable || baseline == null ? null : value - baseline
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-zinc-500 text-[11px] w-14 shrink-0">{label}</span>
-      {unavailable ? (
-        <>
-          <div className="flex-1 h-2 bg-zinc-800 rounded-full" />
-          <span className="text-zinc-600 text-[11px] font-mono font-bold w-10 text-right">—</span>
-        </>
-      ) : (
-        <>
-          <div className="flex-1 h-2 bg-zinc-800 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${barColor}`}
-              style={{ width: `${Math.round((value / max) * 100)}%` }}
-            />
-          </div>
-          <span className="text-zinc-400 text-[11px] font-mono font-bold w-10 text-right">{value}/{max}</span>
-        </>
+    <div>
+      <div className="flex items-center gap-2">
+        <span className="text-zinc-500 text-[11px] w-14 shrink-0">{label}</span>
+        <DeltaBadge delta={delta} />
+        {unavailable ? (
+          <>
+            <div className="flex-1 h-2 bg-zinc-800 rounded-full" />
+            <span className="text-zinc-600 text-[11px] font-mono font-bold w-10 text-right">—</span>
+          </>
+        ) : (
+          <>
+            <div className="flex-1 h-2 bg-zinc-800 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                style={{ width: `${Math.round((value / max) * 100)}%` }}
+              />
+            </div>
+            <span className="text-zinc-400 text-[11px] font-mono font-bold w-10 text-right">{value}/{max}</span>
+          </>
+        )}
+      </div>
+      {!unavailable && (
+        <p className="text-[9px] text-zinc-600 pl-[92px] -mt-0.5">
+          baseline {baseline != null ? `${baseline}/${max}` : '—'}
+        </p>
       )}
     </div>
   )
@@ -176,10 +202,11 @@ export default function RecoveryScorePanel({ today, initialData }: { today: stri
     }
   }
 
-  const { score, garmin } = data
+  const { score, garmin, baseline } = data
   const noSleep = !garmin || garmin.sleep_hours == null
   const noRhr = !garmin || garmin.resting_hr_bpm == null
   const c = COLOR[score.color]
+  const netDelta = baseline.total != null ? score.total - baseline.total : null
 
   return (
     <div
@@ -189,13 +216,10 @@ export default function RecoveryScorePanel({ today, initialData }: { today: stri
       <div className="flex items-center gap-3 sm:gap-4">
         {/* Breakdown bars — fill available space */}
         <div className="flex-1 min-w-0 space-y-2">
-          <BreakdownBar label="Sleep" value={score.sleep} max={40} unavailable={noSleep} barColor={BAR_COLORS.sleep} />
-          {data.sleep_avg_7d != null && (
-            <p className="text-[10px] text-zinc-600 pl-16 -mt-1">7d avg {data.sleep_avg_7d}h</p>
-          )}
-          <BreakdownBar label="RHR" value={score.rhr} max={30} unavailable={noRhr} barColor={BAR_COLORS.rhr} />
-          <BreakdownBar label="Load" value={score.load} max={20} barColor={BAR_COLORS.load} />
-          <BreakdownBar label="Feeling" value={score.subjective} max={10} barColor={BAR_COLORS.subjective} />
+          <BreakdownBar label="Sleep" value={score.sleep} max={40} unavailable={noSleep} barColor={BAR_COLORS.sleep} baseline={baseline.sleep} />
+          <BreakdownBar label="RHR" value={score.rhr} max={30} unavailable={noRhr} barColor={BAR_COLORS.rhr} baseline={baseline.rhr} />
+          <BreakdownBar label="Load" value={score.load} max={20} barColor={BAR_COLORS.load} baseline={baseline.load} />
+          <BreakdownBar label="Feeling" value={score.subjective} max={10} barColor={BAR_COLORS.subjective} baseline={baseline.subjective} />
         </div>
 
         {/* Score ring + label — anchored right; label sits under the ring on mobile, beside it from sm: up */}
@@ -203,6 +227,11 @@ export default function RecoveryScorePanel({ today, initialData }: { today: stri
           <div className="text-center sm:text-right">
             <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-widest mb-0.5 hidden sm:block">Recovery</p>
             <p className={`text-xs sm:text-2xl font-black uppercase tracking-tight ${c.label}`}>{score.label}</p>
+            {netDelta != null && (
+              <p className="text-zinc-600 text-[9px] sm:text-[10px] mt-0.5 whitespace-nowrap">
+                Net {netDelta >= 0 ? '+' : ''}{netDelta} vs 7d
+              </p>
+            )}
             {!data.readiness && !checkinOpen && (
               <button
                 onClick={() => setCheckinOpen(true)}
