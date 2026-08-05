@@ -56,16 +56,30 @@ export default function PmcChart({ data }: Props) {
     label: format(parseISO(p.date), 'MMM d'),
   }))
 
+  const latest = formatted[formatted.length - 1]
+
+  const badges: Array<{ name: string; value: string; bg: string }> = [
+    { name: 'CTL', value: latest.ctl.toFixed(0), bg: '#60a5fa' },
+    { name: 'ATL', value: latest.atl.toFixed(0), bg: '#f87171' },
+    { name: 'TSB', value: latest.tsb.toFixed(0), bg: '#a3e635' },
+    { name: 'ACWR', value: latest.acwr != null ? latest.acwr.toFixed(2) : '—', bg: '#fbbf24' },
+  ]
+
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">Performance Management</p>
         <div className="flex items-center gap-3">
-          <div className="flex gap-3 text-[10px] font-mono">
-            <span className="text-blue-400">CTL fitness</span>
-            <span className="text-rose-400">ATL fatigue</span>
-            <span className="text-lime-400">TSB form</span>
-            <span className="text-amber-400">ACWR</span>
+          <div className="flex gap-1.5">
+            {badges.map((b) => (
+              <span
+                key={b.name}
+                className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded text-zinc-950"
+                style={{ backgroundColor: b.bg }}
+              >
+                {b.name} {b.value}
+              </span>
+            ))}
           </div>
           <div className="flex gap-1">
             {RANGES.map((r, i) => (
