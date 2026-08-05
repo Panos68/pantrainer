@@ -92,6 +92,18 @@ export default async function Home() {
     ? Math.round(((weekLoad - prevWeekLoad) / prevWeekLoad) * 100)
     : null
 
+  const prevWeekSessionsToDate = prevWeek
+    ? prevWeek.sessions.filter((s) => s.status === 'completed' && remapDay(new Date(s.date).getDay()) <= todayRemapped)
+    : []
+  const prevWeekCalories = prevWeek ? prevWeekSessionsToDate.reduce((sum, s) => sum + (s.total_calories ?? 0), 0) : null
+  const prevWeekDurationMin = prevWeek ? prevWeekSessionsToDate.reduce((sum, s) => sum + (s.duration_min ?? 0), 0) : null
+
+  const pctDelta = (current: number, prev: number | null) =>
+    prev != null && prev > 0 && current > 0 ? Math.round(((current - prev) / prev) * 100) : null
+
+  const caloriesDelta = pctDelta(weekCalories, prevWeekCalories)
+  const durationDelta = pctDelta(weekDurationMin, prevWeekDurationMin)
+
   // ACWR zone using all history up to today
   const allLoadPoints = [...archivedWeeks, week]
     .flatMap((w) => w.sessions)
@@ -154,7 +166,9 @@ export default async function Home() {
           loadZone={loadZone}
           healthFlags={week.health_flags}
           calories={weekCalories}
+          caloriesDelta={caloriesDelta}
           durationLabel={formatDuration(weekDurationMin)}
+          durationDelta={durationDelta}
           adaptiveAlert={adaptiveAlert}
           today={todayISO}
           initialReadiness={readinessSnapshot}

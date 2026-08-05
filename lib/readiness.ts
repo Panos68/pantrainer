@@ -2,6 +2,15 @@ import type { WeekDoc, AthleteProfile, GarminRecoveryDay, DailyReadiness, Recove
 import { calcRecoveryScore } from './recovery-score'
 import { calcACWR } from './daily-score'
 import { sessionToLoadPoint } from './training-load'
+import { subDays, format, parseISO } from 'date-fns'
+
+export interface ReadinessBaseline {
+  total: number | null
+  sleep: number | null
+  rhr: number | null
+  load: number | null
+  subjective: number | null
+}
 
 export interface ReadinessSnapshot {
   date: string
@@ -10,6 +19,35 @@ export interface ReadinessSnapshot {
   garmin: GarminRecoveryDay | null
   sleep_avg_7d: number | null
   has_garmin_sleep: boolean
+  baseline: ReadinessBaseline
+}
+
+// Average of the trailing 7 days' saved scores (excluding `date` itself),
+// so today's drivers can be shown as a delta against recent normal rather
+// than just an absolute bar.
+function calc7dBaseline(date: string, week: WeekDoc, archivedWeeks: WeekDoc[]): ReadinessBaseline {
+  const allScores: Record<string, RecoveryScoreBreakdown> = {
+    ...Object.assign({}, ...archivedWeeks.map((w) => w.daily_scores ?? {})),
+    ...(week.daily_scores ?? {}),
+  }
+
+  const priorDays = Array.from({ length: 7 }, (_, i) => format(subDays(parseISO(date), i + 1), 'yyyy-MM-dd'))
+  const priorScores = priorDays.map((d) => allScores[d]).filter((s): s is RecoveryScoreBreakdown => s != null)
+
+  if (priorScores.length === 0) {
+    return { total: null, sleep: null, rhr: null, load: null, subjective: null }
+  }
+
+  const avg = (pick: (s: RecoveryScoreBreakdown) => number) =>
+    Math.round(priorScores.reduce((sum, s) => sum + pick(s), 0) / priorScores.length)
+
+  return {
+    total: avg((s) => s.total),
+    sleep: avg((s) => s.sleep),
+    rhr: avg((s) => s.rhr),
+    load: avg((s) => s.load),
+    subjective: avg((s) => s.subjective),
+  }
 }
 
 export function buildReadinessSnapshot(
@@ -41,5 +79,7 @@ export function buildReadinessSnapshot(
     ? Math.round((sleepValues.reduce((a, b) => a + b, 0) / sleepValues.length) * 10) / 10
     : null
 
-  return { date, score, readiness, garmin, sleep_avg_7d, has_garmin_sleep: garmin?.sleep_hours != null }
+  const baseline = calc7dBaseline(date, week, archivedWeeks)
+
+  return { date, score, readiness, garmin, sleep_avg_7d, has_garmin_sleep: garmin?.sleep_hours != null, baseline }
 }
