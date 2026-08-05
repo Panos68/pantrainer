@@ -1,5 +1,5 @@
 import { readCurrentWeekDirect, writeCurrentWeek } from '@/lib/data'
-import { fetchActivityStrengthSets } from '@/lib/garmin'
+import { fetchActivityStrengthSets, type GarminStrengthSet } from '@/lib/garmin'
 import { deriveExerciseAggregates } from '@/lib/liveSession'
 import type { Exercise, ExerciseGroup, Session, SetEntry } from '@/lib/schema'
 
@@ -10,6 +10,13 @@ function flattenExercises(session: Session): Exercise[] {
     return session.exercise_groups.flatMap((g: ExerciseGroup) => g.exercises)
   }
   return session.exercises
+}
+
+function plannedRepsNumber(exercise: Exercise): number {
+  const r = exercise.reps
+  if (typeof r === 'number') return r
+  const parsed = parseInt(String(r ?? ''), 10)
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
 function applySetLog(exercise: Exercise, log: SetEntry[]): Exercise {
@@ -55,10 +62,18 @@ export async function POST(
     return Response.json({ error: 'No strength set data found on the Garmin activity' }, { status: 404 })
   }
 
-  // Match pushed exercises (a strict, ordered subsequence of the flattened
-  // session, since unmapped exercises were skipped at push time) back to
-  // their position in the session, then chunk the flat chronological set
-  // list by each exercise's known set count.
+  // Match sets back to exercises by GARMIN CATEGORY/EXERCISE-NAME IDENTITY,
+  // not by chronological position — a naive "next N sets belong to exercise
+  // N" chunking breaks for supersets, where two exercises' sets physically
+  // interleave (A, B, A, B, ...) rather than running back-to-back.
+  const queuesByKey = new Map<string, GarminStrengthSet[]>()
+  for (const s of pulledSets) {
+    const key = `${s.category ?? ''}::${s.exerciseName ?? ''}`
+    const q = queuesByKey.get(key) ?? []
+    q.push(s)
+    queuesByKey.set(key, q)
+  }
+
   const flat = flattenExercises(session)
   const matchedExercises: Exercise[] = []
   let flatIdx = 0
@@ -70,15 +85,21 @@ export async function POST(
   }
 
   const setLogsByExercise = new Map<Exercise, SetEntry[]>()
-  let cursor = 0
   for (let i = 0; i < pushedOrder.length && i < matchedExercises.length; i++) {
-    const count = pushedOrder[i].sets
-    const chunk = pulledSets.slice(cursor, cursor + count)
-    cursor += count
+    const pushed = pushedOrder[i]
+    const exercise = matchedExercises[i]
+    const key = `${pushed.garminCategory}::${pushed.garminExerciseName}`
+    const queue = queuesByKey.get(key) ?? []
+    const chunk = queue.splice(0, pushed.sets)
+    // Garmin's motion-based rep counter is unreliable (confirmed by live
+    // test — same set sometimes counted, sometimes not, sometimes asked for
+    // manual confirmation, sometimes not) — trust the PLANNED rep count
+    // instead. Weight, which is manually entered on the watch, is trustworthy.
+    const plannedReps = plannedRepsNumber(exercise)
     setLogsByExercise.set(
-      matchedExercises[i],
+      exercise,
       chunk.map((s) => ({
-        reps: s.reps ?? 0,
+        reps: plannedReps,
         weight_kg: s.weight_kg,
         effort: null,
         completed_at: new Date().toISOString(),
@@ -88,7 +109,7 @@ export async function POST(
 
   function updateIfMatched(exercise: Exercise): Exercise {
     const log = setLogsByExercise.get(exercise)
-    return log ? applySetLog(exercise, log) : exercise
+    return log && log.length > 0 ? applySetLog(exercise, log) : exercise
   }
 
   const updatedSession: Session =

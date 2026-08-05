@@ -115,12 +115,16 @@ export async function fetchActivityDetail(activityId: number, existingClient?: u
 export type GarminStrengthSet = {
   reps: number | null
   weight_kg: number | null
+  category: string | null
+  exerciseName: string | null
 }
 
 // Confirmed live (Phase 0 spike, 2026-08-03): this endpoint is undocumented by
 // the npm client but returns true per-set data — reps, weight, ACTIVE/REST —
 // unlike `getActivity`/`getActivities`, which only expose aggregated
-// per-category summaries (`summarizedExerciseSets`).
+// per-category summaries (`summarizedExerciseSets`). Each set also carries its
+// own category/exerciseName — essential for matching sets back to the right
+// exercise when a superset interleaves two exercises' sets chronologically.
 export async function fetchActivityStrengthSets(
   activityId: number,
   existingClient?: unknown
@@ -136,6 +140,7 @@ export async function fetchActivityStrengthSets(
         repetitionCount?: number | null
         weight?: number | null
         setType?: string
+        exercises?: Array<{ category?: string; name?: string }>
       }>
     }
     const sets = raw?.exerciseSets
@@ -145,6 +150,8 @@ export async function fetchActivityStrengthSets(
       .map((s) => ({
         reps: typeof s.repetitionCount === 'number' ? s.repetitionCount : null,
         weight_kg: typeof s.weight === 'number' ? s.weight / 1000 : null,
+        category: s.exercises?.[0]?.category ?? null,
+        exerciseName: s.exercises?.[0]?.name ?? null,
       }))
   } catch {
     return null

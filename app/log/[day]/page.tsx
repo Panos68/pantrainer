@@ -346,13 +346,18 @@ export default function LogDayPage() {
   // RPE and per-set effort/notes stay manual — this only fills in the numbers.
   const pullGarminSets = useCallback(async () => {
     const res = await fetch(`/api/session/${day}/garmin-pull-sets`, { method: 'POST' })
-    if (!res.ok) return
+    if (!res.ok) {
+      const data = await res.json().catch(() => null)
+      setGarminPushMessage(data?.error ? `Garmin pull failed: ${data.error}` : 'Garmin pull failed')
+      return
+    }
     const updated: Session = await res.json()
     setSession(updated)
     const flatExercises = updated.exercise_groups
       ? updated.exercise_groups.flatMap((g) => g.exercises)
       : (updated.exercises ?? [])
     setSetLogEdits(Object.fromEntries(flatExercises.map((ex, i) => [i, ex.set_log ?? []])))
+    setGarminPushMessage('Pulled real weights from your watch — check the set rows below')
   }, [day])
 
   const pushToGarmin = useCallback(async () => {

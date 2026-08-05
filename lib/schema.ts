@@ -72,7 +72,12 @@ export const SessionSchema = z.object({
   rpe: z.number().min(1).max(10).nullable().optional(),
   reasoning: z.string().nullable().optional(),
   garmin_workout_id: z.number().nullable().optional(),
-  garmin_pushed_exercise_order: z.array(z.object({ name: z.string(), sets: z.number() })).nullable().optional(),
+  garmin_pushed_exercise_order: z.array(z.object({
+    name: z.string(),
+    sets: z.number(),
+    garminCategory: z.string(),
+    garminExerciseName: z.string(),
+  })).nullable().optional(),
   garmin_push_skipped: z.array(z.string()).optional(),
   garmin_pull_status: z.enum(['not_pushed', 'pushed', 'pulled']).optional(),
 })

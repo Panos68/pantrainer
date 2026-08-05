@@ -60,17 +60,35 @@ function baseExecutableStep(overrides: Record<string, any>) {
   }
 }
 
+type RepsTarget = { type: 'reps' | 'time'; value: number }
+
+// Plan reps fields are sometimes actually a duration ("30 sec", "60 sec/side")
+// rather than a rep count — those must push as a TIME end condition, not a
+// reps end condition, or Garmin silently reinterprets "60 sec" as "60 reps".
+function parseRepsTarget(reps: Exercise['reps']): RepsTarget {
+  if (typeof reps === 'number') return { type: 'reps', value: reps }
+  const str = String(reps ?? '')
+  const timeMatch = str.match(/(\d+)\s*(sec|min)/i)
+  if (timeMatch) {
+    const n = parseInt(timeMatch[1], 10)
+    const seconds = timeMatch[2].toLowerCase().startsWith('min') ? n * 60 : n
+    return { type: 'time', value: seconds }
+  }
+  const parsed = parseInt(str, 10)
+  return { type: 'reps', value: Number.isFinite(parsed) && parsed > 0 ? parsed : 1 }
+}
+
 function exerciseStep(
   mapping: GarminExerciseMapEntry,
-  reps: number,
+  target: RepsTarget,
   weightKg: number | null,
   isWarmup: boolean
 ) {
   return baseExecutableStep({
     stepOrder: 0, // overwritten by assignStepOrder's tree-wide sequential pass
     stepType: isWarmup ? STEP_TYPE.warmup : STEP_TYPE.interval,
-    endCondition: END_CONDITION.reps,
-    endConditionValue: reps,
+    endCondition: target.type === 'time' ? END_CONDITION.time : END_CONDITION.reps,
+    endConditionValue: target.value,
     category: mapping.garminCategory,
     exerciseName: mapping.garminExerciseName,
     weightValue: weightKg != null ? weightKg : null,
@@ -89,13 +107,6 @@ function restStep(restSec: number) {
   })
 }
 
-function repsOf(exercise: Exercise): number {
-  const r = exercise.reps
-  if (typeof r === 'number') return r
-  const parsed = parseInt(String(r ?? ''), 10)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
-}
-
 // `skipLastRestStep` on RepeatGroupDTO turned out to not be honored (confirmed
 // by live test — the trailing rest still played/showed). Instead we avoid a
 // trailing rest structurally: repeat only the first (sets-1) rounds with a
@@ -109,8 +120,8 @@ function buildExerciseSteps(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): any[] {
   const sets = exercise.sets ?? 1
-  const reps = repsOf(exercise)
-  const lastSet = exerciseStep(mapping, reps, exercise.weight_kg ?? null, isWarmup)
+  const target = parseRepsTarget(exercise.reps)
+  const lastSet = exerciseStep(mapping, target, exercise.weight_kg ?? null, isWarmup)
 
   if (sets <= 1) return [lastSet]
 
@@ -125,7 +136,7 @@ function buildExerciseSteps(
       childStepId: 1,
       numberOfIterations: leadingRounds,
       workoutSteps: [
-        exerciseStep(mapping, reps, exercise.weight_kg ?? null, isWarmup),
+        exerciseStep(mapping, target, exercise.weight_kg ?? null, isWarmup),
         restStep(restBetweenSetsSec),
       ],
       endConditionValue: leadingRounds,
@@ -140,7 +151,44 @@ function buildExerciseSteps(
   return steps
 }
 
-export type PushedExercise = { name: string; sets: number }
+// If the primary exercise has no Garmin mapping, try its own listed
+// alternatives before giving up — e.g. "Machine Row" (unmapped) has
+// "Single-Arm Dumbbell Row" as an alternative, which does have a mapping.
+// The substitute's own sets/reps/weight get pushed (that's what's actually
+// on the watch); `originalName` is kept so pull-back still lands on the
+// exercise the user actually sees/logs in the app.
+function resolveMappedExercise(
+  exercise: Exercise,
+  mapping: Record<string, GarminExerciseMapEntry>
+): { originalName: string; exercise: Exercise; entry: GarminExerciseMapEntry } | null {
+  const entry = mapping[normalizeExerciseName(exercise.name)]
+  if (entry) return { originalName: exercise.name, exercise, entry }
+
+  for (const alt of exercise.alternatives ?? []) {
+    const altEntry = mapping[normalizeExerciseName(alt.name)]
+    if (altEntry) {
+      return {
+        originalName: exercise.name,
+        exercise: {
+          ...exercise,
+          name: alt.name,
+          sets: alt.sets ?? exercise.sets,
+          reps: alt.reps ?? exercise.reps,
+          weight_kg: alt.weight_kg ?? exercise.weight_kg,
+        },
+        entry: altEntry,
+      }
+    }
+  }
+  return null
+}
+
+export type PushedExercise = {
+  name: string
+  sets: number
+  garminCategory: string
+  garminExerciseName: string
+}
 
 export type BuildResult = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -176,14 +224,14 @@ export function buildStrengthWorkoutPayload(
     const restBetweenSets = group.rest_between_sets_sec ?? DEFAULT_REST_SEC
     const restBetweenExercises = group.rest_between_exercises_sec ?? DEFAULT_REST_SEC
 
-    const mappedExercises: Array<{ exercise: Exercise; entry: GarminExerciseMapEntry }> = []
+    const mappedExercises: Array<{ originalName: string; exercise: Exercise; entry: GarminExerciseMapEntry }> = []
     for (const exercise of group.exercises) {
-      const entry = mapping[normalizeExerciseName(exercise.name)]
-      if (!entry) {
+      const resolved = resolveMappedExercise(exercise, mapping)
+      if (!resolved) {
         skippedExercises.push(exercise.name)
         continue
       }
-      mappedExercises.push({ exercise, entry })
+      mappedExercises.push(resolved)
     }
     if (mappedExercises.length === 0) continue
 
@@ -192,12 +240,17 @@ export function buildStrengthWorkoutPayload(
       // exercise back-to-back, with a single rest step at the end of the
       // round — not a separate rest (or repeat wrapper) per exercise.
       const roundSets = Math.max(...mappedExercises.map(({ exercise }) => exercise.sets ?? 1))
-      mappedExercises.forEach(({ exercise }) =>
-        pushedExerciseOrder.push({ name: exercise.name, sets: roundSets })
+      mappedExercises.forEach(({ originalName, entry }) =>
+        pushedExerciseOrder.push({
+          name: originalName,
+          sets: roundSets,
+          garminCategory: entry.garminCategory,
+          garminExerciseName: entry.garminExerciseName,
+        })
       )
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const roundSteps: any[] = mappedExercises.map(({ exercise, entry }) =>
-        exerciseStep(entry, repsOf(exercise), exercise.weight_kg ?? null, isWarmup)
+        exerciseStep(entry, parseRepsTarget(exercise.reps), exercise.weight_kg ?? null, isWarmup)
       )
       roundSteps.push(restStep(restBetweenSets))
       workoutSteps.push({
@@ -218,9 +271,14 @@ export function buildStrengthWorkoutPayload(
       continue
     }
 
-    mappedExercises.forEach(({ exercise, entry }, i) => {
+    mappedExercises.forEach(({ originalName, exercise, entry }, i) => {
       const isLastInGroup = i === mappedExercises.length - 1
-      pushedExerciseOrder.push({ name: exercise.name, sets: exercise.sets ?? 1 })
+      pushedExerciseOrder.push({
+        name: originalName,
+        sets: exercise.sets ?? 1,
+        garminCategory: entry.garminCategory,
+        garminExerciseName: entry.garminExerciseName,
+      })
       workoutSteps.push(...buildExerciseSteps(exercise, entry, restBetweenSets, isWarmup))
       if (!isLastInGroup) {
         workoutSteps.push(restStep(restBetweenExercises))
