@@ -106,6 +106,15 @@ export const NutritionLogEntrySchema = z.object({
   analyzedAt: z.string(), // ISO timestamp of when this estimate was saved
 })
 
+// Freeform note about what was eaten on a given day, typed directly in the app
+// (as an alternative to photographing everything). Surfaced to Claude alongside
+// any food photos for the same date via list_food_photos_for_range.
+export const FoodNoteSchema = z.object({
+  _id: z.string(), // date this note is for, YYYY-MM-DD
+  text: z.string(),
+  updatedAt: z.string(), // ISO timestamp of last save
+})
+
 // Week summary
 export const WeekSummarySchema = z.object({
   total_sessions: z.number().default(0),
@@ -280,6 +289,7 @@ export const ProposedPlanSchema = z.object({
 // Export types
 export type GarminExerciseMapEntry = z.infer<typeof GarminExerciseMapEntrySchema>
 export type NutritionLogEntry = z.infer<typeof NutritionLogEntrySchema>
+export type FoodNote = z.infer<typeof FoodNoteSchema>
 export type SetEntry = z.infer<typeof SetEntrySchema>
 export type Exercise = z.infer<typeof ExerciseSchema>
 export type ExerciseGroup = z.infer<typeof ExerciseGroupSchema>

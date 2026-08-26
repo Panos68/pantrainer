@@ -10,6 +10,7 @@ import {
   readAllArchivedWeeks,
   writeNutritionLogEntry,
   readNutritionLogForRange,
+  readFoodNotesForRange,
 } from '@/lib/data'
 import { buildExportV2 } from '@/lib/export'
 import { validateImport } from '@/lib/import'
@@ -110,7 +111,7 @@ const TOOLS = [
   {
     name: 'list_food_photos_for_range',
     description:
-      'Fetch food photos uploaded within an inclusive date range so they can be analyzed for approximate calorie/macro content. Returns each photo as an inline image labeled with the date it was uploaded for. Use this when the athlete asks about their eating/calories for a period — there is no separate calorie database yet, so photos are the only source; if none are found for the range, say so rather than guessing.',
+      'Fetch food photos and any written food notes for an inclusive date range so they can be analyzed for approximate calorie/macro content. Returns each photo as an inline image labeled with the date it was uploaded for, plus any freeform notes the athlete typed directly in the app describing what they ate (an alternative to photographing everything). Use this when the athlete asks about their eating/calories for a period — there is no separate calorie database yet, so photos and notes are the only sources; if neither is found for the range, say so rather than guessing.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -200,10 +201,22 @@ async function handleListFoodPhotosForRange(args: Record<string, unknown>) {
     return { error: 'BLOB_READ_WRITE_TOKEN is not configured' }
   }
 
-  const matches = await matchFoodPhotoBlobsForRange(startDate, endDate, token)
+  const [matches, notes] = await Promise.all([
+    matchFoodPhotoBlobsForRange(startDate, endDate, token),
+    readFoodNotesForRange(startDate, endDate),
+  ])
+
+  const noteSummaries = notes.map((n) => ({ date: n._id, text: n.text }))
 
   if (matches.length === 0) {
-    return { summary: `No food photos found between ${startDate} and ${endDate}.`, photos: [] }
+    return {
+      summary:
+        noteSummaries.length > 0
+          ? `No food photos found between ${startDate} and ${endDate}, but ${noteSummaries.length} written note(s) exist.`
+          : `No food photos or notes found between ${startDate} and ${endDate}.`,
+      photos: [],
+      notes: noteSummaries,
+    }
   }
 
   const photos = await Promise.all(
@@ -211,8 +224,9 @@ async function handleListFoodPhotosForRange(args: Record<string, unknown>) {
   )
 
   return {
-    summary: `Found ${matches.length} food photo(s) between ${startDate} and ${endDate}.`,
+    summary: `Found ${matches.length} food photo(s) and ${noteSummaries.length} written note(s) between ${startDate} and ${endDate}.`,
     photos: photos.filter((p): p is { date: string; photo: { data: string; mimeType: string } } => p.photo !== null),
+    notes: noteSummaries,
   }
 }
 
@@ -647,6 +661,9 @@ async function dispatch(req: McpRequest): Promise<Response> {
           return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] })
         }
         const content: unknown[] = [{ type: 'text', text: result.summary }]
+        for (const n of result.notes) {
+          content.push({ type: 'text', text: `Note for ${n.date}: ${n.text}` })
+        }
         for (const p of result.photos) {
           content.push({ type: 'text', text: `Date: ${p.date}` })
           content.push({ type: 'image', data: p.photo.data, mimeType: p.photo.mimeType })

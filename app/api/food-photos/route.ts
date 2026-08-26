@@ -1,6 +1,12 @@
-import { put } from '@vercel/blob'
+import { put, list, del } from '@vercel/blob'
 import { blobUrl } from '@/lib/blob-url'
 import { createHmac, timingSafeEqual } from 'crypto'
+
+function isCookieAuthed(request: Request): boolean {
+  const cookie = request.headers.get('cookie') ?? ''
+  const authCookie = cookie.split(';').find((c) => c.trim().startsWith('auth='))?.split('=')[1]?.trim()
+  return authCookie === process.env.AUTH_PASSWORD
+}
 
 export function signFoodPhotoUrl(baseUrl: string, pathname: string, ttlSeconds = 3600): string {
   const exp = Math.floor(Date.now() / 1000) + ttlSeconds
@@ -81,18 +87,36 @@ export async function GET(request: Request) {
 
   const { searchParams: sp } = new URL(request.url)
   const pathname = sp.get('pathname')
+  const date = sp.get('date')
+
+  if (!pathname && date) {
+    if (!isCookieAuthed(request)) {
+      return Response.json({ error: 'Not authenticated' }, { status: 403 })
+    }
+    try {
+      const { blobs } = await list({
+        prefix: `data/food-photos/${date}/`,
+        token: process.env.BLOB_READ_WRITE_TOKEN,
+      })
+      return Response.json({
+        photos: blobs.map((b) => b.pathname).sort(),
+      })
+    } catch (error) {
+      return Response.json(
+        { error: error instanceof Error ? error.message : 'Failed to list photos' },
+        { status: 500 },
+      )
+    }
+  }
+
   if (!pathname) {
-    return Response.json({ error: 'Missing pathname' }, { status: 400 })
+    return Response.json({ error: 'Missing pathname or date' }, { status: 400 })
   }
   if (!pathname.startsWith('data/food-photos/')) {
     return Response.json({ error: 'Invalid pathname' }, { status: 403 })
   }
 
-  const cookie = request.headers.get('cookie') ?? ''
-  const authCookie = cookie.split(';').find((c) => c.trim().startsWith('auth='))?.split('=')[1]?.trim()
-  const isSessionAuthed = authCookie === process.env.AUTH_PASSWORD
-
-  if (!isSessionAuthed) {
+  if (!isCookieAuthed(request)) {
     const exp = sp.get('exp')
     const sig = sp.get('sig')
     if (!exp || !sig || !verifyFoodPhotoSig(pathname, exp, sig)) {
@@ -119,6 +143,38 @@ export async function GET(request: Request) {
   } catch (error) {
     return Response.json(
       { error: error instanceof Error ? error.message : 'Failed to read photo blob' },
+      { status: 500 },
+    )
+  }
+}
+
+export async function DELETE(request: Request) {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return Response.json(
+      { error: 'BLOB_READ_WRITE_TOKEN is not configured' },
+      { status: 500 },
+    )
+  }
+
+  if (!isCookieAuthed(request)) {
+    return Response.json({ error: 'Not authenticated' }, { status: 403 })
+  }
+
+  const { searchParams: sp } = new URL(request.url)
+  const pathname = sp.get('pathname')
+  if (!pathname) {
+    return Response.json({ error: 'Missing pathname' }, { status: 400 })
+  }
+  if (!pathname.startsWith('data/food-photos/')) {
+    return Response.json({ error: 'Invalid pathname' }, { status: 403 })
+  }
+
+  try {
+    await del(pathname, { token: process.env.BLOB_READ_WRITE_TOKEN })
+    return Response.json({ deleted: true })
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : 'Failed to delete photo' },
       { status: 500 },
     )
   }

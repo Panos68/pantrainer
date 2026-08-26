@@ -50,6 +50,10 @@ function resolvePhotoHref(value: string): string {
   return `/api/photos?pathname=${encodeURIComponent(value)}`
 }
 
+function resolveFoodPhotoHref(pathname: string): string {
+  return `/api/food-photos?pathname=${encodeURIComponent(pathname)}`
+}
+
 function todayIsoLocal(): string {
   const now = new Date()
   const y = now.getFullYear()
@@ -229,7 +233,10 @@ export default function LogDayPage() {
   const [photoUploadMsg, setPhotoUploadMsg] = useState<string | null>(null)
   const [uploadingFoodPhotos, setUploadingFoodPhotos] = useState(false)
   const [foodPhotoUploadMsg, setFoodPhotoUploadMsg] = useState<string | null>(null)
-  const [foodPhotosUploadedCount, setFoodPhotosUploadedCount] = useState(0)
+  const [foodPhotos, setFoodPhotos] = useState<string[]>([])
+  const [foodNote, setFoodNote] = useState('')
+  const [foodNoteSaving, setFoodNoteSaving] = useState(false)
+  const [foodNoteMsg, setFoodNoteMsg] = useState<string | null>(null)
 
   const [nutritionEntry, setNutritionEntry] = useState<{
     estimatedCalories: number
@@ -464,6 +471,20 @@ export default function LogDayPage() {
       .then((res) => (res.ok ? res.json() : null))
       .then(setNutritionEntry)
       .catch(() => setNutritionEntry(null))
+  }, [day])
+
+  useEffect(() => {
+    fetch(`/api/food-photos?date=${day}`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : { photos: [] }))
+      .then((data) => setFoodPhotos(data.photos ?? []))
+      .catch(() => setFoodPhotos([]))
+  }, [day])
+
+  useEffect(() => {
+    fetch(`/api/food-notes?date=${day}`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((note) => setFoodNote(note?.text ?? ''))
+      .catch(() => setFoodNote(''))
   }, [day])
 
   const buildPayload = useCallback(() => {
@@ -711,7 +732,7 @@ export default function LogDayPage() {
     setUploadingFoodPhotos(true)
     setFoodPhotoUploadMsg(null)
     try {
-      let uploadedCount = 0
+      const uploadedPathnames: string[] = []
       for (const file of files) {
         const formData = new FormData()
         formData.set('file', file)
@@ -734,16 +755,56 @@ export default function LogDayPage() {
         if (!res.ok || !data.pathname) {
           throw new Error(data.error ?? `Upload failed for ${file.name} (${res.status})`)
         }
-        uploadedCount += 1
+        uploadedPathnames.push(data.pathname)
       }
 
-      setFoodPhotosUploadedCount((prev) => prev + uploadedCount)
-      setFoodPhotoUploadMsg(`Uploaded ${uploadedCount} food photo${uploadedCount > 1 ? 's' : ''}`)
+      setFoodPhotos((prev) => [...prev, ...uploadedPathnames].sort())
+      setFoodPhotoUploadMsg(`Uploaded ${uploadedPathnames.length} food photo${uploadedPathnames.length > 1 ? 's' : ''}`)
       setTimeout(() => setFoodPhotoUploadMsg(null), 2500)
     } catch (error) {
       setFoodPhotoUploadMsg(error instanceof Error ? error.message : 'Food photo upload failed')
     } finally {
       setUploadingFoodPhotos(false)
+    }
+  }
+
+  async function removeFoodPhoto(pathname: string) {
+    const prev = foodPhotos
+    setFoodPhotos((cur) => cur.filter((p) => p !== pathname))
+    try {
+      const res = await fetch(`/api/food-photos?pathname=${encodeURIComponent(pathname)}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error ?? `Failed to remove photo (${res.status})`)
+      }
+    } catch (error) {
+      setFoodPhotos(prev)
+      setFoodPhotoUploadMsg(error instanceof Error ? error.message : 'Failed to remove photo')
+    }
+  }
+
+  async function saveFoodNote() {
+    if (!session) return
+    setFoodNoteSaving(true)
+    setFoodNoteMsg(null)
+    try {
+      const res = await fetch('/api/food-notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: session.date, text: foodNote }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error ?? `Failed to save note (${res.status})`)
+      }
+      setFoodNoteMsg('Saved')
+      setTimeout(() => setFoodNoteMsg(null), 2000)
+    } catch (error) {
+      setFoodNoteMsg(error instanceof Error ? error.message : 'Failed to save note')
+    } finally {
+      setFoodNoteSaving(false)
     }
   }
 
@@ -1364,11 +1425,11 @@ export default function LogDayPage() {
             />
           </div>
 
-          {/* Photos */}
+          {/* Session Photos */}
           {(
             <div className="space-y-2">
               <label className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
-                Photos
+                Session Photos
               </label>
               <div className="flex gap-2">
                 <label className="flex-1 h-11 rounded-xl border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-sm flex items-center px-4 cursor-pointer transition-colors">
@@ -1485,9 +1546,61 @@ export default function LogDayPage() {
                 Uploading food photos...
               </p>
             )}
-            {foodPhotosUploadedCount > 0 && (
-              <p className="text-zinc-600 text-[10px] font-mono">
-                {foodPhotosUploadedCount} food photo{foodPhotosUploadedCount > 1 ? 's' : ''} uploaded today
+            {foodPhotos.length > 0 && (
+              <ul className="space-y-1.5 mt-2">
+                {foodPhotos.map((p) => (
+                  <li
+                    key={p}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <a href={resolveFoodPhotoHref(p)} target="_blank" rel="noreferrer" className="shrink-0">
+                        <div
+                          className="h-12 w-12 rounded border border-zinc-700 bg-zinc-800 bg-cover bg-center"
+                          style={{ backgroundImage: `url("${resolveFoodPhotoHref(p)}")` }}
+                        />
+                      </a>
+                      <a
+                        href={resolveFoodPhotoHref(p)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-zinc-400 hover:text-zinc-200 text-xs font-mono truncate"
+                      >
+                        {p}
+                      </a>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeFoodPhoto(p)}
+                      className="text-zinc-600 hover:text-red-400 text-xs font-mono transition-colors shrink-0"
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Food Notes */}
+          <div className="space-y-1.5">
+            <label className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
+              Food Notes
+            </label>
+            <textarea
+              value={foodNote}
+              onChange={(e) => setFoodNote(e.target.value)}
+              onBlur={() => void saveFoodNote()}
+              rows={3}
+              placeholder="What did you eat today? (alternative to a photo)"
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-zinc-100 text-sm font-mono placeholder:text-zinc-600 focus:outline-none focus:border-lime-400/50 focus:ring-1 focus:ring-lime-400/20 transition-colors resize-none leading-relaxed"
+            />
+            {foodNoteSaving && (
+              <p className="text-zinc-500 text-[10px] font-mono">Saving note...</p>
+            )}
+            {foodNoteMsg && (
+              <p className={`text-[10px] font-mono ${foodNoteMsg === 'Saved' ? 'text-lime-400' : 'text-red-400'}`}>
+                {foodNoteMsg}
               </p>
             )}
           </div>
