@@ -8,12 +8,14 @@ import {
   writeProposedPlan,
   readArchivedWeeks,
   readAllArchivedWeeks,
+  writeNutritionLogEntry,
+  readNutritionLogForRange,
 } from '@/lib/data'
 import { buildExportV2 } from '@/lib/export'
 import { validateImport } from '@/lib/import'
 import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
 import { SessionSchema, ProposedPlanRunTypeSchema } from '@/lib/schema'
-import type { WeekDoc } from '@/lib/schema'
+import type { WeekDoc, NutritionLogEntry } from '@/lib/schema'
 
 // ---------------------------------------------------------------------------
 // MCP tool definitions
@@ -118,6 +120,23 @@ const TOOLS = [
       required: ['start_date', 'end_date'],
     },
   },
+  {
+    name: 'save_nutrition_estimate',
+    description:
+      'Save a calorie/macro estimate for a specific day, whether derived from analyzing food photos (list_food_photos_for_range) or from a plain-text description the athlete gave in chat (e.g. "had kvarg and granola for breakfast"). Before estimating from text, check recent entries via get_nutrition_summary_for_range for a similar description and anchor to that prior estimate so repeat meals stay consistent rather than drifting each time. Re-saving a date overwrites the previous estimate for that date.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        date: { type: 'string', description: 'ISO date (YYYY-MM-DD) this estimate is for. Required.' },
+        calories: { type: 'number', description: 'Estimated total calories for the day. Required.' },
+        protein: { type: 'number', description: 'Estimated grams of protein.' },
+        carbs: { type: 'number', description: 'Estimated grams of carbs.' },
+        fat: { type: 'number', description: 'Estimated grams of fat.' },
+        description: { type: 'string', description: 'Brief description of what was eaten. Required.' },
+      },
+      required: ['date', 'calories', 'description'],
+    },
+  },
 ]
 
 // ---------------------------------------------------------------------------
@@ -179,6 +198,31 @@ async function handleListFoodPhotosForRange(args: Record<string, unknown>) {
     summary: `Found ${matches.length} food photo(s) between ${startDate} and ${endDate}.`,
     photos: photos.filter((p): p is { date: string; photo: { data: string; mimeType: string } } => p.photo !== null),
   }
+}
+
+async function handleSaveNutritionEstimate(args: Record<string, unknown>) {
+  const date = args.date
+  const calories = args.calories
+  const description = args.description
+  if (typeof date !== 'string' || typeof calories !== 'number' || typeof description !== 'string') {
+    return { error: 'date (string), calories (number), and description (string) are required' }
+  }
+
+  const macros: NutritionLogEntry['macros'] = {}
+  if (typeof args.protein === 'number') macros.protein = args.protein
+  if (typeof args.carbs === 'number') macros.carbs = args.carbs
+  if (typeof args.fat === 'number') macros.fat = args.fat
+
+  const entry: NutritionLogEntry = {
+    _id: date,
+    estimatedCalories: calories,
+    macros: Object.keys(macros).length > 0 ? macros : undefined,
+    description,
+    analyzedAt: new Date().toISOString(),
+  }
+
+  await writeNutritionLogEntry(entry)
+  return { saved: true, date }
 }
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://pantrainer.vercel.app'
@@ -561,6 +605,7 @@ async function dispatch(req: McpRequest): Promise<Response> {
       else if (name === 'submit_proposal_by_date') data = await handleSubmitProposalByDate(args)
       else if (name === 'get_garmin_recovery_freshness') data = await handleGetGarminRecoveryFreshness(args)
       else if (name === 'get_lift_history') data = await handleGetLiftHistory(args)
+      else if (name === 'save_nutrition_estimate') data = await handleSaveNutritionEstimate(args)
       else return mcpError(id, -32601, `Unknown tool: ${name}`)
       return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] })
     } catch (err) {
