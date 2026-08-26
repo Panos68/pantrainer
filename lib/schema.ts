@@ -75,8 +75,9 @@ export const SessionSchema = z.object({
   garmin_pushed_exercise_order: z.array(z.object({
     name: z.string(),
     sets: z.number(),
-    garminCategory: z.string(),
-    garminExerciseName: z.string(),
+    // Optional: sessions pushed before this field was added only have name/sets.
+    garminCategory: z.string().optional(),
+    garminExerciseName: z.string().optional(),
   })).nullable().optional(),
   garmin_push_skipped: z.array(z.string()).optional(),
   garmin_pull_status: z.enum(['not_pushed', 'pushed', 'pulled']).optional(),
