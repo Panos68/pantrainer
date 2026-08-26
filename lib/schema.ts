@@ -93,6 +93,18 @@ export const GarminExerciseMapEntrySchema = z.object({
   updatedAt: z.string(),
 })
 
+export const NutritionLogEntrySchema = z.object({
+  _id: z.string(), // date this estimate is for, YYYY-MM-DD
+  estimatedCalories: z.number(),
+  macros: z.object({
+    protein: z.number().optional(),
+    carbs: z.number().optional(),
+    fat: z.number().optional(),
+  }).optional(),
+  description: z.string(),
+  analyzedAt: z.string(), // ISO timestamp of when this estimate was saved
+})
+
 // Week summary
 export const WeekSummarySchema = z.object({
   total_sessions: z.number().default(0),
@@ -266,6 +278,7 @@ export const ProposedPlanSchema = z.object({
 
 // Export types
 export type GarminExerciseMapEntry = z.infer<typeof GarminExerciseMapEntrySchema>
+export type NutritionLogEntry = z.infer<typeof NutritionLogEntrySchema>
 export type SetEntry = z.infer<typeof SetEntrySchema>
 export type Exercise = z.infer<typeof ExerciseSchema>
 export type ExerciseGroup = z.infer<typeof ExerciseGroupSchema>
