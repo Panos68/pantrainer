@@ -231,6 +231,12 @@ export default function LogDayPage() {
   const [foodPhotoUploadMsg, setFoodPhotoUploadMsg] = useState<string | null>(null)
   const [foodPhotosUploadedCount, setFoodPhotosUploadedCount] = useState(0)
 
+  const [nutritionEntry, setNutritionEntry] = useState<{
+    estimatedCalories: number
+    macros?: { protein?: number; carbs?: number; fat?: number }
+    description: string
+  } | null>(null)
+
   // Session import state
   const [showImport, setShowImport] = useState(false)
   const [importJson, setImportJson] = useState('')
@@ -452,6 +458,13 @@ export default function LogDayPage() {
     }
     load()
   }, [day, refreshFromGarmin, pullGarminSets])
+
+  useEffect(() => {
+    fetch(`/api/nutrition-log?date=${day}`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then(setNutritionEntry)
+      .catch(() => setNutritionEntry(null))
+  }, [day])
 
   const buildPayload = useCallback(() => {
     function mergeActualIntoExercise(ex: Session['exercises'][number], i: number) {
@@ -1416,6 +1429,29 @@ export default function LogDayPage() {
                   ))}
                 </ul>
               )}
+            </div>
+          )}
+
+          {nutritionEntry && (
+            <div className="space-y-1.5 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
+              <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
+                Nutrition (est.)
+              </p>
+              <p className="text-zinc-100 font-display font-bold text-xl">
+                {nutritionEntry.estimatedCalories.toLocaleString()} cal
+              </p>
+              {nutritionEntry.macros && (
+                <p className="text-zinc-500 text-xs font-mono">
+                  {[
+                    nutritionEntry.macros.protein != null ? `${nutritionEntry.macros.protein}g protein` : null,
+                    nutritionEntry.macros.carbs != null ? `${nutritionEntry.macros.carbs}g carbs` : null,
+                    nutritionEntry.macros.fat != null ? `${nutritionEntry.macros.fat}g fat` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              )}
+              <p className="text-zinc-600 text-xs font-mono truncate">{nutritionEntry.description}</p>
             </div>
           )}
 
