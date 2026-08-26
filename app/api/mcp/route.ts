@@ -137,6 +137,19 @@ const TOOLS = [
       required: ['date', 'calories', 'description'],
     },
   },
+  {
+    name: 'get_nutrition_summary_for_range',
+    description:
+      'Get a cheap summary of saved nutrition estimates for a date range (e.g. "this week", "last 10 days") without re-analyzing any photos. Returns each day\'s saved calories/macros/description, a total and average, and gap_dates — dates in the range that have uploaded food photos but no saved estimate yet. For any gap_dates, call list_food_photos_for_range for just those dates to fill them in, rather than reprocessing the whole range.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        start_date: { type: 'string', description: 'ISO date (YYYY-MM-DD), inclusive start of range. Required.' },
+        end_date: { type: 'string', description: 'ISO date (YYYY-MM-DD), inclusive end of range. Required.' },
+      },
+      required: ['start_date', 'end_date'],
+    },
+  },
 ]
 
 // ---------------------------------------------------------------------------
@@ -163,6 +176,18 @@ async function fetchPhotoAsBase64(pathname: string): Promise<{ data: string; mim
   }
 }
 
+async function matchFoodPhotoBlobsForRange(startDate: string, endDate: string, token: string) {
+  const { blobs } = await list({ prefix: 'data/food-photos/', token })
+  return blobs
+    .map((b) => {
+      const parts = b.pathname.split('/')
+      const date = parts[2] ?? ''
+      return { pathname: b.pathname, date }
+    })
+    .filter((b) => b.date >= startDate && b.date <= endDate)
+    .sort((a, b) => a.date.localeCompare(b.date))
+}
+
 async function handleListFoodPhotosForRange(args: Record<string, unknown>) {
   const startDate = args.start_date
   const endDate = args.end_date
@@ -175,16 +200,7 @@ async function handleListFoodPhotosForRange(args: Record<string, unknown>) {
     return { error: 'BLOB_READ_WRITE_TOKEN is not configured' }
   }
 
-  const { blobs } = await list({ prefix: 'data/food-photos/', token })
-
-  const matches = blobs
-    .map((b) => {
-      const parts = b.pathname.split('/')
-      const date = parts[2] ?? ''
-      return { pathname: b.pathname, date }
-    })
-    .filter((b) => b.date >= startDate && b.date <= endDate)
-    .sort((a, b) => a.date.localeCompare(b.date))
+  const matches = await matchFoodPhotoBlobsForRange(startDate, endDate, token)
 
   if (matches.length === 0) {
     return { summary: `No food photos found between ${startDate} and ${endDate}.`, photos: [] }
@@ -223,6 +239,44 @@ async function handleSaveNutritionEstimate(args: Record<string, unknown>) {
 
   await writeNutritionLogEntry(entry)
   return { saved: true, date }
+}
+
+async function handleGetNutritionSummaryForRange(args: Record<string, unknown>) {
+  const startDate = args.start_date
+  const endDate = args.end_date
+  if (typeof startDate !== 'string' || typeof endDate !== 'string') {
+    return { error: 'start_date and end_date are required ISO date strings' }
+  }
+
+  const entries = await readNutritionLogForRange(startDate, endDate)
+  const loggedDates = new Set(entries.map((e) => e._id))
+
+  let gapDates: string[] = []
+  const token = process.env.BLOB_READ_WRITE_TOKEN
+  if (token) {
+    const photoMatches = await matchFoodPhotoBlobsForRange(startDate, endDate, token)
+    const photoDates = new Set(photoMatches.map((m) => m.date))
+    gapDates = [...photoDates].filter((d) => !loggedDates.has(d)).sort()
+  }
+
+  const totalCalories = entries.reduce((sum, e) => sum + e.estimatedCalories, 0)
+  const avgCalories = entries.length > 0 ? Math.round(totalCalories / entries.length) : null
+
+  return {
+    summary:
+      entries.length > 0
+        ? `${entries.length} logged day(s) between ${startDate} and ${endDate}, avg ${avgCalories} cal/day.`
+        : `No saved nutrition estimates between ${startDate} and ${endDate}.`,
+    entries: entries.map((e) => ({
+      date: e._id,
+      calories: e.estimatedCalories,
+      macros: e.macros ?? null,
+      description: e.description,
+    })),
+    total_calories: totalCalories,
+    avg_calories: avgCalories,
+    gap_dates: gapDates,
+  }
 }
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://pantrainer.vercel.app'
@@ -606,6 +660,7 @@ async function dispatch(req: McpRequest): Promise<Response> {
       else if (name === 'get_garmin_recovery_freshness') data = await handleGetGarminRecoveryFreshness(args)
       else if (name === 'get_lift_history') data = await handleGetLiftHistory(args)
       else if (name === 'save_nutrition_estimate') data = await handleSaveNutritionEstimate(args)
+      else if (name === 'get_nutrition_summary_for_range') data = await handleGetNutritionSummaryForRange(args)
       else return mcpError(id, -32601, `Unknown tool: ${name}`)
       return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] })
     } catch (err) {
