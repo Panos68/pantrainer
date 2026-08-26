@@ -227,6 +227,9 @@ export default function LogDayPage() {
   const [photos, setPhotos] = useState<string[]>([])
   const [uploadingPhotos, setUploadingPhotos] = useState(false)
   const [photoUploadMsg, setPhotoUploadMsg] = useState<string | null>(null)
+  const [uploadingFoodPhotos, setUploadingFoodPhotos] = useState(false)
+  const [foodPhotoUploadMsg, setFoodPhotoUploadMsg] = useState<string | null>(null)
+  const [foodPhotosUploadedCount, setFoodPhotosUploadedCount] = useState(0)
 
   // Session import state
   const [showImport, setShowImport] = useState(false)
@@ -685,6 +688,49 @@ export default function LogDayPage() {
       setPhotoUploadMsg(error instanceof Error ? error.message : 'Photo upload failed')
     } finally {
       setUploadingPhotos(false)
+    }
+  }
+
+  async function handleFoodPhotoFilesUpload(fileList: FileList | null) {
+    const files = Array.from(fileList ?? [])
+    if (files.length === 0 || !session) return
+
+    setUploadingFoodPhotos(true)
+    setFoodPhotoUploadMsg(null)
+    try {
+      let uploadedCount = 0
+      for (const file of files) {
+        const formData = new FormData()
+        formData.set('file', file)
+        formData.set('date', session.date)
+        const res = await fetch('/api/food-photos', {
+          method: 'POST',
+          body: formData,
+        })
+        const raw = await res.text()
+        let data: { pathname?: string; error?: string } = {}
+        if (raw.trim().length > 0) {
+          try {
+            data = JSON.parse(raw) as { pathname?: string; error?: string }
+          } catch {
+            throw new Error(
+              `Upload failed for ${file.name} (${res.status}): ${raw.slice(0, 120)}`,
+            )
+          }
+        }
+        if (!res.ok || !data.pathname) {
+          throw new Error(data.error ?? `Upload failed for ${file.name} (${res.status})`)
+        }
+        uploadedCount += 1
+      }
+
+      setFoodPhotosUploadedCount((prev) => prev + uploadedCount)
+      setFoodPhotoUploadMsg(`Uploaded ${uploadedCount} food photo${uploadedCount > 1 ? 's' : ''}`)
+      setTimeout(() => setFoodPhotoUploadMsg(null), 2500)
+    } catch (error) {
+      setFoodPhotoUploadMsg(error instanceof Error ? error.message : 'Food photo upload failed')
+    } finally {
+      setUploadingFoodPhotos(false)
     }
   }
 
@@ -1372,6 +1418,43 @@ export default function LogDayPage() {
               )}
             </div>
           )}
+
+          {/* Food Photos */}
+          <div className="space-y-2">
+            <label className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
+              Food Photos
+            </label>
+            <div className="flex gap-2">
+              <label className="flex-1 h-11 rounded-xl border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-sm flex items-center px-4 cursor-pointer transition-colors">
+                <span className="text-zinc-600 mr-2">+</span> Add food photo…
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    void handleFoodPhotoFilesUpload(e.target.files)
+                    e.target.value = ''
+                  }}
+                />
+              </label>
+            </div>
+            {foodPhotoUploadMsg && (
+              <p className={`text-[10px] font-mono ${foodPhotoUploadMsg.startsWith('Uploaded') ? 'text-lime-400' : 'text-red-400'}`}>
+                {foodPhotoUploadMsg}
+              </p>
+            )}
+            {uploadingFoodPhotos && (
+              <p className="text-zinc-500 text-[10px] font-mono">
+                Uploading food photos...
+              </p>
+            )}
+            {foodPhotosUploadedCount > 0 && (
+              <p className="text-zinc-600 text-[10px] font-mono">
+                {foodPhotosUploadedCount} food photo{foodPhotosUploadedCount > 1 ? 's' : ''} uploaded today
+              </p>
+            )}
+          </div>
         </form>
 
         {/* Save message */}
