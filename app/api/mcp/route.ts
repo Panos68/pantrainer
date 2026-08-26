@@ -1,4 +1,5 @@
 import { blobUrl } from '@/lib/blob-url'
+import { list } from '@vercel/blob'
 import { signPhotoUrl } from '@/app/api/photos/route'
 import {
   readCurrentWeekDirect,
@@ -104,6 +105,19 @@ const TOOLS = [
       required: ['exercise_name'],
     },
   },
+  {
+    name: 'list_food_photos_for_range',
+    description:
+      'Fetch food photos uploaded within an inclusive date range so they can be analyzed for approximate calorie/macro content. Returns each photo as an inline image labeled with the date it was uploaded for. Use this when the athlete asks about their eating/calories for a period — there is no separate calorie database yet, so photos are the only source; if none are found for the range, say so rather than guessing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        start_date: { type: 'string', description: 'ISO date (YYYY-MM-DD), inclusive start of range. Required.' },
+        end_date: { type: 'string', description: 'ISO date (YYYY-MM-DD), inclusive end of range. Required.' },
+      },
+      required: ['start_date', 'end_date'],
+    },
+  },
 ]
 
 // ---------------------------------------------------------------------------
@@ -127,6 +141,43 @@ async function fetchPhotoAsBase64(pathname: string): Promise<{ data: string; mim
     return { data, mimeType }
   } catch {
     return null
+  }
+}
+
+async function handleListFoodPhotosForRange(args: Record<string, unknown>) {
+  const startDate = args.start_date
+  const endDate = args.end_date
+  if (typeof startDate !== 'string' || typeof endDate !== 'string') {
+    return { error: 'start_date and end_date are required ISO date strings' }
+  }
+
+  const token = process.env.BLOB_READ_WRITE_TOKEN
+  if (!token) {
+    return { error: 'BLOB_READ_WRITE_TOKEN is not configured' }
+  }
+
+  const { blobs } = await list({ prefix: 'data/food-photos/', token })
+
+  const matches = blobs
+    .map((b) => {
+      const parts = b.pathname.split('/')
+      const date = parts[2] ?? ''
+      return { pathname: b.pathname, date }
+    })
+    .filter((b) => b.date >= startDate && b.date <= endDate)
+    .sort((a, b) => a.date.localeCompare(b.date))
+
+  if (matches.length === 0) {
+    return { summary: `No food photos found between ${startDate} and ${endDate}.`, photos: [] }
+  }
+
+  const photos = await Promise.all(
+    matches.map(async (m) => ({ date: m.date, photo: await fetchPhotoAsBase64(m.pathname) })),
+  )
+
+  return {
+    summary: `Found ${matches.length} food photo(s) between ${startDate} and ${endDate}.`,
+    photos: photos.filter((p): p is { date: string; photo: { data: string; mimeType: string } } => p.photo !== null),
   }
 }
 
@@ -488,6 +539,19 @@ async function dispatch(req: McpRequest): Promise<Response> {
         const content: unknown[] = [{ type: 'text', text: JSON.stringify(payload, null, 2) }]
         for (const photo of photoBase64) {
           content.push({ type: 'image', data: photo.data, mimeType: photo.mimeType })
+        }
+        return mcpResult(id, { content })
+      }
+
+      if (name === 'list_food_photos_for_range') {
+        const result = await handleListFoodPhotosForRange(args)
+        if ('error' in result) {
+          return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] })
+        }
+        const content: unknown[] = [{ type: 'text', text: result.summary }]
+        for (const p of result.photos) {
+          content.push({ type: 'text', text: `Date: ${p.date}` })
+          content.push({ type: 'image', data: p.photo.data, mimeType: p.photo.mimeType })
         }
         return mcpResult(id, { content })
       }
