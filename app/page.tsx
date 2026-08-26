@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { redirect } from 'next/navigation'
 import { format, differenceInDays, parseISO, subDays } from 'date-fns'
 import Link from 'next/link'
-import { readAthleteProfile, readCurrentWeek, readAppState, readArchivedWeeks, readPendingWeek } from '@/lib/data'
+import { readAthleteProfile, readCurrentWeek, readAppState, readArchivedWeeks, readPendingWeek, readNutritionLogForRange } from '@/lib/data'
 import { isPendingWeekDue } from '@/lib/week-activation'
 import { sessionToLoadPoint } from '@/lib/training-load'
 import { calcAdaptiveAlert } from '@/lib/adaptive-alert'
@@ -104,6 +104,24 @@ export default async function Home() {
   const caloriesDelta = pctDelta(weekCalories, prevWeekCalories)
   const durationDelta = pctDelta(weekDurationMin, prevWeekDurationMin)
 
+  const weekDates = week.sessions.map((s) => s.date).sort()
+  const prevWeekDatesToDate = prevWeekSessionsToDate.map((s) => s.date).sort()
+
+  const [nutritionEntries, prevNutritionEntries] = await Promise.all([
+    readNutritionLogForRange(weekDates[0], todayISO),
+    prevWeekDatesToDate.length > 0
+      ? readNutritionLogForRange(prevWeekDatesToDate[0], prevWeekDatesToDate[prevWeekDatesToDate.length - 1])
+      : Promise.resolve([]),
+  ])
+
+  const avgCalIntake = nutritionEntries.length > 0
+    ? Math.round(nutritionEntries.reduce((sum, e) => sum + e.estimatedCalories, 0) / nutritionEntries.length)
+    : 0
+  const prevAvgCalIntake = prevNutritionEntries.length > 0
+    ? Math.round(prevNutritionEntries.reduce((sum, e) => sum + e.estimatedCalories, 0) / prevNutritionEntries.length)
+    : null
+  const avgCalIntakeDelta = pctDelta(avgCalIntake, prevAvgCalIntake)
+
   // ACWR zone using all history up to today
   const allLoadPoints = [...archivedWeeks, week]
     .flatMap((w) => w.sessions)
@@ -169,6 +187,8 @@ export default async function Home() {
           caloriesDelta={caloriesDelta}
           durationLabel={formatDuration(weekDurationMin)}
           durationDelta={durationDelta}
+          avgCalIntake={avgCalIntake}
+          avgCalIntakeDelta={avgCalIntakeDelta}
           adaptiveAlert={adaptiveAlert}
           today={todayISO}
           initialReadiness={readinessSnapshot}
