@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { redirect } from 'next/navigation'
-import { format, differenceInDays, parseISO, subDays } from 'date-fns'
+import { format, differenceInDays, parseISO, subDays, startOfWeek, subWeeks, addDays } from 'date-fns'
 import Link from 'next/link'
 import { readAthleteProfile, readCurrentWeek, readAppState, readArchivedWeeks, readPendingWeek, readNutritionLogForRange } from '@/lib/data'
 import { isPendingWeekDue } from '@/lib/week-activation'
@@ -104,14 +104,16 @@ export default async function Home() {
   const caloriesDelta = pctDelta(weekCalories, prevWeekCalories)
   const durationDelta = pctDelta(weekDurationMin, prevWeekDurationMin)
 
-  const weekDates = week.sessions.map((s) => s.date).sort()
-  const prevWeekDatesToDate = prevWeekSessionsToDate.map((s) => s.date).sort()
+  // Nutrition is calendar-daily data (independent of whether a workout happened), so its
+  // week-over-week windows are calendar week bounds, not session dates — unlike training
+  // load/calories/duration above, which are naturally scoped to completed sessions.
+  const currentWeekStart = format(startOfWeek(parseISO(todayISO), { weekStartsOn: 1 }), 'yyyy-MM-dd')
+  const prevWeekStart = format(subWeeks(parseISO(currentWeekStart), 1), 'yyyy-MM-dd')
+  const prevWeekEnd = format(addDays(parseISO(prevWeekStart), todayRemapped), 'yyyy-MM-dd')
 
   const [nutritionEntries, prevNutritionEntries] = await Promise.all([
-    readNutritionLogForRange(weekDates[0], todayISO),
-    prevWeekDatesToDate.length > 0
-      ? readNutritionLogForRange(prevWeekDatesToDate[0], prevWeekDatesToDate[prevWeekDatesToDate.length - 1])
-      : Promise.resolve([]),
+    readNutritionLogForRange(currentWeekStart, todayISO),
+    readNutritionLogForRange(prevWeekStart, prevWeekEnd),
   ])
 
   const avgCalIntake = nutritionEntries.length > 0
