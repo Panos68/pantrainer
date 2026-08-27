@@ -1315,6 +1315,8 @@ export default function LogDayPage() {
           onSubmit={(e) => e.preventDefault()}
           className="space-y-5"
         >
+          {activeTab === 'log' && (
+          <>
           {/* Session Type */}
           <div className="space-y-1.5">
             <label className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
@@ -1523,7 +1525,11 @@ export default function LogDayPage() {
               )}
             </div>
           )}
+          </>
+          )}
 
+          {activeTab === 'nutrition' && (
+          <>
           {nutritionEntry && (
             <div className="space-y-1.5 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
               <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
@@ -1653,6 +1659,8 @@ export default function LogDayPage() {
               </p>
             )}
           </div>
+          </>
+          )}
         </form>
 
         {/* Save message */}
