@@ -238,6 +238,7 @@ export default function LogDayPage() {
   const [foodNote, setFoodNote] = useState('')
   const [foodNoteSaving, setFoodNoteSaving] = useState(false)
   const [foodNoteMsg, setFoodNoteMsg] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'log' | 'recovery' | 'nutrition'>('log')
 
   const [nutritionEntry, setNutritionEntry] = useState<{
     estimatedCalories: number
@@ -957,6 +958,24 @@ export default function LogDayPage() {
             </p>
           </div>
         )}
+
+        {/* Tabs */}
+        <div className="flex gap-1 rounded-xl border border-zinc-800 bg-zinc-900 p-1">
+          {(['log', 'recovery', 'nutrition'] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 h-9 rounded-lg text-xs font-mono font-bold tracking-widest uppercase transition-colors ${
+                activeTab === tab
+                  ? 'bg-lime-400/10 text-lime-400'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
 
         {/* Coach guidance banner */}
         {session.subtype && (
