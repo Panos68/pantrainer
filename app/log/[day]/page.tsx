@@ -467,25 +467,28 @@ export default function LogDayPage() {
   }, [day, refreshFromGarmin, pullGarminSets])
 
   useEffect(() => {
-    fetch(`/api/nutrition-log?date=${day}`, { cache: 'no-store' })
+    if (!session) return
+    fetch(`/api/nutrition-log?date=${session.date}`, { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : null))
       .then(setNutritionEntry)
       .catch(() => setNutritionEntry(null))
-  }, [day])
+  }, [session?.date])
 
   useEffect(() => {
-    fetch(`/api/food-photos?date=${day}`, { cache: 'no-store' })
+    if (!session) return
+    fetch(`/api/food-photos?date=${session.date}`, { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : { photos: [] }))
       .then((data) => setFoodPhotos(data.photos ?? []))
       .catch(() => setFoodPhotos([]))
-  }, [day])
+  }, [session?.date])
 
   useEffect(() => {
-    fetch(`/api/food-notes?date=${day}`, { cache: 'no-store' })
+    if (!session) return
+    fetch(`/api/food-notes?date=${session.date}`, { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : null))
       .then((note) => setFoodNote(note?.text ?? ''))
       .catch(() => setFoodNote(''))
-  }, [day])
+  }, [session?.date])
 
   const buildPayload = useCallback(() => {
     function mergeActualIntoExercise(ex: Session['exercises'][number], i: number) {
