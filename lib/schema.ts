@@ -101,7 +101,7 @@ export const NutritionLogEntrySchema = z.object({
     protein: z.number().optional(),
     carbs: z.number().optional(),
     fat: z.number().optional(),
-  }).optional(),
+  }).nullable().optional(), // nullable: legacy docs may have stored null instead of omitting the key
   description: z.string(),
   analyzedAt: z.string(), // ISO timestamp of when this estimate was saved
 })

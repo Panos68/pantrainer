@@ -246,7 +246,10 @@ async function handleSaveNutritionEstimate(args: Record<string, unknown>) {
   const entry: NutritionLogEntry = {
     _id: date,
     estimatedCalories: calories,
-    macros: Object.keys(macros).length > 0 ? macros : undefined,
+    // Omit the key entirely rather than setting it to undefined — the MongoDB
+    // driver serializes an undefined field value as BSON null, not as an
+    // absent key, which the schema's .optional() (not .nullable()) rejects on read.
+    ...(Object.keys(macros).length > 0 ? { macros } : {}),
     description,
     analyzedAt: new Date().toISOString(),
   }
