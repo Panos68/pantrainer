@@ -8,6 +8,7 @@ import GarminRecoveryCard from '@/components/GarminRecoveryCard'
 import MuscleMap from '@/components/MuscleMap'
 import ExerciseDemo from '@/components/ExerciseDemo'
 import { deriveExerciseAggregates, applyExerciseTableEditToSetLog, parseTimedSeconds } from '@/lib/liveSession'
+import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
 
 // ─── Type colors ─────────────────────────────────────────────────────────
 
@@ -1516,6 +1517,24 @@ export default function LogDayPage() {
                 </p>
               )}
               <p className="text-zinc-600 text-xs font-mono truncate">{nutritionEntry.description}</p>
+              {typeof garminRecovery?.total_kilocalories === 'number' && garminRecovery.total_kilocalories > 0 && (
+                <div className="pt-1 border-t border-zinc-800">
+                  {(() => {
+                    const deficit = garminRecovery.total_kilocalories! - nutritionEntry.estimatedCalories
+                    const isDeficit = deficit > 0
+                    return (
+                      <p className={`text-sm font-mono font-bold ${isDeficit ? 'text-lime-400' : 'text-amber-400'}`}>
+                        {isDeficit ? 'Deficit' : 'Surplus'}: {Math.abs(Math.round(deficit)).toLocaleString()} cal
+                      </p>
+                    )
+                  })()}
+                  {session?.date === todayIsoInAppTimeZone() && (
+                    <p className="text-zinc-600 text-[10px] font-mono mt-0.5">
+                      still accumulating — both burn and intake for today are incomplete
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

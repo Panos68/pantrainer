@@ -142,6 +142,7 @@ export const GarminRecoveryDaySchema = z.object({
   vo2max: z.number().nullable().optional(),
   fitness_age: z.number().nullable().optional(),
   achievable_fitness_age: z.number().nullable().optional(),
+  total_kilocalories: z.number().nullable().optional(), // Garmin's own daily total burn (BMR + active), live/same-day
   fetched_at: z.string().optional(),
 })
 
