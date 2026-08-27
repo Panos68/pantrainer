@@ -1,5 +1,6 @@
 import { put, list, del } from '@vercel/blob'
 import { blobUrl } from '@/lib/blob-url'
+import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
 import { createHmac, timingSafeEqual } from 'crypto'
 
 function isCookieAuthed(request: Request): boolean {
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
 
   const formData = await request.formData()
   const file = formData.get('file')
-  const date = (formData.get('date') as string | null) ?? 'unknown-date'
+  const date = (formData.get('date') as string | null) || todayIsoInAppTimeZone()
 
   if (!(file instanceof File)) {
     return Response.json({ error: 'Missing file' }, { status: 400 })
