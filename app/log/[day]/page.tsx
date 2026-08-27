@@ -997,6 +997,8 @@ export default function LogDayPage() {
           </div>
         )}
 
+        {activeTab === 'log' && (
+        <>
         {/* Muscle map — collapsible */}
         {(session.muscle_groups ?? []).length > 0 && (
           <div>
@@ -1275,6 +1277,8 @@ export default function LogDayPage() {
             </div>
           )
         })()}
+        </>
+        )}
 
         {/* Status badge */}
         {session.status === 'in_progress' && (
