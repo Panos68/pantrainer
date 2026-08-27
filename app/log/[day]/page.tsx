@@ -1290,6 +1290,8 @@ export default function LogDayPage() {
           </div>
         )}
 
+        {activeTab === 'recovery' && (
+        <>
         {/* Recovery card */}
         <GarminRecoveryCard
           date={session.date}
@@ -1305,6 +1307,8 @@ export default function LogDayPage() {
         >
           {refreshingGarmin ? 'Refreshing Garmin...' : 'Refresh Garmin Data'}
         </button>
+        </>
+        )}
 
         {/* Form */}
         <form
