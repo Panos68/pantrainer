@@ -11,3 +11,12 @@ export function todayIsoInAppTimeZone(): string {
     day: '2-digit',
   }).format(new Date())
 }
+
+export function formatTimeInAppTimeZone(date: Date | string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: APP_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(date))
+}
