@@ -242,7 +242,12 @@ export default function LogDayPage() {
 
   const [nutritionEntry, setNutritionEntry] = useState<{
     estimatedCalories: number
-    macros?: { protein?: number; carbs?: number; fat?: number }
+    macros?: { protein?: number; carbs?: number; fat?: number } | null
+    meals?: Array<{
+      name: string
+      calories: number
+      macros?: { protein?: number; carbs?: number; fat?: number } | null
+    }> | null
     description: string
   } | null>(null)
 
@@ -1549,7 +1554,29 @@ export default function LogDayPage() {
                     .join(' · ')}
                 </p>
               )}
-              <p className="text-zinc-600 text-xs font-mono truncate">{nutritionEntry.description}</p>
+              {nutritionEntry.meals && nutritionEntry.meals.length > 0 && (
+                <ul className="space-y-1 pt-1 border-t border-zinc-800">
+                  {nutritionEntry.meals.map((meal, i) => (
+                    <li key={i} className="text-xs font-mono">
+                      <span className="text-zinc-300">{meal.name}</span>
+                      <span className="text-zinc-500"> — {meal.calories.toLocaleString()} cal</span>
+                      {meal.macros && (
+                        <span className="text-zinc-600">
+                          {' '}
+                          ({[
+                            meal.macros.protein != null ? `${meal.macros.protein}g protein` : null,
+                            meal.macros.carbs != null ? `${meal.macros.carbs}g carbs` : null,
+                            meal.macros.fat != null ? `${meal.macros.fat}g fat` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')})
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-zinc-600 text-xs font-mono whitespace-pre-wrap leading-relaxed">{nutritionEntry.description}</p>
               {typeof garminRecovery?.total_kilocalories === 'number' && garminRecovery.total_kilocalories > 0 && (
                 <div className="pt-1 border-t border-zinc-800">
                   {(() => {
@@ -1646,9 +1673,9 @@ export default function LogDayPage() {
               value={foodNote}
               onChange={(e) => setFoodNote(e.target.value)}
               onBlur={() => void saveFoodNote()}
-              rows={3}
+              rows={8}
               placeholder="What did you eat today? (alternative to a photo)"
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-zinc-100 text-sm font-mono placeholder:text-zinc-600 focus:outline-none focus:border-lime-400/50 focus:ring-1 focus:ring-lime-400/20 transition-colors resize-none leading-relaxed"
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-zinc-100 text-sm font-mono placeholder:text-zinc-600 focus:outline-none focus:border-lime-400/50 focus:ring-1 focus:ring-lime-400/20 transition-colors resize-y leading-relaxed"
             />
             {foodNoteSaving && (
               <p className="text-zinc-500 text-[10px] font-mono">Saving note...</p>

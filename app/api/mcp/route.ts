@@ -124,16 +124,31 @@ const TOOLS = [
   {
     name: 'save_nutrition_estimate',
     description:
-      'Save a calorie/macro estimate for a specific day, whether derived from analyzing food photos (list_food_photos_for_range) or from a plain-text description the athlete gave in chat (e.g. "had kvarg and granola for breakfast"). Before estimating from text, check recent entries via get_nutrition_summary_for_range for a similar description and anchor to that prior estimate so repeat meals stay consistent rather than drifting each time. Re-saving a date overwrites the previous estimate for that date.',
+      'Save a calorie/macro estimate for a specific day, whether derived from analyzing food photos (list_food_photos_for_range) or from a plain-text description the athlete gave in chat (e.g. "had kvarg and granola for breakfast"). Before estimating from text, check recent entries via get_nutrition_summary_for_range for a similar description and anchor to that prior estimate so repeat meals stay consistent rather than drifting each time. Re-saving a date overwrites the previous estimate for that date — when re-analyzing a day flagged stale by get_nutrition_summary_for_range, re-look at ALL of that day\'s photos/notes and save one fresh whole-day total (do not try to add just the new item to the old saved total).',
     inputSchema: {
       type: 'object',
       properties: {
         date: { type: 'string', description: 'ISO date (YYYY-MM-DD) this estimate is for. Required.' },
         calories: { type: 'number', description: 'Estimated total calories for the day. Required.' },
-        protein: { type: 'number', description: 'Estimated grams of protein.' },
-        carbs: { type: 'number', description: 'Estimated grams of carbs.' },
-        fat: { type: 'number', description: 'Estimated grams of fat.' },
+        protein: { type: 'number', description: 'Estimated grams of protein for the day.' },
+        carbs: { type: 'number', description: 'Estimated grams of carbs for the day.' },
+        fat: { type: 'number', description: 'Estimated grams of fat for the day.' },
         description: { type: 'string', description: 'Brief description of what was eaten. Required.' },
+        meals: {
+          type: 'array',
+          description: 'Optional per-meal breakdown (e.g. one entry per Breakfast/Lunch/Dinner/Snack) — the day-level calories/protein/carbs/fat above still apply as the whole-day total regardless of whether this is provided.',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', description: 'Meal label, e.g. "Breakfast". Required.' },
+              calories: { type: 'number', description: 'Estimated calories for this meal. Required.' },
+              protein: { type: 'number', description: 'Estimated grams of protein for this meal.' },
+              carbs: { type: 'number', description: 'Estimated grams of carbs for this meal.' },
+              fat: { type: 'number', description: 'Estimated grams of fat for this meal.' },
+            },
+            required: ['name', 'calories'],
+          },
+        },
       },
       required: ['date', 'calories', 'description'],
     },
@@ -141,7 +156,7 @@ const TOOLS = [
   {
     name: 'get_nutrition_summary_for_range',
     description:
-      'Get a cheap summary of saved nutrition estimates for a date range (e.g. "this week", "last 10 days") without re-analyzing any photos. Returns each day\'s saved calories/macros/description, a total and average, and gap_dates — dates in the range that have uploaded food photos but no saved estimate yet. For any gap_dates, call list_food_photos_for_range for just those dates to fill them in, rather than reprocessing the whole range.',
+      'Get a cheap summary of saved nutrition estimates for a date range (e.g. "this week", "last 10 days") without re-analyzing any photos. Returns each day\'s saved calories/macros/meals/description, a total and average, plus two lists of dates needing attention: gap_dates (photos/notes exist but no saved estimate at all yet) and stale_dates (a saved estimate exists, but a photo or note for that date was added/edited AFTER it was saved — e.g. a dinner photo added after breakfast/lunch were already analyzed). For any date in either list, call list_food_photos_for_range for just that date, re-look at ALL of that day\'s photos/notes together (not just the new item), and call save_nutrition_estimate to save one fresh whole-day total — never try to add just the new item on top of the old saved number, since that risks double-counting.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -183,7 +198,7 @@ async function matchFoodPhotoBlobsForRange(startDate: string, endDate: string, t
     .map((b) => {
       const parts = b.pathname.split('/')
       const date = parts[2] ?? ''
-      return { pathname: b.pathname, date }
+      return { pathname: b.pathname, date, uploadedAt: b.uploadedAt as Date }
     })
     .filter((b) => b.date >= startDate && b.date <= endDate)
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -238,18 +253,37 @@ async function handleSaveNutritionEstimate(args: Record<string, unknown>) {
     return { error: 'date (string), calories (number), and description (string) are required' }
   }
 
-  const macros: NutritionLogEntry['macros'] = {}
+  const macros: NonNullable<NutritionLogEntry['macros']> = {}
   if (typeof args.protein === 'number') macros.protein = args.protein
   if (typeof args.carbs === 'number') macros.carbs = args.carbs
   if (typeof args.fat === 'number') macros.fat = args.fat
 
+  const rawMeals = Array.isArray(args.meals) ? args.meals : []
+  const meals: NonNullable<NutritionLogEntry['meals']> = rawMeals
+    .filter(
+      (m): m is Record<string, unknown> =>
+        typeof m === 'object' && m !== null && typeof (m as Record<string, unknown>).name === 'string' && typeof (m as Record<string, unknown>).calories === 'number',
+    )
+    .map((m) => {
+      const mealMacros: NonNullable<NutritionLogEntry['macros']> = {}
+      if (typeof m.protein === 'number') mealMacros.protein = m.protein
+      if (typeof m.carbs === 'number') mealMacros.carbs = m.carbs
+      if (typeof m.fat === 'number') mealMacros.fat = m.fat
+      return {
+        name: m.name as string,
+        calories: m.calories as number,
+        ...(Object.keys(mealMacros).length > 0 ? { macros: mealMacros } : {}),
+      }
+    })
+
   const entry: NutritionLogEntry = {
     _id: date,
     estimatedCalories: calories,
-    // Omit the key entirely rather than setting it to undefined — the MongoDB
+    // Omit keys entirely rather than setting them to undefined — the MongoDB
     // driver serializes an undefined field value as BSON null, not as an
     // absent key, which the schema's .optional() (not .nullable()) rejects on read.
     ...(Object.keys(macros).length > 0 ? { macros } : {}),
+    ...(meals.length > 0 ? { meals } : {}),
     description,
     analyzedAt: new Date().toISOString(),
   }
@@ -266,14 +300,38 @@ async function handleGetNutritionSummaryForRange(args: Record<string, unknown>) 
   }
 
   const entries = await readNutritionLogForRange(startDate, endDate)
-  const loggedDates = new Set(entries.map((e) => e._id))
+  const entryByDate = new Map(entries.map((e) => [e._id, e]))
 
   let gapDates: string[] = []
+  let staleDates: string[] = []
   const token = process.env.BLOB_READ_WRITE_TOKEN
   if (token) {
-    const photoMatches = await matchFoodPhotoBlobsForRange(startDate, endDate, token)
-    const photoDates = new Set(photoMatches.map((m) => m.date))
-    gapDates = [...photoDates].filter((d) => !loggedDates.has(d)).sort()
+    const [photoMatches, notes] = await Promise.all([
+      matchFoodPhotoBlobsForRange(startDate, endDate, token),
+      readFoodNotesForRange(startDate, endDate),
+    ])
+
+    // Latest content timestamp per date, across both photos and notes.
+    const latestContentByDate = new Map<string, number>()
+    for (const p of photoMatches) {
+      const ts = new Date(p.uploadedAt).getTime()
+      latestContentByDate.set(p.date, Math.max(latestContentByDate.get(p.date) ?? 0, ts))
+    }
+    for (const n of notes) {
+      const ts = new Date(n.updatedAt).getTime()
+      latestContentByDate.set(n._id, Math.max(latestContentByDate.get(n._id) ?? 0, ts))
+    }
+
+    for (const [date, latestTs] of latestContentByDate) {
+      const entry = entryByDate.get(date)
+      if (!entry) {
+        gapDates.push(date)
+      } else if (latestTs > new Date(entry.analyzedAt).getTime()) {
+        staleDates.push(date)
+      }
+    }
+    gapDates.sort()
+    staleDates.sort()
   }
 
   const totalCalories = entries.reduce((sum, e) => sum + e.estimatedCalories, 0)
@@ -288,11 +346,13 @@ async function handleGetNutritionSummaryForRange(args: Record<string, unknown>) 
       date: e._id,
       calories: e.estimatedCalories,
       macros: e.macros ?? null,
+      meals: e.meals ?? null,
       description: e.description,
     })),
     total_calories: totalCalories,
     avg_calories: avgCalories,
     gap_dates: gapDates,
+    stale_dates: staleDates,
   }
 }
 

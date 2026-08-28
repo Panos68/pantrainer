@@ -94,14 +94,21 @@ export const GarminExerciseMapEntrySchema = z.object({
   updatedAt: z.string(),
 })
 
+const MealMacrosSchema = z.object({
+  protein: z.number().optional(),
+  carbs: z.number().optional(),
+  fat: z.number().optional(),
+}).nullable().optional()
+
 export const NutritionLogEntrySchema = z.object({
   _id: z.string(), // date this estimate is for, YYYY-MM-DD
-  estimatedCalories: z.number(),
-  macros: z.object({
-    protein: z.number().optional(),
-    carbs: z.number().optional(),
-    fat: z.number().optional(),
-  }).nullable().optional(), // nullable: legacy docs may have stored null instead of omitting the key
+  estimatedCalories: z.number(), // day total
+  macros: MealMacrosSchema, // day total
+  meals: z.array(z.object({
+    name: z.string(), // e.g. "Breakfast", "Lunch"
+    calories: z.number(),
+    macros: MealMacrosSchema,
+  })).optional(), // per-meal breakdown, optional — day total above always applies regardless
   description: z.string(),
   analyzedAt: z.string(), // ISO timestamp of when this estimate was saved
 })
