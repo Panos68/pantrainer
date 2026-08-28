@@ -1,4 +1,5 @@
 import { blobUrl } from '@/lib/blob-url'
+import { list } from '@vercel/blob'
 import { signPhotoUrl } from '@/app/api/photos/route'
 import {
   readCurrentWeekDirect,
@@ -7,12 +8,15 @@ import {
   writeProposedPlan,
   readArchivedWeeks,
   readAllArchivedWeeks,
+  writeNutritionLogEntry,
+  readNutritionLogForRange,
+  readFoodNotesForRange,
 } from '@/lib/data'
 import { buildExportV2 } from '@/lib/export'
 import { validateImport } from '@/lib/import'
 import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
 import { SessionSchema, ProposedPlanRunTypeSchema } from '@/lib/schema'
-import type { WeekDoc } from '@/lib/schema'
+import type { WeekDoc, NutritionLogEntry } from '@/lib/schema'
 
 // ---------------------------------------------------------------------------
 // MCP tool definitions
@@ -104,6 +108,49 @@ const TOOLS = [
       required: ['exercise_name'],
     },
   },
+  {
+    name: 'list_food_photos_for_range',
+    description:
+      'Fetch food photos and any written food notes for an inclusive date range so they can be analyzed for approximate calorie/macro content. Returns each photo as an inline image labeled with the date it was uploaded for, plus any freeform notes the athlete typed directly in the app describing what they ate (an alternative to photographing everything). Use this when the athlete asks about their eating/calories for a period — there is no separate calorie database yet, so photos and notes are the only sources; if neither is found for the range, say so rather than guessing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        start_date: { type: 'string', description: 'ISO date (YYYY-MM-DD), inclusive start of range. Required.' },
+        end_date: { type: 'string', description: 'ISO date (YYYY-MM-DD), inclusive end of range. Required.' },
+      },
+      required: ['start_date', 'end_date'],
+    },
+  },
+  {
+    name: 'save_nutrition_estimate',
+    description:
+      'Save a calorie/macro estimate for a specific day, whether derived from analyzing food photos (list_food_photos_for_range) or from a plain-text description the athlete gave in chat (e.g. "had kvarg and granola for breakfast"). Before estimating from text, check recent entries via get_nutrition_summary_for_range for a similar description and anchor to that prior estimate so repeat meals stay consistent rather than drifting each time. Re-saving a date overwrites the previous estimate for that date.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        date: { type: 'string', description: 'ISO date (YYYY-MM-DD) this estimate is for. Required.' },
+        calories: { type: 'number', description: 'Estimated total calories for the day. Required.' },
+        protein: { type: 'number', description: 'Estimated grams of protein.' },
+        carbs: { type: 'number', description: 'Estimated grams of carbs.' },
+        fat: { type: 'number', description: 'Estimated grams of fat.' },
+        description: { type: 'string', description: 'Brief description of what was eaten. Required.' },
+      },
+      required: ['date', 'calories', 'description'],
+    },
+  },
+  {
+    name: 'get_nutrition_summary_for_range',
+    description:
+      'Get a cheap summary of saved nutrition estimates for a date range (e.g. "this week", "last 10 days") without re-analyzing any photos. Returns each day\'s saved calories/macros/description, a total and average, and gap_dates — dates in the range that have uploaded food photos but no saved estimate yet. For any gap_dates, call list_food_photos_for_range for just those dates to fill them in, rather than reprocessing the whole range.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        start_date: { type: 'string', description: 'ISO date (YYYY-MM-DD), inclusive start of range. Required.' },
+        end_date: { type: 'string', description: 'ISO date (YYYY-MM-DD), inclusive end of range. Required.' },
+      },
+      required: ['start_date', 'end_date'],
+    },
+  },
 ]
 
 // ---------------------------------------------------------------------------
@@ -127,6 +174,125 @@ async function fetchPhotoAsBase64(pathname: string): Promise<{ data: string; mim
     return { data, mimeType }
   } catch {
     return null
+  }
+}
+
+async function matchFoodPhotoBlobsForRange(startDate: string, endDate: string, token: string) {
+  const { blobs } = await list({ prefix: 'data/food-photos/', token })
+  return blobs
+    .map((b) => {
+      const parts = b.pathname.split('/')
+      const date = parts[2] ?? ''
+      return { pathname: b.pathname, date }
+    })
+    .filter((b) => b.date >= startDate && b.date <= endDate)
+    .sort((a, b) => a.date.localeCompare(b.date))
+}
+
+async function handleListFoodPhotosForRange(args: Record<string, unknown>) {
+  const startDate = args.start_date
+  const endDate = args.end_date
+  if (typeof startDate !== 'string' || typeof endDate !== 'string') {
+    return { error: 'start_date and end_date are required ISO date strings' }
+  }
+
+  const token = process.env.BLOB_READ_WRITE_TOKEN
+  if (!token) {
+    return { error: 'BLOB_READ_WRITE_TOKEN is not configured' }
+  }
+
+  const [matches, notes] = await Promise.all([
+    matchFoodPhotoBlobsForRange(startDate, endDate, token),
+    readFoodNotesForRange(startDate, endDate),
+  ])
+
+  const noteSummaries = notes.map((n) => ({ date: n._id, text: n.text }))
+
+  if (matches.length === 0) {
+    return {
+      summary:
+        noteSummaries.length > 0
+          ? `No food photos found between ${startDate} and ${endDate}, but ${noteSummaries.length} written note(s) exist.`
+          : `No food photos or notes found between ${startDate} and ${endDate}.`,
+      photos: [],
+      notes: noteSummaries,
+    }
+  }
+
+  const photos = await Promise.all(
+    matches.map(async (m) => ({ date: m.date, photo: await fetchPhotoAsBase64(m.pathname) })),
+  )
+
+  return {
+    summary: `Found ${matches.length} food photo(s) and ${noteSummaries.length} written note(s) between ${startDate} and ${endDate}.`,
+    photos: photos.filter((p): p is { date: string; photo: { data: string; mimeType: string } } => p.photo !== null),
+    notes: noteSummaries,
+  }
+}
+
+async function handleSaveNutritionEstimate(args: Record<string, unknown>) {
+  const date = args.date
+  const calories = args.calories
+  const description = args.description
+  if (typeof date !== 'string' || typeof calories !== 'number' || typeof description !== 'string') {
+    return { error: 'date (string), calories (number), and description (string) are required' }
+  }
+
+  const macros: NutritionLogEntry['macros'] = {}
+  if (typeof args.protein === 'number') macros.protein = args.protein
+  if (typeof args.carbs === 'number') macros.carbs = args.carbs
+  if (typeof args.fat === 'number') macros.fat = args.fat
+
+  const entry: NutritionLogEntry = {
+    _id: date,
+    estimatedCalories: calories,
+    // Omit the key entirely rather than setting it to undefined — the MongoDB
+    // driver serializes an undefined field value as BSON null, not as an
+    // absent key, which the schema's .optional() (not .nullable()) rejects on read.
+    ...(Object.keys(macros).length > 0 ? { macros } : {}),
+    description,
+    analyzedAt: new Date().toISOString(),
+  }
+
+  await writeNutritionLogEntry(entry)
+  return { saved: true, date }
+}
+
+async function handleGetNutritionSummaryForRange(args: Record<string, unknown>) {
+  const startDate = args.start_date
+  const endDate = args.end_date
+  if (typeof startDate !== 'string' || typeof endDate !== 'string') {
+    return { error: 'start_date and end_date are required ISO date strings' }
+  }
+
+  const entries = await readNutritionLogForRange(startDate, endDate)
+  const loggedDates = new Set(entries.map((e) => e._id))
+
+  let gapDates: string[] = []
+  const token = process.env.BLOB_READ_WRITE_TOKEN
+  if (token) {
+    const photoMatches = await matchFoodPhotoBlobsForRange(startDate, endDate, token)
+    const photoDates = new Set(photoMatches.map((m) => m.date))
+    gapDates = [...photoDates].filter((d) => !loggedDates.has(d)).sort()
+  }
+
+  const totalCalories = entries.reduce((sum, e) => sum + e.estimatedCalories, 0)
+  const avgCalories = entries.length > 0 ? Math.round(totalCalories / entries.length) : null
+
+  return {
+    summary:
+      entries.length > 0
+        ? `${entries.length} logged day(s) between ${startDate} and ${endDate}, avg ${avgCalories} cal/day.`
+        : `No saved nutrition estimates between ${startDate} and ${endDate}.`,
+    entries: entries.map((e) => ({
+      date: e._id,
+      calories: e.estimatedCalories,
+      macros: e.macros ?? null,
+      description: e.description,
+    })),
+    total_calories: totalCalories,
+    avg_calories: avgCalories,
+    gap_dates: gapDates,
   }
 }
 
@@ -492,11 +658,29 @@ async function dispatch(req: McpRequest): Promise<Response> {
         return mcpResult(id, { content })
       }
 
+      if (name === 'list_food_photos_for_range') {
+        const result = await handleListFoodPhotosForRange(args)
+        if ('error' in result) {
+          return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] })
+        }
+        const content: unknown[] = [{ type: 'text', text: result.summary }]
+        for (const n of result.notes) {
+          content.push({ type: 'text', text: `Note for ${n.date}: ${n.text}` })
+        }
+        for (const p of result.photos) {
+          content.push({ type: 'text', text: `Date: ${p.date}` })
+          content.push({ type: 'image', data: p.photo.data, mimeType: p.photo.mimeType })
+        }
+        return mcpResult(id, { content })
+      }
+
       let data: unknown
       if (name === 'submit_proposed_plan') data = await handleSubmitProposedPlan(args)
       else if (name === 'submit_proposal_by_date') data = await handleSubmitProposalByDate(args)
       else if (name === 'get_garmin_recovery_freshness') data = await handleGetGarminRecoveryFreshness(args)
       else if (name === 'get_lift_history') data = await handleGetLiftHistory(args)
+      else if (name === 'save_nutrition_estimate') data = await handleSaveNutritionEstimate(args)
+      else if (name === 'get_nutrition_summary_for_range') data = await handleGetNutritionSummaryForRange(args)
       else return mcpError(id, -32601, `Unknown tool: ${name}`)
       return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] })
     } catch (err) {

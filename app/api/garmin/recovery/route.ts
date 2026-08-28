@@ -1,4 +1,4 @@
-import { fetchSleepData, fetchHRData, fetchBodyBattery, fetchStress, fetchVO2Max, fetchFitnessAge } from '@/lib/garmin'
+import { fetchSleepData, fetchHRData, fetchBodyBattery, fetchStress, fetchVO2Max, fetchFitnessAge, fetchDailySummary } from '@/lib/garmin'
 import { readCurrentWeekDirect, writeCurrentWeek, readArchivedWeeks } from '@/lib/data'
 import { computeDailyScore } from '@/lib/daily-score'
 
@@ -19,6 +19,7 @@ function sanitizeRecovery(recovery: {
   vo2max?: number | null
   fitness_age?: number | null
   achievable_fitness_age?: number | null
+  total_kilocalories?: number | null
   fetched_at?: string
 }) {
   return {
@@ -34,6 +35,7 @@ function sanitizeRecovery(recovery: {
     vo2max: positiveOrNull(recovery.vo2max),
     fitness_age: positiveOrNull(recovery.fitness_age),
     achievable_fitness_age: positiveOrNull(recovery.achievable_fitness_age),
+    total_kilocalories: positiveOrNull(recovery.total_kilocalories),
     fetched_at: recovery.fetched_at ?? new Date().toISOString(),
   }
 }
@@ -51,6 +53,7 @@ function hasAnyRecoveryMetric(recovery: {
   vo2max: number | null
   fitness_age: number | null
   achievable_fitness_age: number | null
+  total_kilocalories: number | null
 }) {
   return (
     recovery.sleep_hours != null ||
@@ -64,7 +67,8 @@ function hasAnyRecoveryMetric(recovery: {
     recovery.max_stress_level != null ||
     recovery.vo2max != null ||
     recovery.fitness_age != null ||
-    recovery.achievable_fitness_age != null
+    recovery.achievable_fitness_age != null ||
+    recovery.total_kilocalories != null
   )
 }
 
@@ -100,13 +104,14 @@ export async function POST(req: Request) {
   }
 
   try {
-    const [sleep, hr, bodyBattery, stress, vo2max, fitnessAge] = await Promise.allSettled([
+    const [sleep, hr, bodyBattery, stress, vo2max, fitnessAge, dailySummary] = await Promise.allSettled([
       fetchSleepData(date),
       fetchHRData(date),
       fetchBodyBattery(date),
       fetchStress(date),
       fetchVO2Max(date),
       fetchFitnessAge(date),
+      fetchDailySummary(date),
     ])
 
     const recovery = sanitizeRecovery({
@@ -122,6 +127,7 @@ export async function POST(req: Request) {
       vo2max: vo2max.status === 'fulfilled' ? (vo2max.value?.vo2max ?? null) : null,
       fitness_age: fitnessAge.status === 'fulfilled' ? (fitnessAge.value?.fitness_age ?? null) : null,
       achievable_fitness_age: fitnessAge.status === 'fulfilled' ? (fitnessAge.value?.achievable_fitness_age ?? null) : null,
+      total_kilocalories: dailySummary.status === 'fulfilled' ? (dailySummary.value?.total_kilocalories ?? null) : null,
       fetched_at: new Date().toISOString(),
     })
 

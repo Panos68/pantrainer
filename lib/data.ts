@@ -6,6 +6,8 @@ import {
   AutomationNotesSchema,
   ProposedPlanSchema,
   GarminExerciseMapEntrySchema,
+  NutritionLogEntrySchema,
+  FoodNoteSchema,
 } from './schema'
 import type {
   WeekDoc,
@@ -15,6 +17,8 @@ import type {
   ProposedPlan,
   DailyReadiness,
   GarminExerciseMapEntry,
+  NutritionLogEntry,
+  FoodNote,
 } from './schema'
 import { format, parseISO } from 'date-fns'
 import { getDb } from './mongodb'
@@ -310,6 +314,66 @@ export async function writeGarminExerciseMapping(entry: GarminExerciseMapEntry):
   await db.collection('exercise_garmin_map').replaceOne(
     { _id: entry._id as never },
     entry,
+    { upsert: true }
+  )
+}
+
+// ─── Nutrition log ──────────────────────────────────────────────────────────
+// One doc per day, keyed by date. Written by the save_nutrition_estimate MCP
+// tool after Claude analyzes a day's food photos or a text description; read
+// by the day-log page and by the get_nutrition_summary_for_range MCP tool.
+
+export async function readNutritionLogEntry(date: string): Promise<NutritionLogEntry | null> {
+  const db = await getDb()
+  const doc = await db.collection('nutrition_log').findOne({ _id: date as never })
+  return doc ? NutritionLogEntrySchema.parse(doc) : null
+}
+
+export async function readNutritionLogForRange(startDate: string, endDate: string): Promise<NutritionLogEntry[]> {
+  const db = await getDb()
+  const docs = await db
+    .collection('nutrition_log')
+    .find({ _id: { $gte: startDate as never, $lte: endDate as never } })
+    .sort({ _id: 1 })
+    .toArray()
+  return docs.map((d) => NutritionLogEntrySchema.parse(d))
+}
+
+export async function writeNutritionLogEntry(entry: NutritionLogEntry): Promise<void> {
+  const db = await getDb()
+  await db.collection('nutrition_log').replaceOne(
+    { _id: entry._id as never },
+    entry,
+    { upsert: true }
+  )
+}
+
+// ─── Food notes ─────────────────────────────────────────────────────────────
+// One doc per day, keyed by date. A freeform note typed directly in the app
+// (as an alternative to photographing food); read by the day-log page and
+// surfaced to Claude via the get_nutrition tools alongside any food photos.
+
+export async function readFoodNote(date: string): Promise<FoodNote | null> {
+  const db = await getDb()
+  const doc = await db.collection('food_notes').findOne({ _id: date as never })
+  return doc ? FoodNoteSchema.parse(doc) : null
+}
+
+export async function readFoodNotesForRange(startDate: string, endDate: string): Promise<FoodNote[]> {
+  const db = await getDb()
+  const docs = await db
+    .collection('food_notes')
+    .find({ _id: { $gte: startDate as never, $lte: endDate as never } })
+    .sort({ _id: 1 })
+    .toArray()
+  return docs.map((d) => FoodNoteSchema.parse(d))
+}
+
+export async function writeFoodNote(note: FoodNote): Promise<void> {
+  const db = await getDb()
+  await db.collection('food_notes').replaceOne(
+    { _id: note._id as never },
+    note,
     { upsert: true }
   )
 }

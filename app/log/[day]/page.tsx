@@ -8,6 +8,7 @@ import GarminRecoveryCard from '@/components/GarminRecoveryCard'
 import MuscleMap from '@/components/MuscleMap'
 import ExerciseDemo from '@/components/ExerciseDemo'
 import { deriveExerciseAggregates, applyExerciseTableEditToSetLog, parseTimedSeconds } from '@/lib/liveSession'
+import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
 
 // ─── Type colors ─────────────────────────────────────────────────────────
 
@@ -48,6 +49,10 @@ function isPreviewablePhotoUrl(value: string): boolean {
 function resolvePhotoHref(value: string): string {
   if (isPreviewablePhotoUrl(value)) return value
   return `/api/photos?pathname=${encodeURIComponent(value)}`
+}
+
+function resolveFoodPhotoHref(pathname: string): string {
+  return `/api/food-photos?pathname=${encodeURIComponent(pathname)}`
 }
 
 function todayIsoLocal(): string {
@@ -227,6 +232,19 @@ export default function LogDayPage() {
   const [photos, setPhotos] = useState<string[]>([])
   const [uploadingPhotos, setUploadingPhotos] = useState(false)
   const [photoUploadMsg, setPhotoUploadMsg] = useState<string | null>(null)
+  const [uploadingFoodPhotos, setUploadingFoodPhotos] = useState(false)
+  const [foodPhotoUploadMsg, setFoodPhotoUploadMsg] = useState<string | null>(null)
+  const [foodPhotos, setFoodPhotos] = useState<string[]>([])
+  const [foodNote, setFoodNote] = useState('')
+  const [foodNoteSaving, setFoodNoteSaving] = useState(false)
+  const [foodNoteMsg, setFoodNoteMsg] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'log' | 'recovery' | 'nutrition'>('log')
+
+  const [nutritionEntry, setNutritionEntry] = useState<{
+    estimatedCalories: number
+    macros?: { protein?: number; carbs?: number; fat?: number }
+    description: string
+  } | null>(null)
 
   // Session import state
   const [showImport, setShowImport] = useState(false)
@@ -449,6 +467,30 @@ export default function LogDayPage() {
     }
     load()
   }, [day, refreshFromGarmin, pullGarminSets])
+
+  useEffect(() => {
+    if (!session) return
+    fetch(`/api/nutrition-log?date=${session.date}`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then(setNutritionEntry)
+      .catch(() => setNutritionEntry(null))
+  }, [session?.date])
+
+  useEffect(() => {
+    if (!session) return
+    fetch(`/api/food-photos?date=${session.date}`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : { photos: [] }))
+      .then((data) => setFoodPhotos(data.photos ?? []))
+      .catch(() => setFoodPhotos([]))
+  }, [session?.date])
+
+  useEffect(() => {
+    if (!session) return
+    fetch(`/api/food-notes?date=${session.date}`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((note) => setFoodNote(note?.text ?? ''))
+      .catch(() => setFoodNote(''))
+  }, [session?.date])
 
   const buildPayload = useCallback(() => {
     function mergeActualIntoExercise(ex: Session['exercises'][number], i: number) {
@@ -688,6 +730,89 @@ export default function LogDayPage() {
     }
   }
 
+  async function handleFoodPhotoFilesUpload(fileList: FileList | null) {
+    const files = Array.from(fileList ?? [])
+    if (files.length === 0 || !session) return
+
+    setUploadingFoodPhotos(true)
+    setFoodPhotoUploadMsg(null)
+    try {
+      const uploadedPathnames: string[] = []
+      for (const file of files) {
+        const formData = new FormData()
+        formData.set('file', file)
+        formData.set('date', session.date)
+        const res = await fetch('/api/food-photos', {
+          method: 'POST',
+          body: formData,
+        })
+        const raw = await res.text()
+        let data: { pathname?: string; error?: string } = {}
+        if (raw.trim().length > 0) {
+          try {
+            data = JSON.parse(raw) as { pathname?: string; error?: string }
+          } catch {
+            throw new Error(
+              `Upload failed for ${file.name} (${res.status}): ${raw.slice(0, 120)}`,
+            )
+          }
+        }
+        if (!res.ok || !data.pathname) {
+          throw new Error(data.error ?? `Upload failed for ${file.name} (${res.status})`)
+        }
+        uploadedPathnames.push(data.pathname)
+      }
+
+      setFoodPhotos((prev) => [...prev, ...uploadedPathnames].sort())
+      setFoodPhotoUploadMsg(`Uploaded ${uploadedPathnames.length} food photo${uploadedPathnames.length > 1 ? 's' : ''}`)
+      setTimeout(() => setFoodPhotoUploadMsg(null), 2500)
+    } catch (error) {
+      setFoodPhotoUploadMsg(error instanceof Error ? error.message : 'Food photo upload failed')
+    } finally {
+      setUploadingFoodPhotos(false)
+    }
+  }
+
+  async function removeFoodPhoto(pathname: string) {
+    const prev = foodPhotos
+    setFoodPhotos((cur) => cur.filter((p) => p !== pathname))
+    try {
+      const res = await fetch(`/api/food-photos?pathname=${encodeURIComponent(pathname)}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error ?? `Failed to remove photo (${res.status})`)
+      }
+    } catch (error) {
+      setFoodPhotos(prev)
+      setFoodPhotoUploadMsg(error instanceof Error ? error.message : 'Failed to remove photo')
+    }
+  }
+
+  async function saveFoodNote() {
+    if (!session) return
+    setFoodNoteSaving(true)
+    setFoodNoteMsg(null)
+    try {
+      const res = await fetch('/api/food-notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: session.date, text: foodNote }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error ?? `Failed to save note (${res.status})`)
+      }
+      setFoodNoteMsg('Saved')
+      setTimeout(() => setFoodNoteMsg(null), 2000)
+    } catch (error) {
+      setFoodNoteMsg(error instanceof Error ? error.message : 'Failed to save note')
+    } finally {
+      setFoodNoteSaving(false)
+    }
+  }
+
   async function handleRefreshGarmin() {
     setRefreshingGarmin(true)
     setSaveMsg('')
@@ -834,6 +959,24 @@ export default function LogDayPage() {
           </div>
         )}
 
+        {/* Tabs */}
+        <div className="flex gap-1 rounded-xl border border-zinc-800 bg-zinc-900 p-1">
+          {(['log', 'recovery', 'nutrition'] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 h-9 rounded-lg text-xs font-mono font-bold tracking-widest uppercase transition-colors ${
+                activeTab === tab
+                  ? 'bg-lime-400/10 text-lime-400'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
         {/* Coach guidance banner */}
         {session.subtype && (
           <div className="rounded-xl border border-zinc-700 bg-zinc-900/80 p-4">
@@ -854,6 +997,8 @@ export default function LogDayPage() {
           </div>
         )}
 
+        {activeTab === 'log' && (
+        <>
         {/* Muscle map — collapsible */}
         {(session.muscle_groups ?? []).length > 0 && (
           <div>
@@ -1132,6 +1277,8 @@ export default function LogDayPage() {
             </div>
           )
         })()}
+        </>
+        )}
 
         {/* Status badge */}
         {session.status === 'in_progress' && (
@@ -1143,6 +1290,8 @@ export default function LogDayPage() {
           </div>
         )}
 
+        {activeTab === 'recovery' && (
+        <>
         {/* Recovery card */}
         <GarminRecoveryCard
           date={session.date}
@@ -1158,12 +1307,16 @@ export default function LogDayPage() {
         >
           {refreshingGarmin ? 'Refreshing Garmin...' : 'Refresh Garmin Data'}
         </button>
+        </>
+        )}
 
         {/* Form */}
         <form
           onSubmit={(e) => e.preventDefault()}
           className="space-y-5"
         >
+          {activeTab === 'log' && (
+          <>
           {/* Session Type */}
           <div className="space-y-1.5">
             <label className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
@@ -1305,11 +1458,11 @@ export default function LogDayPage() {
             />
           </div>
 
-          {/* Photos */}
+          {/* Session Photos */}
           {(
             <div className="space-y-2">
               <label className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
-                Photos
+                Session Photos
               </label>
               <div className="flex gap-2">
                 <label className="flex-1 h-11 rounded-xl border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-sm flex items-center px-4 cursor-pointer transition-colors">
@@ -1371,6 +1524,142 @@ export default function LogDayPage() {
                 </ul>
               )}
             </div>
+          )}
+          </>
+          )}
+
+          {activeTab === 'nutrition' && (
+          <>
+          {nutritionEntry && (
+            <div className="space-y-1.5 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
+              <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
+                Nutrition (est.)
+              </p>
+              <p className="text-zinc-100 font-display font-bold text-xl">
+                {nutritionEntry.estimatedCalories.toLocaleString()} cal
+              </p>
+              {nutritionEntry.macros && (
+                <p className="text-zinc-500 text-xs font-mono">
+                  {[
+                    nutritionEntry.macros.protein != null ? `${nutritionEntry.macros.protein}g protein` : null,
+                    nutritionEntry.macros.carbs != null ? `${nutritionEntry.macros.carbs}g carbs` : null,
+                    nutritionEntry.macros.fat != null ? `${nutritionEntry.macros.fat}g fat` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              )}
+              <p className="text-zinc-600 text-xs font-mono truncate">{nutritionEntry.description}</p>
+              {typeof garminRecovery?.total_kilocalories === 'number' && garminRecovery.total_kilocalories > 0 && (
+                <div className="pt-1 border-t border-zinc-800">
+                  {(() => {
+                    const deficit = garminRecovery.total_kilocalories! - nutritionEntry.estimatedCalories
+                    const isDeficit = deficit > 0
+                    return (
+                      <p className={`text-sm font-mono font-bold ${isDeficit ? 'text-lime-400' : 'text-amber-400'}`}>
+                        {isDeficit ? 'Deficit' : 'Surplus'}: {Math.abs(Math.round(deficit)).toLocaleString()} cal
+                      </p>
+                    )
+                  })()}
+                  {session?.date === todayIsoInAppTimeZone() && (
+                    <p className="text-zinc-600 text-[10px] font-mono mt-0.5">
+                      still accumulating — both burn and intake for today are incomplete
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Food Photos */}
+          <div className="space-y-2">
+            <label className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
+              Food Photos
+            </label>
+            <div className="flex gap-2">
+              <label className="flex-1 h-11 rounded-xl border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-sm flex items-center px-4 cursor-pointer transition-colors">
+                <span className="text-zinc-600 mr-2">+</span> Add food photo…
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    void handleFoodPhotoFilesUpload(e.target.files)
+                    e.target.value = ''
+                  }}
+                />
+              </label>
+            </div>
+            {foodPhotoUploadMsg && (
+              <p className={`text-[10px] font-mono ${foodPhotoUploadMsg.startsWith('Uploaded') ? 'text-lime-400' : 'text-red-400'}`}>
+                {foodPhotoUploadMsg}
+              </p>
+            )}
+            {uploadingFoodPhotos && (
+              <p className="text-zinc-500 text-[10px] font-mono">
+                Uploading food photos...
+              </p>
+            )}
+            {foodPhotos.length > 0 && (
+              <ul className="space-y-1.5 mt-2">
+                {foodPhotos.map((p) => (
+                  <li
+                    key={p}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <a href={resolveFoodPhotoHref(p)} target="_blank" rel="noreferrer" className="shrink-0">
+                        <div
+                          className="h-12 w-12 rounded border border-zinc-700 bg-zinc-800 bg-cover bg-center"
+                          style={{ backgroundImage: `url("${resolveFoodPhotoHref(p)}")` }}
+                        />
+                      </a>
+                      <a
+                        href={resolveFoodPhotoHref(p)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-zinc-400 hover:text-zinc-200 text-xs font-mono truncate"
+                      >
+                        {p}
+                      </a>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeFoodPhoto(p)}
+                      className="text-zinc-600 hover:text-red-400 text-xs font-mono transition-colors shrink-0"
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Food Notes */}
+          <div className="space-y-1.5">
+            <label className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
+              Food Notes
+            </label>
+            <textarea
+              value={foodNote}
+              onChange={(e) => setFoodNote(e.target.value)}
+              onBlur={() => void saveFoodNote()}
+              rows={3}
+              placeholder="What did you eat today? (alternative to a photo)"
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-zinc-100 text-sm font-mono placeholder:text-zinc-600 focus:outline-none focus:border-lime-400/50 focus:ring-1 focus:ring-lime-400/20 transition-colors resize-none leading-relaxed"
+            />
+            {foodNoteSaving && (
+              <p className="text-zinc-500 text-[10px] font-mono">Saving note...</p>
+            )}
+            {foodNoteMsg && (
+              <p className={`text-[10px] font-mono ${foodNoteMsg === 'Saved' ? 'text-lime-400' : 'text-red-400'}`}>
+                {foodNoteMsg}
+              </p>
+            )}
+          </div>
+          </>
           )}
         </form>
 

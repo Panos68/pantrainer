@@ -1,9 +1,9 @@
 export const dynamic = 'force-dynamic'
 
 import { redirect } from 'next/navigation'
-import { format, differenceInDays, parseISO, subDays } from 'date-fns'
+import { format, differenceInDays, parseISO, subDays, startOfWeek, subWeeks, addDays } from 'date-fns'
 import Link from 'next/link'
-import { readAthleteProfile, readCurrentWeek, readAppState, readArchivedWeeks, readPendingWeek } from '@/lib/data'
+import { readAthleteProfile, readCurrentWeek, readAppState, readArchivedWeeks, readPendingWeek, readNutritionLogForRange } from '@/lib/data'
 import { isPendingWeekDue } from '@/lib/week-activation'
 import { sessionToLoadPoint } from '@/lib/training-load'
 import { calcAdaptiveAlert } from '@/lib/adaptive-alert'
@@ -104,6 +104,26 @@ export default async function Home() {
   const caloriesDelta = pctDelta(weekCalories, prevWeekCalories)
   const durationDelta = pctDelta(weekDurationMin, prevWeekDurationMin)
 
+  // Nutrition is calendar-daily data (independent of whether a workout happened), so its
+  // week-over-week windows are calendar week bounds, not session dates — unlike training
+  // load/calories/duration above, which are naturally scoped to completed sessions.
+  const currentWeekStart = format(startOfWeek(parseISO(todayISO), { weekStartsOn: 1 }), 'yyyy-MM-dd')
+  const prevWeekStart = format(subWeeks(parseISO(currentWeekStart), 1), 'yyyy-MM-dd')
+  const prevWeekEnd = format(addDays(parseISO(prevWeekStart), todayRemapped), 'yyyy-MM-dd')
+
+  const [nutritionEntries, prevNutritionEntries] = await Promise.all([
+    readNutritionLogForRange(currentWeekStart, todayISO),
+    readNutritionLogForRange(prevWeekStart, prevWeekEnd),
+  ])
+
+  const avgCalIntake = nutritionEntries.length > 0
+    ? Math.round(nutritionEntries.reduce((sum, e) => sum + e.estimatedCalories, 0) / nutritionEntries.length)
+    : 0
+  const prevAvgCalIntake = prevNutritionEntries.length > 0
+    ? Math.round(prevNutritionEntries.reduce((sum, e) => sum + e.estimatedCalories, 0) / prevNutritionEntries.length)
+    : null
+  const avgCalIntakeDelta = pctDelta(avgCalIntake, prevAvgCalIntake)
+
   // ACWR zone using all history up to today
   const allLoadPoints = [...archivedWeeks, week]
     .flatMap((w) => w.sessions)
@@ -169,6 +189,8 @@ export default async function Home() {
           caloriesDelta={caloriesDelta}
           durationLabel={formatDuration(weekDurationMin)}
           durationDelta={durationDelta}
+          avgCalIntake={avgCalIntake}
+          avgCalIntakeDelta={avgCalIntakeDelta}
           adaptiveAlert={adaptiveAlert}
           today={todayISO}
           initialReadiness={readinessSnapshot}

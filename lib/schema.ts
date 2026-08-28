@@ -94,6 +94,27 @@ export const GarminExerciseMapEntrySchema = z.object({
   updatedAt: z.string(),
 })
 
+export const NutritionLogEntrySchema = z.object({
+  _id: z.string(), // date this estimate is for, YYYY-MM-DD
+  estimatedCalories: z.number(),
+  macros: z.object({
+    protein: z.number().optional(),
+    carbs: z.number().optional(),
+    fat: z.number().optional(),
+  }).nullable().optional(), // nullable: legacy docs may have stored null instead of omitting the key
+  description: z.string(),
+  analyzedAt: z.string(), // ISO timestamp of when this estimate was saved
+})
+
+// Freeform note about what was eaten on a given day, typed directly in the app
+// (as an alternative to photographing everything). Surfaced to Claude alongside
+// any food photos for the same date via list_food_photos_for_range.
+export const FoodNoteSchema = z.object({
+  _id: z.string(), // date this note is for, YYYY-MM-DD
+  text: z.string(),
+  updatedAt: z.string(), // ISO timestamp of last save
+})
+
 // Week summary
 export const WeekSummarySchema = z.object({
   total_sessions: z.number().default(0),
@@ -121,6 +142,7 @@ export const GarminRecoveryDaySchema = z.object({
   vo2max: z.number().nullable().optional(),
   fitness_age: z.number().nullable().optional(),
   achievable_fitness_age: z.number().nullable().optional(),
+  total_kilocalories: z.number().nullable().optional(), // Garmin's own daily total burn (BMR + active), live/same-day
   fetched_at: z.string().optional(),
 })
 
@@ -267,6 +289,8 @@ export const ProposedPlanSchema = z.object({
 
 // Export types
 export type GarminExerciseMapEntry = z.infer<typeof GarminExerciseMapEntrySchema>
+export type NutritionLogEntry = z.infer<typeof NutritionLogEntrySchema>
+export type FoodNote = z.infer<typeof FoodNoteSchema>
 export type SetEntry = z.infer<typeof SetEntrySchema>
 export type Exercise = z.infer<typeof ExerciseSchema>
 export type ExerciseGroup = z.infer<typeof ExerciseGroupSchema>

@@ -226,6 +226,29 @@ export async function fetchStress(date: string): Promise<GarminStressResult | nu
   }
 }
 
+export type GarminDailySummaryResult = {
+  total_kilocalories: number | null
+}
+
+export async function fetchDailySummary(date: string): Promise<GarminDailySummaryResult | null> {
+  try {
+    const client: any = await createClient()
+    const base = client.url.GC_API
+    const profile = await client.getUserProfile()
+    const displayName = profile?.displayName
+    if (!displayName) return null
+    const raw = await client.client.get(
+      `${base}/usersummary-service/usersummary/daily/${displayName}?calendarDate=${date}`
+    ) as { totalKilocalories?: number }
+    if (!raw) return null
+    return {
+      total_kilocalories: typeof raw.totalKilocalories === 'number' && raw.totalKilocalories > 0 ? raw.totalKilocalories : null,
+    }
+  } catch {
+    return null
+  }
+}
+
 export type GarminVo2MaxResult = {
   vo2max: number | null
 }

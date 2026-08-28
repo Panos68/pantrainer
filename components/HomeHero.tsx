@@ -18,6 +18,8 @@ interface HomeHeroProps {
   caloriesDelta: number | null
   durationLabel: string
   durationDelta: number | null
+  avgCalIntake: number
+  avgCalIntakeDelta: number | null
   adaptiveAlert: AdaptiveAlert | null
   today: string
   initialReadiness: ReadinessSnapshot
@@ -40,7 +42,7 @@ function WeekTile({ label, value, valueClassName, interpretation }: { label: str
   )
 }
 
-function WeekStatsRow({ weekLoad, loadDelta, acwr, loadZone, calories, caloriesDelta, durationLabel, durationDelta }: Omit<HomeHeroProps, 'healthFlags' | 'adaptiveAlert' | 'today' | 'initialReadiness'>) {
+function WeekStatsRow({ weekLoad, loadDelta, acwr, loadZone, calories, caloriesDelta, durationLabel, durationDelta, avgCalIntake, avgCalIntakeDelta }: Omit<HomeHeroProps, 'healthFlags' | 'adaptiveAlert' | 'today' | 'initialReadiness'>) {
   const displayLoad = useCountUp(weekLoad)
   const displayAcwrHundredths = useCountUp(acwr != null ? Math.round(acwr * 100) : 0)
 
@@ -52,7 +54,7 @@ function WeekStatsRow({ weekLoad, loadDelta, acwr, loadZone, calories, caloriesD
     .join(' · ') || 'Not enough history yet'
 
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-4 gap-3">
       <WeekTile
         label="Week's Load"
         value={weekLoad > 0 ? String(displayLoad) : '—'}
@@ -69,11 +71,16 @@ function WeekStatsRow({ weekLoad, loadDelta, acwr, loadZone, calories, caloriesD
         value={durationLabel}
         interpretation={pctLabel(durationDelta)}
       />
+      <WeekTile
+        label="Avg Cal Intake"
+        value={avgCalIntake > 0 ? avgCalIntake.toLocaleString() : '—'}
+        interpretation={pctLabel(avgCalIntakeDelta)}
+      />
     </div>
   )
 }
 
-export default function HomeHero({ weekLoad, loadDelta, acwr, loadZone, healthFlags, calories, caloriesDelta, durationLabel, durationDelta, adaptiveAlert, today, initialReadiness }: HomeHeroProps) {
+export default function HomeHero({ weekLoad, loadDelta, acwr, loadZone, healthFlags, calories, caloriesDelta, durationLabel, durationDelta, avgCalIntake, avgCalIntakeDelta, adaptiveAlert, today, initialReadiness }: HomeHeroProps) {
   const hasActiveFlags = healthFlags.some((f) => !f.cleared)
 
   return (
@@ -95,6 +102,8 @@ export default function HomeHero({ weekLoad, loadDelta, acwr, loadZone, healthFl
           caloriesDelta={caloriesDelta}
           durationLabel={durationLabel}
           durationDelta={durationDelta}
+          avgCalIntake={avgCalIntake}
+          avgCalIntakeDelta={avgCalIntakeDelta}
         />
       </div>
       <div className="relative space-y-4">

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
 import type { GarminRecoveryDay } from '@/lib/schema'
 
 interface GarminRecoveryCardProps {
@@ -33,6 +34,8 @@ export default function GarminRecoveryCard({
   const maxStress = typeof data?.max_stress_level === 'number' && data.max_stress_level >= 0 ? data.max_stress_level : null
   const vo2max = typeof data?.vo2max === 'number' && data.vo2max > 0 ? data.vo2max : null
   const fitnessAge = typeof data?.fitness_age === 'number' && data.fitness_age > 0 ? data.fitness_age : null
+  const totalKilocalories = typeof data?.total_kilocalories === 'number' && data.total_kilocalories > 0 ? data.total_kilocalories : null
+  const isSameDay = date === todayIsoInAppTimeZone()
 
   async function fetchRecovery(force = false) {
     setLoading(true)
@@ -173,6 +176,15 @@ export default function GarminRecoveryCard({
               <div className="text-zinc-500 text-[9px] font-mono tracking-widest uppercase mb-0.5">Fitness Age</div>
               <div className="text-violet-400 text-lg font-mono font-black leading-none">{Math.round(fitnessAge)}</div>
               <div className="text-zinc-600 text-[9px] font-mono mt-0.5">years</div>
+            </div>
+          )}
+          {totalKilocalories != null && (
+            <div>
+              <div className="text-zinc-500 text-[9px] font-mono tracking-widest uppercase mb-0.5">Cal Burned</div>
+              <div className="text-lime-400 text-lg font-mono font-black leading-none">{totalKilocalories.toLocaleString()}</div>
+              <div className="text-zinc-600 text-[9px] font-mono mt-0.5">
+                {isSameDay ? 'kcal · still accumulating' : 'kcal'}
+              </div>
             </div>
           )}
         </div>
