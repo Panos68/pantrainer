@@ -122,6 +122,32 @@ export const FoodNoteSchema = z.object({
   updatedAt: z.string(), // ISO timestamp of last save
 })
 
+// ─── Pantry ─────────────────────────────────────────────────────────────────
+// The athlete's staple foods. Injected into the MCP food-photo response so the
+// estimator matches against a known short list instead of guessing across every
+// food that exists (a tub of kvarg was repeatedly read as milk, which is wrong
+// on both calories and protein).
+
+const PantryMacrosSchema = z.object({
+  calories: z.number(),
+  protein: z.number(),
+  carbs: z.number(),
+  fat: z.number(),
+})
+
+export const PantryItemSchema = z.object({
+  _id: z.string(),                          // slug, e.g. "kvarg"
+  name: z.string(),                         // display name, e.g. "Kvarg"
+  aliases: z.array(z.string()).default([]), // lowercase, as they appear in notes
+  visualCue: z.string(),                    // what it looks like AND what it is not
+  per100g: PantryMacrosSchema,
+  usualGrams: z.number(),                   // anchor portion when a photo is ambiguous
+  source: z.enum(['seeded', 'manual']).default('manual'),
+  updatedAt: z.string(),
+})
+
+export type PantryItem = z.infer<typeof PantryItemSchema>
+
 // Week summary
 export const WeekSummarySchema = z.object({
   total_sessions: z.number().default(0),
