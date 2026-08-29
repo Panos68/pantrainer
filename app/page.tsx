@@ -217,6 +217,12 @@ export default async function Home() {
           >
             Progress
           </Link>
+          <Link
+            href="/pantry"
+            className="text-xs font-mono font-bold tracking-widest uppercase text-zinc-500 hover:text-zinc-300 transition-colors"
+          >
+            Pantry
+          </Link>
         </footer>
 
       </div>
