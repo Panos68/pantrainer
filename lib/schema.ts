@@ -108,6 +108,15 @@ export const NutritionLogEntrySchema = z.object({
     name: z.string(), // e.g. "Breakfast", "Lunch"
     calories: z.number(),
     macros: MealMacrosSchema,
+    // Per-item breakdown. Optional — entries saved before the pantry existed
+    // have none. Recording grams is what makes it possible to later learn the
+    // athlete's usual portion from real history rather than a seeded guess.
+    items: z.array(z.object({
+      name: z.string(),
+      grams: z.number(),
+      calories: z.number(),
+      pantryId: z.string().nullable(), // null for one-off foods (eating out)
+    })).optional(),
   })).optional(), // per-meal breakdown, optional — day total above always applies regardless
   description: z.string(),
   analyzedAt: z.string(), // ISO timestamp of when this estimate was saved

@@ -148,6 +148,20 @@ const TOOLS = [
               protein: { type: 'number', description: 'Estimated grams of protein for this meal.' },
               carbs: { type: 'number', description: 'Estimated grams of carbs for this meal.' },
               fat: { type: 'number', description: 'Estimated grams of fat for this meal.' },
+              items: {
+                type: 'array',
+                description: 'Optional per-item breakdown of this meal. Include it whenever you can identify individual foods, and ALWAYS for pantry staples — recording grams is what lets the athlete\'s usual portions be refined from real history later.',
+                items: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string', description: 'Food name, e.g. "Kvarg". Required.' },
+                    grams: { type: 'number', description: 'Estimated weight in grams. Required.' },
+                    calories: { type: 'number', description: 'Calories for this item. Required.' },
+                    pantry_id: { type: 'string', description: 'The staple\'s id from pantry_brief (e.g. "kvarg"). Omit for a one-off food such as a restaurant meal.' },
+                  },
+                  required: ['name', 'grams', 'calories'],
+                },
+              },
             },
             required: ['name', 'calories'],
           },
@@ -282,10 +296,28 @@ async function handleSaveNutritionEstimate(args: Record<string, unknown>) {
       if (typeof m.protein === 'number') mealMacros.protein = m.protein
       if (typeof m.carbs === 'number') mealMacros.carbs = m.carbs
       if (typeof m.fat === 'number') mealMacros.fat = m.fat
+      // Same omit-don't-undefine rule as the entry below: an `items: undefined`
+      // round-trips through Mongo as null and fails the schema on read.
+      const rawItems = Array.isArray(m.items) ? m.items : []
+      const items = rawItems
+        .filter(
+          (it): it is Record<string, unknown> =>
+            typeof it === 'object' && it !== null &&
+            typeof (it as Record<string, unknown>).name === 'string' &&
+            typeof (it as Record<string, unknown>).grams === 'number' &&
+            typeof (it as Record<string, unknown>).calories === 'number',
+        )
+        .map((it) => ({
+          name: it.name as string,
+          grams: it.grams as number,
+          calories: it.calories as number,
+          pantryId: typeof it.pantry_id === 'string' ? it.pantry_id : null,
+        }))
       return {
         name: m.name as string,
         calories: m.calories as number,
         ...(Object.keys(mealMacros).length > 0 ? { macros: mealMacros } : {}),
+        ...(items.length > 0 ? { items } : {}),
       }
     })
 
