@@ -1,6 +1,11 @@
 import { fetchAndStoreRecovery, isMidDaySnapshot, isoDaysAgoInAppTimeZone } from '@/lib/garmin-recovery'
 import { readCurrentWeekDirect } from '@/lib/data'
 
+// Scheduled at 01:01 UTC (see vercel.json) = 03:01 Europe/Stockholm in summer,
+// 02:01 in winter. Vercel crons are UTC-only, so this is deliberately not
+// pinned to local midnight: such a schedule would fire before midnight on one
+// side of the DST switch and finalize the wrong day.
+
 // Garmin can lag a little at the day boundary; give the fetches room.
 export const maxDuration = 120
 
