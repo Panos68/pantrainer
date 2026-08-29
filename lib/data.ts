@@ -8,6 +8,7 @@ import {
   GarminExerciseMapEntrySchema,
   NutritionLogEntrySchema,
   FoodNoteSchema,
+  PantryItemSchema,
 } from './schema'
 import type {
   WeekDoc,
@@ -19,9 +20,11 @@ import type {
   GarminExerciseMapEntry,
   NutritionLogEntry,
   FoodNote,
+  PantryItem,
 } from './schema'
 import { format, parseISO } from 'date-fns'
 import { getDb } from './mongodb'
+import { PANTRY_SEED } from './pantry-seed'
 
 // Collections:
 //   config    — singleton docs: athlete, state, automation-notes, garmin-tokens
@@ -376,4 +379,41 @@ export async function writeFoodNote(note: FoodNote): Promise<void> {
     note,
     { upsert: true }
   )
+}
+
+// ─── Pantry ─────────────────────────────────────────────────────────────────
+// The athlete's staple foods, one doc per food. Read on every MCP food-photo
+// call, so keep it small — this is a list of ~10 staples, not a food database.
+
+export async function readPantry(): Promise<PantryItem[]> {
+  const db = await getDb()
+  const docs = await db.collection('pantry').find({}).sort({ _id: 1 }).toArray()
+  return docs.map((d) => PantryItemSchema.parse(d))
+}
+
+export async function writePantryItem(item: PantryItem): Promise<void> {
+  const db = await getDb()
+  await db.collection('pantry').replaceOne(
+    { _id: item._id as never },
+    item,
+    { upsert: true }
+  )
+}
+
+export async function deletePantryItem(id: string): Promise<void> {
+  const db = await getDb()
+  await db.collection('pantry').deleteOne({ _id: id as never })
+}
+
+/**
+ * Populate the pantry from the seed list on first use. Only inserts when the
+ * collection is completely empty, so it can never overwrite an edit the
+ * athlete has made.
+ */
+export async function seedPantryIfEmpty(): Promise<number> {
+  const db = await getDb()
+  const count = await db.collection('pantry').countDocuments()
+  if (count > 0) return 0
+  await db.collection('pantry').insertMany(PANTRY_SEED as never[])
+  return PANTRY_SEED.length
 }
