@@ -151,7 +151,8 @@ export const PantryItemSchema = z.object({
   visualCue: z.string(),                    // what it looks like AND what it is not
   per100g: PantryMacrosSchema,
   usualGrams: z.number(),                   // anchor portion when a photo is ambiguous
-  source: z.enum(['seeded', 'manual']).default('manual'),
+  barcode: z.string().optional(),           // EAN, when the item was added by scanning
+  source: z.enum(['seeded', 'manual', 'scanned']).default('manual'),
   updatedAt: z.string(),
 })
 

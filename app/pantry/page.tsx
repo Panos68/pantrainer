@@ -1,14 +1,16 @@
 'use client'
 
 import Link from 'next/link'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useSyncExternalStore } from 'react'
 import type { PantryItem } from '@/lib/schema'
+import BarcodeScanner, { isBarcodeDetectorAvailable } from '@/components/BarcodeScanner'
 
 // The staple foods the nutrition estimator matches against. Kept deliberately
 // short — this is a list of what the athlete actually eats repeatedly, not a
 // food database.
 
 const EMPTY_DRAFT = {
+  barcode: '',
   name: '',
   aliases: '',
   visualCue: '',
@@ -29,6 +31,66 @@ export default function PantryPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [draft, setDraft] = useState(EMPTY_DRAFT)
   const [addError, setAddError] = useState<string | null>(null)
+  const [scanning, setScanning] = useState(false)
+  const [scanNote, setScanNote] = useState<string | null>(null)
+
+  // BarcodeDetector does not exist during SSR, so the server must render the
+  // button as absent and the client fill it in on hydration. useSyncExternalStore
+  // is the supported way to read a browser capability without a hydration
+  // mismatch or a setState-in-effect.
+  const canScan = useSyncExternalStore(
+    () => () => {},              // capability never changes; nothing to subscribe to
+    isBarcodeDetectorAvailable,  // client
+    () => false,                 // server
+  )
+
+  const handleScan = useCallback(async (barcode: string) => {
+    setScanning(false)
+    setAddError(null)
+
+    // A barcode already in the pantry means editing that food, not adding a
+    // duplicate under a second slug.
+    const existing = pantry?.find((i) => i.barcode === barcode)
+    if (existing) {
+      setScanNote(`${existing.name} is already in your pantry — edit it above.`)
+      return
+    }
+
+    setScanNote('Looking up…')
+    const res = await fetch(`/api/pantry/lookup?barcode=${encodeURIComponent(barcode)}`)
+    const found = await res.json() as {
+      found: boolean
+      name?: string
+      brands?: string
+      missingNutriments?: boolean
+      per100g?: { calories: number; protein: number; carbs: number; fat: number }
+    }
+
+    if (!found.found) {
+      setDraft({ ...EMPTY_DRAFT, barcode })
+      setScanNote(`Barcode ${barcode} is not in Open Food Facts — fill it in by hand.`)
+      return
+    }
+
+    if (!found.per100g) {
+      setDraft({ ...EMPTY_DRAFT, barcode, name: found.name ?? '' })
+      setScanNote(`Found "${found.name}" but it has no nutrition data — read the values off the package.`)
+      return
+    }
+
+    setDraft({
+      barcode,
+      name: found.name ?? '',
+      aliases: found.name ? found.name.toLowerCase() : '',
+      visualCue: '',
+      calories: String(found.per100g.calories),
+      protein: String(found.per100g.protein),
+      carbs: String(found.per100g.carbs),
+      fat: String(found.per100g.fat),
+      usualGrams: '',
+    })
+    setScanNote(`Found "${found.name}". Add your usual portion and what it looks like, then save.`)
+  }, [pantry])
 
   const load = useCallback(async () => {
     const res = await fetch('/api/pantry', { cache: 'no-store' })
@@ -95,6 +157,7 @@ export default function PantryPage() {
       body: JSON.stringify({
         _id: id,
         name: draft.name.trim(),
+        ...(draft.barcode ? { barcode: draft.barcode, source: 'scanned' } : {}),
         aliases: draft.aliases
           .split(',')
           .map((a) => a.trim().toLowerCase())
@@ -216,7 +279,20 @@ export default function PantryPage() {
         )}
 
         <form onSubmit={addFood} className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-3 space-y-3">
-          <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">Add food</p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">Add food</p>
+            {canScan && (
+              <button
+                type="button"
+                onClick={() => { setScanNote(null); setScanning(true) }}
+                className="text-[10px] font-mono font-bold tracking-widest uppercase text-lime-400 border border-lime-400/30 rounded px-2 py-1 hover:bg-lime-400/10 transition-colors"
+              >
+                Scan barcode
+              </button>
+            )}
+          </div>
+
+          {scanNote && <p className="text-zinc-400 text-[10px] font-mono leading-relaxed">{scanNote}</p>}
 
           <div className="grid grid-cols-2 gap-2">
             <input
@@ -280,6 +356,13 @@ export default function PantryPage() {
         </footer>
 
       </div>
+
+      {scanning && (
+        <BarcodeScanner
+          onDetected={(code) => void handleScan(code)}
+          onClose={() => setScanning(false)}
+        />
+      )}
     </main>
   )
 }
