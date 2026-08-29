@@ -13,6 +13,10 @@ const PUBLIC_PATHS = [
   '/api/automation',
   '/api/revalidate',
   '/api/week/activate',
+  // Vercel Cron invokes this with its own Bearer CRON_SECRET header, not the
+  // login cookie — without this it would be redirected to /login and the job
+  // would silently never run. The route authorizes the secret itself.
+  '/api/cron/',
 ]
 
 export function proxy(request: NextRequest) {

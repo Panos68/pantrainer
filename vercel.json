@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "//": "01:01 UTC = 03:01 Europe/Stockholm in summer, 02:01 in winter. Vercel crons are UTC-only, so this is deliberately not 00:01 UTC-equivalent: a schedule pinned to local midnight would fire before midnight on one side of the DST switch and finalize the wrong day.",
+      "path": "/api/cron/finalize-day",
+      "schedule": "1 1 * * *"
+    }
+  ]
+}
