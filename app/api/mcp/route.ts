@@ -11,7 +11,10 @@ import {
   writeNutritionLogEntry,
   readNutritionLogForRange,
   readFoodNotesForRange,
+  readPantry,
+  seedPantryIfEmpty,
 } from '@/lib/data'
+import { formatPantryBrief } from '@/lib/pantry-brief'
 import { buildExportV2 } from '@/lib/export'
 import { validateImport } from '@/lib/import'
 import { todayIsoInAppTimeZone, formatTimeInAppTimeZone } from '@/lib/app-timezone'
@@ -111,7 +114,7 @@ const TOOLS = [
   {
     name: 'list_food_photos_for_range',
     description:
-      'Fetch food photos and any written food notes for an inclusive date range so they can be analyzed for approximate calorie/macro content. Returns each photo as an inline image labeled with the date AND local time it was uploaded (e.g. "Date: 2026-08-28, uploaded 08:15") — use that real time to label meals in save_nutrition_estimate\'s optional per-meal breakdown (e.g. a photo uploaded 07:xx-09:xx is very likely breakfast, 12:xx-14:xx likely lunch, 18:xx-20:xx likely dinner, anything clearly outside those windows is more likely a snack) rather than guessing the meal type purely from what the food looks like. If the upload time doesn\'t clearly indicate a specific meal, use a neutral label like "Snack" or "Meal (unclear time)" instead of forcing it into breakfast/lunch/dinner. Also returns any freeform notes the athlete typed directly in the app describing what they ate (an alternative to photographing everything) — these have no per-item time, so anchor their content to the day generally. Use this when the athlete asks about their eating/calories for a period — there is no separate calorie database yet, so photos and notes are the only sources; if neither is found for the range, say so rather than guessing.',
+      'Fetch food photos and any written food notes for an inclusive date range so they can be analyzed for approximate calorie/macro content. Returns each photo as an inline image labeled with the date AND local time it was uploaded (e.g. "Date: 2026-08-28, uploaded 08:15") — use that real time to label meals in save_nutrition_estimate\'s optional per-meal breakdown (e.g. a photo uploaded 07:xx-09:xx is very likely breakfast, 12:xx-14:xx likely lunch, 18:xx-20:xx likely dinner, anything clearly outside those windows is more likely a snack) rather than guessing the meal type purely from what the food looks like. If the upload time doesn\'t clearly indicate a specific meal, use a neutral label like "Snack" or "Meal (unclear time)" instead of forcing it into breakfast/lunch/dinner. Also returns any freeform notes the athlete typed directly in the app describing what they ate (an alternative to photographing everything) — these have no per-item time, so anchor their content to the day generally. Also returns pantry_brief: the athlete\'s staple foods with their exact per-100g macros, usual portion sizes, and visual descriptions — ALWAYS apply this before estimating, since several staples (kvarg in particular) are visually ambiguous and have previously been misidentified as milk or yogurt, which is wrong on both calories and protein. Use this when the athlete asks about their eating/calories for a period — there is no separate calorie database yet, so photos and notes are the only sources; if neither is found for the range, say so rather than guessing.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -216,12 +219,16 @@ async function handleListFoodPhotosForRange(args: Record<string, unknown>) {
     return { error: 'BLOB_READ_WRITE_TOKEN is not configured' }
   }
 
-  const [matches, notes] = await Promise.all([
+  await seedPantryIfEmpty()
+
+  const [matches, notes, pantry] = await Promise.all([
     matchFoodPhotoBlobsForRange(startDate, endDate, token),
     readFoodNotesForRange(startDate, endDate),
+    readPantry(),
   ])
 
   const noteSummaries = notes.map((n) => ({ date: n._id, text: n.text }))
+  const pantryBrief = formatPantryBrief(pantry)
 
   if (matches.length === 0) {
     return {
@@ -231,6 +238,7 @@ async function handleListFoodPhotosForRange(args: Record<string, unknown>) {
           : `No food photos or notes found between ${startDate} and ${endDate}.`,
       photos: [],
       notes: noteSummaries,
+      pantry_brief: pantryBrief,
     }
   }
 
@@ -246,6 +254,7 @@ async function handleListFoodPhotosForRange(args: Record<string, unknown>) {
     summary: `Found ${matches.length} food photo(s) and ${noteSummaries.length} written note(s) between ${startDate} and ${endDate}.`,
     photos: photos.filter((p): p is { date: string; time: string; photo: { data: string; mimeType: string } } => p.photo !== null),
     notes: noteSummaries,
+    pantry_brief: pantryBrief,
   }
 }
 
@@ -727,7 +736,11 @@ async function dispatch(req: McpRequest): Promise<Response> {
         if ('error' in result) {
           return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] })
         }
-        const content: unknown[] = [{ type: 'text', text: result.summary }]
+        const content: unknown[] = []
+        if (result.pantry_brief) {
+          content.push({ type: 'text', text: result.pantry_brief })
+        }
+        content.push({ type: 'text', text: result.summary })
         for (const n of result.notes) {
           content.push({ type: 'text', text: `Note for ${n.date}: ${n.text}` })
         }
