@@ -120,6 +120,10 @@ export const NutritionLogEntrySchema = z.object({
   })).optional(), // per-meal breakdown, optional — day total above always applies regardless
   description: z.string(),
   analyzedAt: z.string(), // ISO timestamp of when this estimate was saved
+  // Blob pathnames of the food photos this estimate accounts for. Lets
+  // list_food_photos_for_range skip photos already folded into a saved
+  // estimate when the caller opts in, instead of re-sending them every call.
+  analyzedPhotoPathnames: z.array(z.string()).optional(),
 })
 
 // Freeform note about what was eaten on a given day, typed directly in the app

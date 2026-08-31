@@ -111,10 +111,17 @@ export default async function Home() {
   const prevWeekStart = format(subWeeks(parseISO(currentWeekStart), 1), 'yyyy-MM-dd')
   const prevWeekEnd = format(addDays(parseISO(prevWeekStart), todayRemapped), 'yyyy-MM-dd')
 
-  const [nutritionEntries, prevNutritionEntries] = await Promise.all([
+  // Widest range covering every week shown in WeekBrowser (archived + current),
+  // fetched once and sliced per-week client-side rather than one query per week.
+  const allDisplayedDates = [...archivedWeeks, week].flatMap((w) => w.sessions.map((s) => s.date))
+  const browserRangeStart = allDisplayedDates.length > 0 ? [...allDisplayedDates].sort()[0] : currentWeekStart
+
+  const [nutritionEntries, prevNutritionEntries, browserNutritionEntries] = await Promise.all([
     readNutritionLogForRange(currentWeekStart, todayISO),
     readNutritionLogForRange(prevWeekStart, prevWeekEnd),
+    readNutritionLogForRange(browserRangeStart, todayISO),
   ])
+  const nutritionByDate = Object.fromEntries(browserNutritionEntries.map((e) => [e._id, e]))
 
   const avgCalIntake = nutritionEntries.length > 0
     ? Math.round(nutritionEntries.reduce((sum, e) => sum + e.estimatedCalories, 0) / nutritionEntries.length)
@@ -201,7 +208,12 @@ export default async function Home() {
         </div>
 
         <div className="animate-fade-in-up" style={{ animationDelay: '80ms' }}>
-          <WeekBrowser weeks={[...archivedWeeks, week]} pendingWeek={pendingWeek ?? undefined} todayISO={todayISO} />
+          <WeekBrowser
+            weeks={[...archivedWeeks, week]}
+            pendingWeek={pendingWeek ?? undefined}
+            todayISO={todayISO}
+            nutritionByDate={nutritionByDate}
+          />
         </div>
 
         <footer className="hidden md:flex items-center gap-4 pt-4 border-t border-zinc-800">

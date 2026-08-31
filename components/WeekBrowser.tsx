@@ -1,16 +1,17 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import type { WeekDoc } from '@/lib/schema'
+import type { WeekDoc, NutritionLogEntry } from '@/lib/schema'
 import WeekGrid from './WeekGrid'
 
 interface WeekBrowserProps {
   weeks: WeekDoc[]
   pendingWeek?: WeekDoc
   todayISO: string
+  nutritionByDate?: Record<string, NutritionLogEntry>
 }
 
-export default function WeekBrowser({ weeks, pendingWeek, todayISO }: WeekBrowserProps) {
+export default function WeekBrowser({ weeks, pendingWeek, todayISO, nutritionByDate = {} }: WeekBrowserProps) {
   const allWeeks = pendingWeek ? [...weeks, pendingWeek] : weeks
 
   const defaultDayForWeek = (week: WeekDoc) =>
@@ -27,6 +28,28 @@ export default function WeekBrowser({ weeks, pendingWeek, todayISO }: WeekBrowse
     [selected.sessions],
   )
 
+  const nutritionSummary = useMemo(() => {
+    // Only count days up to today — future/planned days in the current week
+    // never have an estimate and shouldn't count as "missing" one.
+    const relevantDates = selected.sessions.map((s) => s.date).filter((d) => d <= todayISO)
+    const entries = relevantDates
+      .map((d) => nutritionByDate[d])
+      .filter((e): e is NutritionLogEntry => e != null)
+    if (relevantDates.length === 0) return null
+    const totalCalories = entries.reduce((sum, e) => sum + e.estimatedCalories, 0)
+    const totalProtein = entries.reduce((sum, e) => sum + (e.macros?.protein ?? 0), 0)
+    const totalCarbs = entries.reduce((sum, e) => sum + (e.macros?.carbs ?? 0), 0)
+    const totalFat = entries.reduce((sum, e) => sum + (e.macros?.fat ?? 0), 0)
+    return {
+      daysLogged: entries.length,
+      daysMissing: relevantDates.length - entries.length,
+      avgCalories: entries.length > 0 ? Math.round(totalCalories / entries.length) : 0,
+      avgProtein: entries.length > 0 ? Math.round(totalProtein / entries.length) : 0,
+      avgCarbs: entries.length > 0 ? Math.round(totalCarbs / entries.length) : 0,
+      avgFat: entries.length > 0 ? Math.round(totalFat / entries.length) : 0,
+    }
+  }, [selected.sessions, nutritionByDate, todayISO])
+
   return (
     <section>
       <div className="flex items-center gap-3 mb-4">
@@ -38,6 +61,34 @@ export default function WeekBrowser({ weeks, pendingWeek, todayISO }: WeekBrowse
           {completedCount}/{selected.sessions.length} DONE
         </span>
       </div>
+
+      {nutritionSummary && nutritionSummary.daysLogged > 0 && (
+        <div className="mb-4 rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-1">
+          <div>
+            <span className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase mr-2">
+              Avg Daily Intake
+            </span>
+            <span className="text-zinc-100 font-mono font-bold text-sm">
+              {nutritionSummary.avgCalories.toLocaleString()} cal
+            </span>
+          </div>
+          {(nutritionSummary.avgProtein > 0 || nutritionSummary.avgCarbs > 0 || nutritionSummary.avgFat > 0) && (
+            <span className="text-zinc-500 text-xs font-mono">
+              {[
+                nutritionSummary.avgProtein > 0 ? `${nutritionSummary.avgProtein}g protein` : null,
+                nutritionSummary.avgCarbs > 0 ? `${nutritionSummary.avgCarbs}g carbs` : null,
+                nutritionSummary.avgFat > 0 ? `${nutritionSummary.avgFat}g fat` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </span>
+          )}
+          <span className="text-zinc-600 text-xs font-mono ml-auto">
+            {nutritionSummary.daysLogged} day{nutritionSummary.daysLogged === 1 ? '' : 's'} logged
+            {nutritionSummary.daysMissing > 0 ? `, ${nutritionSummary.daysMissing} missing` : ''}
+          </span>
+        </div>
+      )}
 
       <div className="mb-4 flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2">
         <button

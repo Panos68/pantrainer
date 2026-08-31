@@ -178,18 +178,33 @@ export default function DayCard({
           </span>
         </div>
       )}
+      {readOnly && showDetails && (
+        <div className="pt-1">
+          <Link
+            href={`/log/day/${session.date}`}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex h-8 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 px-3 text-[10px] font-mono font-bold tracking-[0.12em] uppercase transition-colors"
+          >
+            View Full Day →
+          </Link>
+        </div>
+      )}
     </div>
   )
 
   if (readOnly) {
     return (
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setExpanded((prev) => !prev)}
-        className={cn(cardClassName, 'w-full text-left')}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') setExpanded((prev) => !prev)
+        }}
+        className={cn(cardClassName, 'w-full text-left cursor-pointer')}
       >
         {content}
-      </button>
+      </div>
     )
   }
 
