@@ -292,10 +292,12 @@ export const AutomationNotesSchema = z.preprocess((raw) => {
 
   const explicitConstraints = typeof obj.constraints === 'string' ? obj.constraints : ''
   const explicitPriorities = typeof obj.priorities_context === 'string' ? obj.priorities_context : ''
-  if (explicitConstraints || explicitPriorities) {
+  const explicitCoachingRules = typeof obj.coaching_rules === 'string' ? obj.coaching_rules : ''
+  if (explicitConstraints || explicitPriorities || explicitCoachingRules) {
     return {
       constraints: explicitConstraints,
       priorities_context: explicitPriorities,
+      coaching_rules: explicitCoachingRules,
       updated_at: typeof obj.updated_at === 'string' ? obj.updated_at : null,
     }
   }
@@ -319,6 +321,12 @@ export const AutomationNotesSchema = z.preprocess((raw) => {
 }, z.object({
   constraints: z.string().default(''),
   priorities_context: z.string().default(''),
+  // Stable coaching philosophy/session-structure rules (weekly pattern, deload
+  // logic, progression pace, exercise_groups schema, etc.) — unlike the two
+  // fields above, this rarely changes and is meant to be the single source of
+  // truth for any caller (Project chat, scheduled task, or otherwise), so it
+  // can't silently drop out when an external prompt gets edited or corrupted.
+  coaching_rules: z.string().default(''),
   updated_at: z.string().nullable().default(null),
 }))
 

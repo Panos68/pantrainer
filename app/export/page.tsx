@@ -32,6 +32,7 @@ type ImportState =
 interface AutomationNotesData {
   constraints: string
   priorities_context: string
+  coaching_rules: string
   updated_at: string | null
 }
 
@@ -421,6 +422,7 @@ function ImportSection() {
   const [notes, setNotes] = useState<AutomationNotesData>({
     constraints: '',
     priorities_context: '',
+    coaching_rules: '',
     updated_at: null,
   })
   const [notesSaving, setNotesSaving] = useState(false)
@@ -782,6 +784,26 @@ function ImportSection() {
       <p className="text-zinc-500 text-xs font-mono tracking-widest uppercase">
         Default flow: MCP automation. Manual JSON import is in Advanced.
       </p>
+
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
+        <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
+          Coaching rules (stable — fetched automatically by any caller)
+        </p>
+        <p className="text-zinc-600 text-[10px] font-mono leading-relaxed">
+          Your training philosophy: weekly pattern, deload logic, progression pace,
+          exercise_groups structure rules, etc. Returned as part of automation_notes
+          by get_current_week/export_v2, so it reaches a scheduled task or chat
+          the same way regardless of whether it has access to any external
+          project/prompt config — edit it here once, everywhere gets it.
+        </p>
+        <textarea
+          value={notes.coaching_rules}
+          onChange={(e) => setNotes((prev) => ({ ...prev, coaching_rules: e.target.value }))}
+          rows={14}
+          placeholder="Stable coaching rules (weekly pattern, deload logic, progression pace, exercise/session structure rules...)"
+          className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-600 rounded-xl px-4 py-3 text-zinc-200 text-xs font-mono placeholder:text-zinc-600 resize-y outline-none transition-colors"
+        />
+      </div>
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
         <p className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">

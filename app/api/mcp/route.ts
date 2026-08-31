@@ -29,7 +29,7 @@ const TOOLS = [
   {
     name: 'get_current_week',
     description:
-      'Fetch the current training week export (v2 coach context), automation notes/rules, and the latest proposed plan draft (if any).',
+      'Fetch the current training week export (v2 coach context), automation notes/rules, and the latest proposed plan draft (if any). The response\'s automation_notes.coaching_rules is the athlete\'s stable training philosophy (weekly pattern, deload logic, progression pace, session/exercise_groups structure rules, etc.) — this is the single source of truth for those rules and MUST be treated as binding when planning or submitting a week, taking precedence over any conflicting recollection from earlier in the conversation or from an external prompt/project, since those can go stale or get edited incorrectly. automation_notes.constraints and .priorities_context are separate, situational/temporary notes (travel windows, this-week priorities) and change more often.',
     inputSchema: {
       type: 'object',
       properties: {},
