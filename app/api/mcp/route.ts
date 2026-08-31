@@ -380,8 +380,8 @@ async function handleGetNutritionSummaryForRange(args: Record<string, unknown>) 
   const entries = await readNutritionLogForRange(startDate, endDate)
   const entryByDate = new Map(entries.map((e) => [e._id, e]))
 
-  let gapDates: string[] = []
-  let staleDates: string[] = []
+  const gapDates: string[] = []
+  const staleDates: string[] = []
   const token = process.env.BLOB_READ_WRITE_TOKEN
   if (token) {
     const [photoMatches, notes] = await Promise.all([

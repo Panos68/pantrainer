@@ -50,16 +50,17 @@ export default function ArchivedDayPage() {
   useEffect(() => {
     if (!date) return
     let cancelled = false
-    setLoading(true)
-    setError(null)
 
-    Promise.all([
-      fetch(`/api/session/by-date/${date}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : Promise.reject(r))),
-      fetch(`/api/nutrition-log?date=${date}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      fetch(`/api/food-photos?date=${date}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      fetch(`/api/food-notes?date=${date}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-    ])
-      .then(([sessionRes, nutrition, photos, note]) => {
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const [sessionRes, nutrition, photos, note] = await Promise.all([
+          fetch(`/api/session/by-date/${date}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : Promise.reject(r))),
+          fetch(`/api/nutrition-log?date=${date}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          fetch(`/api/food-photos?date=${date}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          fetch(`/api/food-notes?date=${date}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        ])
         if (cancelled) return
         setSession(sessionRes.session)
         setIsCurrent(Boolean(sessionRes.isCurrent))
@@ -67,13 +68,14 @@ export default function ArchivedDayPage() {
         setNutritionEntry(nutrition ?? null)
         setFoodPhotos(Array.isArray(photos?.photos) ? photos.photos : Array.isArray(photos) ? photos : [])
         setFoodNote(note?.text ?? null)
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setError('Day not found.')
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false)
-      })
+      }
+    }
+
+    void load()
 
     return () => {
       cancelled = true
