@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import type { WeekDoc, NutritionLogEntry } from '@/lib/schema'
+import { isMidDaySnapshot } from '@/lib/recovery-freshness'
 import WeekGrid from './WeekGrid'
 
 interface WeekBrowserProps {
@@ -40,6 +41,24 @@ export default function WeekBrowser({ weeks, pendingWeek, todayISO, nutritionByD
     const totalProtein = entries.reduce((sum, e) => sum + (e.macros?.protein ?? 0), 0)
     const totalCarbs = entries.reduce((sum, e) => sum + (e.macros?.carbs ?? 0), 0)
     const totalFat = entries.reduce((sum, e) => sum + (e.macros?.fat ?? 0), 0)
+
+    // Balance needs a day's burn to be FINAL, not a live same-day snapshot —
+    // only pair up days that have both a saved estimate and a settled burn.
+    const recovery = selected.garmin_recovery ?? {}
+    const balanceDates = relevantDates.filter((d) => {
+      const entry = nutritionByDate[d]
+      const burn = recovery[d]?.total_kilocalories
+      if (!entry || typeof burn !== 'number' || burn <= 0) return false
+      return !isMidDaySnapshot(d, recovery[d]?.fetched_at)
+    })
+    const avgBurn = balanceDates.length > 0
+      ? Math.round(balanceDates.reduce((sum, d) => sum + (recovery[d].total_kilocalories as number), 0) / balanceDates.length)
+      : null
+    const avgIntakeForBalance = balanceDates.length > 0
+      ? Math.round(balanceDates.reduce((sum, d) => sum + nutritionByDate[d].estimatedCalories, 0) / balanceDates.length)
+      : null
+    const avgBalance = avgBurn != null && avgIntakeForBalance != null ? avgBurn - avgIntakeForBalance : null
+
     return {
       daysLogged: entries.length,
       daysMissing: relevantDates.length - entries.length,
@@ -47,8 +66,11 @@ export default function WeekBrowser({ weeks, pendingWeek, todayISO, nutritionByD
       avgProtein: entries.length > 0 ? Math.round(totalProtein / entries.length) : 0,
       avgCarbs: entries.length > 0 ? Math.round(totalCarbs / entries.length) : 0,
       avgFat: entries.length > 0 ? Math.round(totalFat / entries.length) : 0,
+      avgBurn,
+      avgBalance,
+      balanceDaysCount: balanceDates.length,
     }
-  }, [selected.sessions, nutritionByDate, todayISO])
+  }, [selected.sessions, nutritionByDate, todayISO, selected.garmin_recovery])
 
   return (
     <section>
@@ -81,6 +103,26 @@ export default function WeekBrowser({ weeks, pendingWeek, todayISO, nutritionByD
               ]
                 .filter(Boolean)
                 .join(' · ')}
+            </span>
+          )}
+          {nutritionSummary.avgBurn != null && (
+            <div>
+              <span className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase mr-2">
+                Avg Burn
+              </span>
+              <span className="text-zinc-100 font-mono font-bold text-sm">
+                {nutritionSummary.avgBurn.toLocaleString()} cal
+              </span>
+            </div>
+          )}
+          {nutritionSummary.avgBalance != null && (
+            <span
+              className={`font-mono font-bold text-sm ${nutritionSummary.avgBalance > 0 ? 'text-lime-400' : 'text-amber-400'}`}
+            >
+              Avg {nutritionSummary.avgBalance > 0 ? 'Deficit' : 'Surplus'}: {Math.abs(nutritionSummary.avgBalance).toLocaleString()} cal
+              {nutritionSummary.balanceDaysCount < nutritionSummary.daysLogged && (
+                <span className="text-zinc-600 font-normal"> ({nutritionSummary.balanceDaysCount}d)</span>
+              )}
             </span>
           )}
           <span className="text-zinc-600 text-xs font-mono ml-auto">
