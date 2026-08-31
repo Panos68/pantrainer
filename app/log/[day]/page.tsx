@@ -385,7 +385,7 @@ export default function LogDayPage() {
     }
     const updated: Session = await res.json()
     setSession(updated)
-    const flatExercises = updated.exercise_groups
+    const flatExercises = updated.exercise_groups && updated.exercise_groups.length > 0
       ? updated.exercise_groups.flatMap((g) => g.exercises)
       : (updated.exercises ?? [])
     setSetLogEdits(Object.fromEntries(flatExercises.map((ex, i) => [i, ex.set_log ?? []])))
@@ -445,7 +445,7 @@ export default function LogDayPage() {
         // Seed setLogEdits/actualNotes from the session's raw data (indexed to match the
         // flattened exercises array). Rows with no set_log yet fall back at display time
         // (see getRowDisplay) to plan-derived defaults — nothing to seed here for those.
-        const flatExercises = sessionData.exercise_groups
+        const flatExercises = sessionData.exercise_groups && sessionData.exercise_groups.length > 0
           ? sessionData.exercise_groups.flatMap((g) => g.exercises)
           : (sessionData.exercises ?? [])
         setSetLogEdits(
@@ -530,7 +530,7 @@ export default function LogDayPage() {
     let exercises: Session['exercises']
     let exercise_groups: ExerciseGroup[] | undefined
 
-    if (session?.exercise_groups) {
+    if (session?.exercise_groups && session.exercise_groups.length > 0) {
       // Build groups with actuals merged, tracking a global index across groups
       let globalIndex = 0
       exercise_groups = session.exercise_groups.map((group) => ({
@@ -1034,8 +1034,8 @@ export default function LogDayPage() {
         )}
 
         {/* Exercise table — interactive for all session types with exercises */}
-        {(session.exercise_groups ? session.exercise_groups.flatMap(g => g.exercises).length > 0 : session.exercises?.length > 0) && (() => {
-          const flatForWeightCheck = session.exercise_groups
+        {(session.exercise_groups && session.exercise_groups.length > 0 ? session.exercise_groups.flatMap(g => g.exercises).length > 0 : session.exercises?.length > 0) && (() => {
+          const flatForWeightCheck = session.exercise_groups && session.exercise_groups.length > 0
             ? session.exercise_groups.flatMap((g) => g.exercises)
             : (session.exercises ?? [])
           const showWeightCol = type === 'Strength' || flatForWeightCheck.some(
@@ -1251,7 +1251,7 @@ export default function LogDayPage() {
             </div>
           )
 
-          if (session.exercise_groups) {
+          if (session.exercise_groups && session.exercise_groups.length > 0) {
             const totalExercises = session.exercise_groups.reduce((sum, g) => sum + g.exercises.length, 0)
             let globalIndex = 0
             return (
