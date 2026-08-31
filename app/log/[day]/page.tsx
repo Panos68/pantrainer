@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { Session, GarminRecoveryDay, ExerciseGroup, SetEntry } from '@/lib/schema'
@@ -228,6 +228,15 @@ export default function LogDayPage() {
   const [avgHr, setAvgHr] = useState('')
   const [calories, setCalories] = useState('')
   const [notes, setNotes] = useState('')
+  // saveSession() is a plain function re-created each render; once it's
+  // running, awaiting a promise inside it does NOT give it a fresh `notes`
+  // closure on resolve — it still sees the value from whenever it was
+  // called. Read the payload's notes from this ref (kept in sync below)
+  // instead, so a same-action Garmin sync's setNotes() is picked up.
+  const notesRef = useRef(notes)
+  useEffect(() => {
+    notesRef.current = notes
+  }, [notes])
   const [rpe, setRpe] = useState('')
   const [photos, setPhotos] = useState<string[]>([])
   const [uploadingPhotos, setUploadingPhotos] = useState(false)
@@ -540,7 +549,7 @@ export default function LogDayPage() {
       avg_hr_bpm: avgHr ? Number(avgHr) : null,
       total_calories: calories ? Number(calories) : null,
       rpe: rpe !== '' ? Number(rpe) : null,
-      notes,
+      notes: notesRef.current,
       photos,
       exercises,
       exercise_groups,
@@ -598,9 +607,14 @@ export default function LogDayPage() {
     setSaving(true)
     setSaveMsg('')
     try {
-      // Fire Garmin sync in background — don't block the save on it
+      // Await the Garmin sync before building the payload — this call is what
+      // detects/formats multi-activity notes, and "Mark Complete" redirects
+      // home right after saving. Firing it in the background let the redirect
+      // (or the very next buildPayload() below) race ahead of it, so a
+      // just-finished second activity's notes were silently dropped instead
+      // of ending up in the saved session.
       if ((options?.syncGarmin ?? false) && session) {
-        refreshFromGarmin({ date: session.date, type: session.type }, false).catch(() => {})
+        await refreshFromGarmin({ date: session.date, type: session.type }, false).catch(() => null)
       }
       const payload = mergeGarminIntoPayload(buildPayload(), null)
       const res = await fetch(`/api/session/${day}`, {
