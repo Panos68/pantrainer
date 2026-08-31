@@ -275,6 +275,27 @@ export async function readAllArchivedWeeks(): Promise<WeekDoc[]> {
   return readWeeksByIds(ids)
 }
 
+/**
+ * Find whichever week (current or archived) contains a session for `date`.
+ * Used by the read-only day-detail view so a past day is reachable after its
+ * week has rolled over — checks the current week first (cheap, cached), then
+ * falls back to a direct query against archived week docs.
+ */
+export async function readWeekContainingDate(date: string): Promise<{ week: WeekDoc; isCurrent: boolean } | null> {
+  const current = await readCurrentWeekDirect()
+  if (current?.sessions.some((s) => s.date === date)) {
+    return { week: current, isCurrent: true }
+  }
+
+  const db = await getDb()
+  const doc = await db.collection('weeks').findOne({
+    _id: { $regex: '^archive-' } as never,
+    'value.sessions.date': date as never,
+  } as never)
+  if (!doc) return null
+  return { week: WeekDocSchema.parse(doc.value), isCurrent: false }
+}
+
 // ─── Daily readiness ──────────────────────────────────────────────────────────
 
 export async function readDailyReadiness(date: string): Promise<DailyReadiness | null> {

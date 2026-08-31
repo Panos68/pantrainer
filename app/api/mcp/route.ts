@@ -86,7 +86,7 @@ const TOOLS = [
   {
     name: 'get_garmin_recovery_freshness',
     description:
-      'Check whether cached Garmin recovery data for a given date is actually present and current, before using it to give advice. Returns sleep, resting/max HR, Body Battery, Stress, VO2 max, and Fitness Age (whichever are cached), the recovery score breakdown is NOT included here — use the score directly from the week doc if needed. Includes an explicit warning when data is missing or stale, a same_day flag, and a per-field field_warnings object distinguishing "not synced yet", "Garmin genuinely has no data for this field on this date" (e.g. VO2 max is only recomputed periodically, not daily), and — for Body Battery/Stress specifically when same_day is true — "still accumulating, not a final total yet" (sleep/RHR are overnight-derived and already final by morning, so this third case never applies to them). Use this before trusting any of these numbers.',
+      'Check whether cached Garmin recovery data for a given date is actually present and current, before using it to give advice. Returns sleep, resting/max HR, Body Battery, Stress, VO2 max, Fitness Age, and total_kilocalories (Garmin\'s own daily calorie burn — use this to compute calorie balance against logged intake) (whichever are cached), the recovery score breakdown is NOT included here — use the score directly from the week doc if needed. Includes an explicit warning when data is missing or stale, a same_day flag, and a per-field field_warnings object distinguishing "not synced yet", "Garmin genuinely has no data for this field on this date" (e.g. VO2 max is only recomputed periodically, not daily), and — for Body Battery/Stress/total_kilocalories specifically when same_day is true — "still accumulating, not a final total yet" (sleep/RHR are overnight-derived and already final by morning, so this third case never applies to them). Use this before trusting any of these numbers.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -114,12 +114,17 @@ const TOOLS = [
   {
     name: 'list_food_photos_for_range',
     description:
-      'Fetch food photos and any written food notes for an inclusive date range so they can be analyzed for approximate calorie/macro content. Returns each photo as an inline image labeled with the date AND local time it was uploaded (e.g. "Date: 2026-08-28, uploaded 08:15") — use that real time to label meals in save_nutrition_estimate\'s optional per-meal breakdown (e.g. a photo uploaded 07:xx-09:xx is very likely breakfast, 12:xx-14:xx likely lunch, 18:xx-20:xx likely dinner, anything clearly outside those windows is more likely a snack) rather than guessing the meal type purely from what the food looks like. If the upload time doesn\'t clearly indicate a specific meal, use a neutral label like "Snack" or "Meal (unclear time)" instead of forcing it into breakfast/lunch/dinner. Also returns any freeform notes the athlete typed directly in the app describing what they ate (an alternative to photographing everything) — these have no per-item time, so anchor their content to the day generally. Also returns pantry_brief: the athlete\'s staple foods with their exact per-100g macros, usual portion sizes, and visual descriptions — ALWAYS apply this before estimating, since several staples (kvarg in particular) are visually ambiguous and have previously been misidentified as milk or yogurt, which is wrong on both calories and protein. Use this when the athlete asks about their eating/calories for a period — there is no separate calorie database yet, so photos and notes are the only sources; if neither is found for the range, say so rather than guessing.',
+      'Fetch food photos and any written food notes for an inclusive date range so they can be analyzed for approximate calorie/macro content. Returns each photo as an inline image labeled with the date, local time it was uploaded, AND its blob pathname (e.g. "Date: 2026-08-28, uploaded 08:15, pathname: data/food-photos/2026-08-28/xyz.jpg") — use that real time to label meals in save_nutrition_estimate\'s optional per-meal breakdown (e.g. a photo uploaded 07:xx-09:xx is very likely breakfast, 12:xx-14:xx likely lunch, 18:xx-20:xx likely dinner, anything clearly outside those windows is more likely a snack) rather than guessing the meal type purely from what the food looks like, and pass the pathnames back via photo_pathnames when saving so a later exclude_analyzed call can skip them. If the upload time doesn\'t clearly indicate a specific meal, use a neutral label like "Snack" or "Meal (unclear time)" instead of forcing it into breakfast/lunch/dinner. Also returns any freeform notes the athlete typed directly in the app describing what they ate (an alternative to photographing everything) — these have no per-item time, so anchor their content to the day generally. Also returns pantry_brief: the athlete\'s staple foods with their exact per-100g macros, usual portion sizes, and visual descriptions — ALWAYS apply this before estimating, since several staples (kvarg in particular) are visually ambiguous and have previously been misidentified as milk or yogurt, which is wrong on both calories and protein. Use this when the athlete asks about their eating/calories for a period — there is no separate calorie database yet, so photos and notes are the only sources; if neither is found for the range, say so rather than guessing.',
     inputSchema: {
       type: 'object',
       properties: {
         start_date: { type: 'string', description: 'ISO date (YYYY-MM-DD), inclusive start of range. Required.' },
         end_date: { type: 'string', description: 'ISO date (YYYY-MM-DD), inclusive end of range. Required.' },
+        exclude_analyzed: {
+          type: 'boolean',
+          description:
+            'When true, skip photos whose pathname is already recorded in a saved estimate\'s analyzedPhotoPathnames for that date (saves tokens on repeat calls over an overlapping range). Default false — leave false whenever a day needs a FULL re-analysis (e.g. a day flagged stale by get_nutrition_summary_for_range), since that always requires re-looking at every photo for the day, not just new ones.',
+        },
       },
       required: ['start_date', 'end_date'],
     },
@@ -137,6 +142,12 @@ const TOOLS = [
         carbs: { type: 'number', description: 'Estimated grams of carbs for the day.' },
         fat: { type: 'number', description: 'Estimated grams of fat for the day.' },
         description: { type: 'string', description: 'Brief description of what was eaten. Required.' },
+        photo_pathnames: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Pathnames (from list_food_photos_for_range) of every photo this estimate accounts for. Optional, but recording it is what lets a later list_food_photos_for_range(exclude_analyzed: true) call skip these photos instead of re-sending them. Replaces the prior list wholesale on re-save — always pass the full current set, not just newly added photos.',
+        },
         meals: {
           type: 'array',
           description: 'Optional per-meal breakdown (e.g. one entry per Breakfast/Lunch/Dinner/Snack) — the day-level calories/protein/carbs/fat above still apply as the whole-day total regardless of whether this is provided.',
@@ -227,6 +238,7 @@ async function handleListFoodPhotosForRange(args: Record<string, unknown>) {
   if (typeof startDate !== 'string' || typeof endDate !== 'string') {
     return { error: 'start_date and end_date are required ISO date strings' }
   }
+  const excludeAnalyzed = args.exclude_analyzed === true
 
   const token = process.env.BLOB_READ_WRITE_TOKEN
   if (!token) {
@@ -235,11 +247,21 @@ async function handleListFoodPhotosForRange(args: Record<string, unknown>) {
 
   await seedPantryIfEmpty()
 
-  const [matches, notes, pantry] = await Promise.all([
+  const [allMatches, notes, pantry, nutritionEntries] = await Promise.all([
     matchFoodPhotoBlobsForRange(startDate, endDate, token),
     readFoodNotesForRange(startDate, endDate),
     readPantry(),
+    excludeAnalyzed ? readNutritionLogForRange(startDate, endDate) : Promise.resolve([]),
   ])
+
+  // Pathnames already folded into a saved estimate for their date — only
+  // computed/excluded when the caller opts in, so the default behavior (and
+  // any stale-day full re-analysis) still sees every photo.
+  const analyzedPathnames = new Set(
+    nutritionEntries.flatMap((e) => e.analyzedPhotoPathnames ?? []),
+  )
+  const matches = excludeAnalyzed ? allMatches.filter((m) => !analyzedPathnames.has(m.pathname)) : allMatches
+  const skippedCount = allMatches.length - matches.length
 
   const noteSummaries = notes.map((n) => ({ date: n._id, text: n.text }))
   const pantryBrief = formatPantryBrief(pantry)
@@ -247,9 +269,11 @@ async function handleListFoodPhotosForRange(args: Record<string, unknown>) {
   if (matches.length === 0) {
     return {
       summary:
-        noteSummaries.length > 0
-          ? `No food photos found between ${startDate} and ${endDate}, but ${noteSummaries.length} written note(s) exist.`
-          : `No food photos or notes found between ${startDate} and ${endDate}.`,
+        skippedCount > 0
+          ? `No unanalyzed food photos between ${startDate} and ${endDate} (${skippedCount} already accounted for in a saved estimate). ${noteSummaries.length} written note(s) exist.`
+          : noteSummaries.length > 0
+            ? `No food photos found between ${startDate} and ${endDate}, but ${noteSummaries.length} written note(s) exist.`
+            : `No food photos or notes found between ${startDate} and ${endDate}.`,
       photos: [],
       notes: noteSummaries,
       pantry_brief: pantryBrief,
@@ -260,13 +284,14 @@ async function handleListFoodPhotosForRange(args: Record<string, unknown>) {
     matches.map(async (m) => ({
       date: m.date,
       time: formatTimeInAppTimeZone(m.uploadedAt),
+      pathname: m.pathname,
       photo: await fetchPhotoAsBase64(m.pathname),
     })),
   )
 
   return {
-    summary: `Found ${matches.length} food photo(s) and ${noteSummaries.length} written note(s) between ${startDate} and ${endDate}.`,
-    photos: photos.filter((p): p is { date: string; time: string; photo: { data: string; mimeType: string } } => p.photo !== null),
+    summary: `Found ${matches.length} food photo(s) and ${noteSummaries.length} written note(s) between ${startDate} and ${endDate}.${skippedCount > 0 ? ` (${skippedCount} already-analyzed photo(s) skipped.)` : ''}`,
+    photos: photos.filter((p): p is { date: string; time: string; pathname: string; photo: { data: string; mimeType: string } } => p.photo !== null),
     notes: noteSummaries,
     pantry_brief: pantryBrief,
   }
@@ -321,6 +346,10 @@ async function handleSaveNutritionEstimate(args: Record<string, unknown>) {
       }
     })
 
+  const photoPathnames = Array.isArray(args.photo_pathnames)
+    ? args.photo_pathnames.filter((p): p is string => typeof p === 'string')
+    : []
+
   const entry: NutritionLogEntry = {
     _id: date,
     estimatedCalories: calories,
@@ -331,6 +360,10 @@ async function handleSaveNutritionEstimate(args: Record<string, unknown>) {
     ...(meals.length > 0 ? { meals } : {}),
     description,
     analyzedAt: new Date().toISOString(),
+    // Re-saving a date overwrites the whole entry (see tool description), so
+    // this list is replaced wholesale each save too — it always reflects
+    // exactly the photos this saved total accounts for, never a stale union.
+    ...(photoPathnames.length > 0 ? { analyzedPhotoPathnames: photoPathnames } : {}),
   }
 
   await writeNutritionLogEntry(entry)
@@ -604,6 +637,9 @@ async function handleGetGarminRecoveryFreshness(args: Record<string, unknown>) {
       (isSameDay && recovery?.avg_stress_level != null ? sameDayCaveat('Stress') : null),
     vo2max: fieldWarning('VO2 max', recovery?.vo2max, 'Garmin only recomputes this periodically, not every day'),
     fitness_age: fieldWarning('Fitness Age', recovery?.fitness_age, 'Garmin only recomputes this periodically, not every day'),
+    total_kilocalories:
+      fieldWarning('Total calorie burn', recovery?.total_kilocalories, 'likely the watch wasn\'t worn that day') ??
+      (isSameDay && recovery?.total_kilocalories != null ? sameDayCaveat('Total calorie burn') : null),
   }
 
   return {
@@ -623,6 +659,7 @@ async function handleGetGarminRecoveryFreshness(args: Record<string, unknown>) {
     vo2max: recovery?.vo2max ?? null,
     fitness_age: recovery?.fitness_age ?? null,
     achievable_fitness_age: recovery?.achievable_fitness_age ?? null,
+    total_kilocalories: recovery?.total_kilocalories ?? null,
     fetched_at: recovery?.fetched_at ?? null,
     fetched_hours_ago: fetchedHoursAgo,
     server_now: serverNow.toISOString(),
@@ -777,7 +814,7 @@ async function dispatch(req: McpRequest): Promise<Response> {
           content.push({ type: 'text', text: `Note for ${n.date}: ${n.text}` })
         }
         for (const p of result.photos) {
-          content.push({ type: 'text', text: `Date: ${p.date}, uploaded ${p.time}` })
+          content.push({ type: 'text', text: `Date: ${p.date}, uploaded ${p.time}, pathname: ${p.pathname}` })
           content.push({ type: 'image', data: p.photo.data, mimeType: p.photo.mimeType })
         }
         return mcpResult(id, { content })
