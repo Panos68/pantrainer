@@ -252,7 +252,16 @@ export default function PantryPage() {
                   </label>
                 </div>
 
-                <p className="text-zinc-600 text-[10px] font-mono leading-relaxed">{item.visualCue}</p>
+                <label className="block">
+                  <span className="text-zinc-500 text-[10px] font-mono uppercase tracking-widest">What it looks like</span>
+                  <textarea
+                    value={item.visualCue}
+                    onChange={(e) => updateItem(item._id, { visualCue: e.target.value })}
+                    rows={2}
+                    placeholder="What it looks like — and what it is NOT (e.g. not milk)"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs font-mono text-zinc-200 placeholder:text-zinc-700 focus:border-lime-400 focus:outline-none resize-y"
+                  />
+                </label>
 
                 <div className="flex items-center gap-2">
                   <button
