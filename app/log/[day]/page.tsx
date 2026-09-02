@@ -247,6 +247,7 @@ export default function LogDayPage() {
   const [foodNote, setFoodNote] = useState('')
   const [foodNoteSaving, setFoodNoteSaving] = useState(false)
   const [foodNoteMsg, setFoodNoteMsg] = useState<string | null>(null)
+  const [coachNote, setCoachNote] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'log' | 'recovery' | 'nutrition'>('log')
 
   const [nutritionEntry, setNutritionEntry] = useState<{
@@ -504,6 +505,14 @@ export default function LogDayPage() {
       .then((res) => (res.ok ? res.json() : null))
       .then((note) => setFoodNote(note?.text ?? ''))
       .catch(() => setFoodNote(''))
+  }, [session?.date])
+
+  useEffect(() => {
+    if (!session) return
+    fetch(`/api/coach-note?date=${session.date}`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((note) => setCoachNote(note?.text ?? null))
+      .catch(() => setCoachNote(null))
   }, [session?.date])
 
   const buildPayload = useCallback(() => {
@@ -1607,6 +1616,12 @@ export default function LogDayPage() {
                       still accumulating — both burn and intake for today are incomplete
                     </p>
                   )}
+                </div>
+              )}
+              {coachNote && (
+                <div className="pt-1 border-t border-zinc-800 space-y-1">
+                  <p className="text-cyan-500 text-[10px] font-mono tracking-widest uppercase">Coach</p>
+                  <p className="text-zinc-300 text-xs font-mono leading-relaxed">{coachNote}</p>
                 </div>
               )}
             </div>
