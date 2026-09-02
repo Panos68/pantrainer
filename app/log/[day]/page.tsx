@@ -971,6 +971,13 @@ export default function LogDayPage() {
               </Link>
             )}
             <button
+              onClick={handleRefreshGarmin}
+              disabled={refreshingGarmin || saving}
+              className="px-3 py-1.5 rounded-full border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-mono font-bold tracking-widest uppercase transition-colors disabled:opacity-50"
+            >
+              {refreshingGarmin ? 'Refreshing...' : '↻ Refresh Garmin'}
+            </button>
+            <button
               onClick={() => router.push('/')}
               className="text-zinc-500 hover:text-zinc-300 text-xs font-mono tracking-widest uppercase transition-colors"
             >
@@ -1326,15 +1333,6 @@ export default function LogDayPage() {
           recovery={garminRecovery}
           onFetched={(data) => setGarminRecovery(data)}
         />
-
-        <button
-          type="button"
-          onClick={handleRefreshGarmin}
-          disabled={refreshingGarmin || saving}
-          className="w-full h-10 rounded-xl border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-bold text-xs tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
-        >
-          {refreshingGarmin ? 'Refreshing Garmin...' : 'Refresh Garmin Data'}
-        </button>
         </>
         )}
 
