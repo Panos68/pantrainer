@@ -1,8 +1,9 @@
-import type { WeekDoc } from './schema'
+import type { WeekDoc, NutritionLogEntry } from './schema'
 import { computeDailyScore } from './daily-score'
-import { readArchivedWeeks, readAppState } from './data'
+import { readArchivedWeeks, readAppState, readNutritionLogForRange } from './data'
 import { sessionToLoadPoint, type TrainingLoadPoint } from './training-load'
 import { calcOverloadInsights } from './overload'
+import { isMidDaySnapshot } from './recovery-freshness'
 import { format, parseISO, subDays } from 'date-fns'
 
 export interface ExportPayload {
@@ -75,6 +76,19 @@ export interface CoachContext {
     weeksAtCurrentWeight: number
     suggestion: string
   }>
+  nutrition_summary: {
+    days_logged: number
+    avg_calories: number | null
+    avg_protein_g: number | null
+    avg_carbs_g: number | null
+    avg_fat_g: number | null
+    // Only paired up over days with BOTH a saved estimate and a finalized
+    // (non-mid-day-snapshot) Garmin burn — same rule the home-page weekly
+    // average uses, so this doesn't read as a phantom deficit/surplus.
+    avg_burn_kcal: number | null
+    avg_balance_kcal: number | null
+    balance_days_count: number
+  }
 }
 
 export interface ExportPayloadV2 extends ExportPayload {
@@ -107,6 +121,7 @@ function buildCoachContext(
   currentWeek: WeekDoc,
   archivedWeeks: WeekDoc[],
   training_load_history: TrainingLoadPoint[],
+  nutritionEntries: NutritionLogEntry[],
 ): CoachContext {
   const planned_total = currentWeek.sessions.length
   const completedSessions = currentWeek.sessions.filter((s) => s.status === 'completed')
@@ -160,6 +175,8 @@ function buildCoachContext(
         date,
         sleep: r.sleep_hours ?? null,
         resting_hr: r.resting_hr_bpm ?? null,
+        total_kilocalories: r.total_kilocalories ?? null,
+        fetched_at: r.fetched_at ?? null,
       })),
     )
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -247,6 +264,27 @@ function buildCoachContext(
       ? Math.round((recentRpe.reduce((sum, r) => sum + r.rpe, 0) / recentRpe.length) * 10) / 10
       : null
 
+  const recoveryByDate = new Map(allRecovery.map((r) => [r.date, r]))
+  const avgOrNull = (values: number[]) =>
+    values.length > 0 ? round1(values.reduce((a, b) => a + b, 0) / values.length) : null
+  const avg_calories = avgOrNull(nutritionEntries.map((e) => e.estimatedCalories))
+  const avg_protein_g = avgOrNull(nutritionEntries.map((e) => e.macros?.protein).filter((v): v is number => v != null))
+  const avg_carbs_g = avgOrNull(nutritionEntries.map((e) => e.macros?.carbs).filter((v): v is number => v != null))
+  const avg_fat_g = avgOrNull(nutritionEntries.map((e) => e.macros?.fat).filter((v): v is number => v != null))
+
+  const balanceEntries = nutritionEntries.filter((e) => {
+    const r = recoveryByDate.get(e._id)
+    if (!r || typeof r.total_kilocalories !== 'number' || r.total_kilocalories <= 0) return false
+    return !isMidDaySnapshot(e._id, r.fetched_at)
+  })
+  const avg_burn_kcal = avgOrNull(
+    balanceEntries.map((e) => recoveryByDate.get(e._id)!.total_kilocalories as number),
+  )
+  const avg_balance_kcal =
+    avg_burn_kcal != null && balanceEntries.length > 0
+      ? round1(avg_burn_kcal - balanceEntries.reduce((sum, e) => sum + e.estimatedCalories, 0) / balanceEntries.length)
+      : null
+
   return {
     adherence: {
       completed,
@@ -309,6 +347,16 @@ function buildCoachContext(
       .map(({ exercise, signal, weeksAtCurrentWeight, suggestion }) => ({
         exercise, signal, weeksAtCurrentWeight, suggestion,
       })),
+    nutrition_summary: {
+      days_logged: nutritionEntries.length,
+      avg_calories,
+      avg_protein_g,
+      avg_carbs_g,
+      avg_fat_g,
+      avg_burn_kcal,
+      avg_balance_kcal,
+      balance_days_count: balanceEntries.length,
+    },
   }
 }
 
@@ -349,6 +397,9 @@ export async function buildExport(currentWeek: WeekDoc, options?: { includeDeloa
   }
 }
 
+// Days of nutrition history folded into coach_context.nutrition_summary.
+const NUTRITION_SUMMARY_LOOKBACK_DAYS = 14
+
 export async function buildExportV2(
   currentWeek: WeekDoc,
   options?: { includeDeload?: boolean },
@@ -356,9 +407,16 @@ export async function buildExportV2(
   const base = await buildExport(currentWeek, options)
   const archivedWeeks = await readArchivedWeeks(8)
 
+  // Excludes today — its log is necessarily still in progress and would
+  // skew the average down, same reasoning as the home page's weekly avg.
+  const today = format(new Date(), 'yyyy-MM-dd')
+  const nutritionStart = format(subDays(parseISO(today), NUTRITION_SUMMARY_LOOKBACK_DAYS), 'yyyy-MM-dd')
+  const nutritionEnd = format(subDays(parseISO(today), 1), 'yyyy-MM-dd')
+  const nutritionEntries = await readNutritionLogForRange(nutritionStart, nutritionEnd)
+
   return {
     ...base,
     export_version: 'v2',
-    coach_context: buildCoachContext(currentWeek, archivedWeeks, base.training_load_history),
+    coach_context: buildCoachContext(currentWeek, archivedWeeks, base.training_load_history, nutritionEntries),
   }
 }
