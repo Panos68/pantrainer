@@ -1,5 +1,5 @@
 import { fetchAndStoreRecovery, isMidDaySnapshot, isoDaysAgoInAppTimeZone } from '@/lib/garmin-recovery'
-import { readCurrentWeekDirect } from '@/lib/data'
+import { readCurrentWeekDirect, deleteCoachNote } from '@/lib/data'
 
 // Scheduled at 01:01 UTC (see vercel.json) = 03:01 Europe/Stockholm in summer,
 // 02:01 in winter. Vercel crons are UTC-only, so this is deliberately not
@@ -38,6 +38,14 @@ export async function GET(req: Request) {
 
   for (let daysAgo = 1; daysAgo <= LOOKBACK_DAYS; daysAgo++) {
     const date = isoDaysAgoInAppTimeZone(daysAgo)
+
+    // Yesterday just closed out — any mid-day coach note for it was written
+    // against a partial, no-balance-yet day, so it's stale the moment the
+    // real deficit/surplus is available. Clear it regardless of whether the
+    // recovery refetch below succeeds; it's a no-op if none was ever saved.
+    if (daysAgo === 1) {
+      await deleteCoachNote(date).catch(() => {})
+    }
 
     // Only days the week doc actually tracks — don't backfill across a week rollover.
     if (!week.sessions?.some((s) => s.date === date)) {

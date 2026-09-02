@@ -434,6 +434,15 @@ export async function writeCoachNote(note: CoachNote): Promise<void> {
   )
 }
 
+// A mid-day note is only valid while its day is still in progress — once
+// finalize-day closes a date out, the note's "still partial, no balance yet"
+// framing is stale next to the real deficit/surplus that now shows. Called
+// by that cron rather than left for the next agent call to remember to do.
+export async function deleteCoachNote(date: string): Promise<void> {
+  const db = await getDb()
+  await db.collection('coach_notes').deleteOne({ _id: date as never })
+}
+
 // ─── Pantry ─────────────────────────────────────────────────────────────────
 // The athlete's staple foods, one doc per food. Read on every MCP food-photo
 // call, so keep it small — this is a list of ~10 staples, not a food database.
