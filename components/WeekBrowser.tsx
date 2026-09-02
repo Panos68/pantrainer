@@ -30,9 +30,11 @@ export default function WeekBrowser({ weeks, pendingWeek, todayISO, nutritionByD
   )
 
   const nutritionSummary = useMemo(() => {
-    // Only count days up to today — future/planned days in the current week
-    // never have an estimate and shouldn't count as "missing" one.
-    const relevantDates = selected.sessions.map((s) => s.date).filter((d) => d <= todayISO)
+    // Only count days strictly before today — future/planned days in the
+    // current week never have an estimate and shouldn't count as "missing"
+    // one, and today itself is still in progress so it would skew the
+    // average down while food is still being logged.
+    const relevantDates = selected.sessions.map((s) => s.date).filter((d) => d < todayISO)
     const entries = relevantDates
       .map((d) => nutritionByDate[d])
       .filter((e): e is NutritionLogEntry => e != null)
@@ -196,6 +198,7 @@ export default function WeekBrowser({ weeks, pendingWeek, todayISO, nutritionByD
           sessions={selected.sessions.filter((s) => s.day === activeDay)}
           todayISO={isCurrent ? todayISO : ''}
           garminRecovery={selected.garmin_recovery ?? {}}
+          nutritionByDate={nutritionByDate}
           readOnly={!isCurrent}
           collapsibleOnMobile={isCurrent}
         />
@@ -206,6 +209,7 @@ export default function WeekBrowser({ weeks, pendingWeek, todayISO, nutritionByD
           sessions={selected.sessions}
           todayISO={isCurrent ? todayISO : ''}
           garminRecovery={selected.garmin_recovery ?? {}}
+          nutritionByDate={nutritionByDate}
           readOnly={!isCurrent}
         />
       </div>

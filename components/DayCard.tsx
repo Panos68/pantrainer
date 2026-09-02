@@ -3,13 +3,14 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import type { Session, GarminRecoveryDay } from '@/lib/schema'
+import type { Session, GarminRecoveryDay, NutritionLogEntry } from '@/lib/schema'
 import GarminRecoveryCard from './GarminRecoveryCard'
 
 interface DayCardProps {
   session: Session
   isToday: boolean
   recovery?: GarminRecoveryDay | null
+  nutrition?: NutritionLogEntry | null
   readOnly?: boolean
   collapsibleOnMobile?: boolean
 }
@@ -32,6 +33,7 @@ export default function DayCard({
   session,
   isToday,
   recovery,
+  nutrition,
   readOnly = false,
   collapsibleOnMobile = false,
 }: DayCardProps) {
@@ -56,7 +58,7 @@ export default function DayCard({
     isSkipped && 'opacity-40',
   )
 
-  const hasExtraDetails = Boolean(session.notes) || (session.exercises?.length ?? 0) > 0
+  const hasExtraDetails = Boolean(session.notes) || (session.exercises?.length ?? 0) > 0 || nutrition != null
   const isMobileCollapsible = !readOnly && collapsibleOnMobile
   const showDetails = (readOnly || isMobileCollapsible) ? expanded : true
 
@@ -133,6 +135,26 @@ export default function DayCard({
             {session.subtype}
           </p>
         )
+      )}
+
+      {showDetails && nutrition && (
+        <div className="pt-2 border-t border-zinc-800/60">
+          <p className="text-zinc-600 text-[10px] font-mono tracking-widest uppercase mb-1">Nutrition</p>
+          <p className="text-zinc-200 text-sm font-mono font-bold">
+            {nutrition.estimatedCalories.toLocaleString()} cal
+          </p>
+          {nutrition.macros && (
+            <p className="text-zinc-500 text-xs font-mono">
+              {[
+                nutrition.macros.protein != null ? `${nutrition.macros.protein}g protein` : null,
+                nutrition.macros.carbs != null ? `${nutrition.macros.carbs}g carbs` : null,
+                nutrition.macros.fat != null ? `${nutrition.macros.fat}g fat` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          )}
+        </div>
       )}
 
       {showDetails && (readOnly || isMobileCollapsible) && hasExtraDetails && (
