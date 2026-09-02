@@ -11,6 +11,7 @@ import {
   writeNutritionLogEntry,
   readNutritionLogForRange,
   readFoodNotesForRange,
+  writeCoachNote,
   readPantry,
   seedPantryIfEmpty,
 } from '@/lib/data'
@@ -194,6 +195,19 @@ const TOOLS = [
       required: ['start_date', 'end_date'],
     },
   },
+  {
+    name: 'save_coach_note',
+    description:
+      'Save a short mid-day coaching comment for a specific date on how eating is tracking so far (e.g. whether the athlete is on pace for a deficit/surplus given today\'s burn-so-far and what\'s logged, and a concrete suggestion for the rest of the day — such as "have your protein shake" or "leave room for a bigger dinner"). Shown on the home day card and day-detail page alongside that day\'s nutrition. Keyed by date — re-saving the same date overwrites the previous note for it, and a note only ever shows for the date it was saved against, so there is no separate cleanup step for a new day. Only call this for today (or the date you are actively coaching mid-day) — do not backfill past days with it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        date: { type: 'string', description: 'ISO date (YYYY-MM-DD) this note is for. Required.' },
+        text: { type: 'string', description: 'The coaching comment, 1-3 sentences. Required.' },
+      },
+      required: ['date', 'text'],
+    },
+  },
 ]
 
 // ---------------------------------------------------------------------------
@@ -367,6 +381,20 @@ async function handleSaveNutritionEstimate(args: Record<string, unknown>) {
   }
 
   await writeNutritionLogEntry(entry)
+  return { saved: true, date }
+}
+
+async function handleSaveCoachNote(args: Record<string, unknown>) {
+  const date = args.date
+  const text = args.text
+  if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error('date must be a YYYY-MM-DD string')
+  }
+  if (typeof text !== 'string' || text.trim().length === 0) {
+    throw new Error('text is required')
+  }
+
+  await writeCoachNote({ _id: date, text, generatedAt: new Date().toISOString() })
   return { saved: true, date }
 }
 
@@ -827,6 +855,7 @@ async function dispatch(req: McpRequest): Promise<Response> {
       else if (name === 'get_lift_history') data = await handleGetLiftHistory(args)
       else if (name === 'save_nutrition_estimate') data = await handleSaveNutritionEstimate(args)
       else if (name === 'get_nutrition_summary_for_range') data = await handleGetNutritionSummaryForRange(args)
+      else if (name === 'save_coach_note') data = await handleSaveCoachNote(args)
       else return mcpError(id, -32601, `Unknown tool: ${name}`)
       return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] })
     } catch (err) {

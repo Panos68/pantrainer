@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { redirect } from 'next/navigation'
 import { format, differenceInDays, parseISO, subDays, startOfWeek, subWeeks, addDays } from 'date-fns'
 import Link from 'next/link'
-import { readAthleteProfile, readCurrentWeek, readAppState, readArchivedWeeks, readPendingWeek, readNutritionLogForRange } from '@/lib/data'
+import { readAthleteProfile, readCurrentWeek, readAppState, readArchivedWeeks, readPendingWeek, readNutritionLogForRange, readCoachNotesForRange } from '@/lib/data'
 import { isPendingWeekDue } from '@/lib/week-activation'
 import { sessionToLoadPoint } from '@/lib/training-load'
 import { calcAdaptiveAlert } from '@/lib/adaptive-alert'
@@ -116,12 +116,14 @@ export default async function Home() {
   const allDisplayedDates = [...archivedWeeks, week].flatMap((w) => w.sessions.map((s) => s.date))
   const browserRangeStart = allDisplayedDates.length > 0 ? [...allDisplayedDates].sort()[0] : currentWeekStart
 
-  const [nutritionEntries, prevNutritionEntries, browserNutritionEntries] = await Promise.all([
+  const [nutritionEntries, prevNutritionEntries, browserNutritionEntries, browserCoachNotes] = await Promise.all([
     readNutritionLogForRange(currentWeekStart, todayISO),
     readNutritionLogForRange(prevWeekStart, prevWeekEnd),
     readNutritionLogForRange(browserRangeStart, todayISO),
+    readCoachNotesForRange(browserRangeStart, todayISO),
   ])
   const nutritionByDate = Object.fromEntries(browserNutritionEntries.map((e) => [e._id, e]))
+  const coachNoteByDate = Object.fromEntries(browserCoachNotes.map((n) => [n._id, n]))
 
   const avgCalIntake = nutritionEntries.length > 0
     ? Math.round(nutritionEntries.reduce((sum, e) => sum + e.estimatedCalories, 0) / nutritionEntries.length)
@@ -213,6 +215,7 @@ export default async function Home() {
             pendingWeek={pendingWeek ?? undefined}
             todayISO={todayISO}
             nutritionByDate={nutritionByDate}
+            coachNoteByDate={coachNoteByDate}
           />
         </div>
 

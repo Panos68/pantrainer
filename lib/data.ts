@@ -8,6 +8,7 @@ import {
   GarminExerciseMapEntrySchema,
   NutritionLogEntrySchema,
   FoodNoteSchema,
+  CoachNoteSchema,
   PantryItemSchema,
 } from './schema'
 import type {
@@ -20,6 +21,7 @@ import type {
   GarminExerciseMapEntry,
   NutritionLogEntry,
   FoodNote,
+  CoachNote,
   PantryItem,
 } from './schema'
 import { format, parseISO } from 'date-fns'
@@ -396,6 +398,36 @@ export async function readFoodNotesForRange(startDate: string, endDate: string):
 export async function writeFoodNote(note: FoodNote): Promise<void> {
   const db = await getDb()
   await db.collection('food_notes').replaceOne(
+    { _id: note._id as never },
+    note,
+    { upsert: true }
+  )
+}
+
+// ─── Coach notes ────────────────────────────────────────────────────────────
+// One doc per day, keyed by date. A short mid-day comment on how eating is
+// tracking so far, written by an AI agent via the save_coach_note MCP tool.
+// Read by the home day cards and the day-log page.
+
+export async function readCoachNote(date: string): Promise<CoachNote | null> {
+  const db = await getDb()
+  const doc = await db.collection('coach_notes').findOne({ _id: date as never })
+  return doc ? CoachNoteSchema.parse(doc) : null
+}
+
+export async function readCoachNotesForRange(startDate: string, endDate: string): Promise<CoachNote[]> {
+  const db = await getDb()
+  const docs = await db
+    .collection('coach_notes')
+    .find({ _id: { $gte: startDate as never, $lte: endDate as never } })
+    .sort({ _id: 1 })
+    .toArray()
+  return docs.map((d) => CoachNoteSchema.parse(d))
+}
+
+export async function writeCoachNote(note: CoachNote): Promise<void> {
+  const db = await getDb()
+  await db.collection('coach_notes').replaceOne(
     { _id: note._id as never },
     note,
     { upsert: true }

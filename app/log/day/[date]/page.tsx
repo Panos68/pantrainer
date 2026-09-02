@@ -44,6 +44,7 @@ export default function ArchivedDayPage() {
   const [nutritionEntry, setNutritionEntry] = useState<NutritionEntry | null>(null)
   const [foodPhotos, setFoodPhotos] = useState<string[]>([])
   const [foodNote, setFoodNote] = useState<string | null>(null)
+  const [coachNote, setCoachNote] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -55,11 +56,12 @@ export default function ArchivedDayPage() {
       setLoading(true)
       setError(null)
       try {
-        const [sessionRes, nutrition, photos, note] = await Promise.all([
+        const [sessionRes, nutrition, photos, note, coach] = await Promise.all([
           fetch(`/api/session/by-date/${date}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : Promise.reject(r))),
           fetch(`/api/nutrition-log?date=${date}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
           fetch(`/api/food-photos?date=${date}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
           fetch(`/api/food-notes?date=${date}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          fetch(`/api/coach-note?date=${date}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
         ])
         if (cancelled) return
         setSession(sessionRes.session)
@@ -68,6 +70,7 @@ export default function ArchivedDayPage() {
         setNutritionEntry(nutrition ?? null)
         setFoodPhotos(Array.isArray(photos?.photos) ? photos.photos : Array.isArray(photos) ? photos : [])
         setFoodNote(note?.text ?? null)
+        setCoachNote(coach?.text ?? null)
       } catch {
         if (!cancelled) setError('Day not found.')
       } finally {
@@ -247,7 +250,7 @@ export default function ArchivedDayPage() {
         </div>
 
         {/* Nutrition */}
-        {(nutritionEntry || foodPhotos.length > 0 || foodNote) && (
+        {(nutritionEntry || foodPhotos.length > 0 || foodNote || coachNote) && (
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 space-y-4">
             <div className="text-zinc-500 text-[10px] font-mono tracking-widest uppercase">Nutrition</div>
 
@@ -299,6 +302,13 @@ export default function ArchivedDayPage() {
                     </p>
                   </div>
                 )}
+              </div>
+            )}
+
+            {coachNote && (
+              <div className="pt-1 border-t border-zinc-800 space-y-1">
+                <p className="text-cyan-500 text-[10px] font-mono tracking-widest uppercase">Coach</p>
+                <p className="text-zinc-300 text-xs font-mono leading-relaxed">{coachNote}</p>
               </div>
             )}
 

@@ -1,11 +1,12 @@
 import DayCard from './DayCard'
-import type { Session, GarminRecoveryDay, NutritionLogEntry } from '@/lib/schema'
+import type { Session, GarminRecoveryDay, NutritionLogEntry, CoachNote } from '@/lib/schema'
 
 interface WeekGridProps {
   sessions: Session[]
   todayISO: string
   garminRecovery: Record<string, GarminRecoveryDay>
   nutritionByDate?: Record<string, NutritionLogEntry>
+  coachNoteByDate?: Record<string, CoachNote>
   readOnly?: boolean
   collapsibleOnMobile?: boolean
 }
@@ -15,6 +16,7 @@ export default function WeekGrid({
   todayISO,
   garminRecovery,
   nutritionByDate = {},
+  coachNoteByDate = {},
   readOnly = false,
   collapsibleOnMobile = false,
 }: WeekGridProps) {
@@ -27,6 +29,7 @@ export default function WeekGrid({
           isToday={session.date === todayISO}
           recovery={garminRecovery[session.date] ?? null}
           nutrition={nutritionByDate[session.date] ?? null}
+          coachNote={coachNoteByDate[session.date] ?? null}
           readOnly={readOnly}
           collapsibleOnMobile={collapsibleOnMobile}
         />

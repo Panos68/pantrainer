@@ -135,6 +135,17 @@ export const FoodNoteSchema = z.object({
   updatedAt: z.string(), // ISO timestamp of last save
 })
 
+// A short mid-day coaching comment on how eating is tracking so far today
+// (e.g. "on pace for a deficit, have your shake before the session"), written
+// by an AI agent via the save_coach_note MCP tool. Keyed by date like the
+// other daily docs, so it naturally stops showing once the date rolls over —
+// nothing clears it, the next day just has no entry yet.
+export const CoachNoteSchema = z.object({
+  _id: z.string(), // date this note is for, YYYY-MM-DD
+  text: z.string(),
+  generatedAt: z.string(), // ISO timestamp of when this note was written
+})
+
 // ─── Pantry ─────────────────────────────────────────────────────────────────
 // The athlete's staple foods. Injected into the MCP food-photo response so the
 // estimator matches against a known short list instead of guessing across every
@@ -346,6 +357,7 @@ export const ProposedPlanSchema = z.object({
 export type GarminExerciseMapEntry = z.infer<typeof GarminExerciseMapEntrySchema>
 export type NutritionLogEntry = z.infer<typeof NutritionLogEntrySchema>
 export type FoodNote = z.infer<typeof FoodNoteSchema>
+export type CoachNote = z.infer<typeof CoachNoteSchema>
 export type SetEntry = z.infer<typeof SetEntrySchema>
 export type Exercise = z.infer<typeof ExerciseSchema>
 export type ExerciseGroup = z.infer<typeof ExerciseGroupSchema>

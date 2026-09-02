@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import type { WeekDoc, NutritionLogEntry } from '@/lib/schema'
+import type { WeekDoc, NutritionLogEntry, CoachNote } from '@/lib/schema'
 import { isMidDaySnapshot } from '@/lib/recovery-freshness'
 import WeekGrid from './WeekGrid'
 
@@ -10,9 +10,10 @@ interface WeekBrowserProps {
   pendingWeek?: WeekDoc
   todayISO: string
   nutritionByDate?: Record<string, NutritionLogEntry>
+  coachNoteByDate?: Record<string, CoachNote>
 }
 
-export default function WeekBrowser({ weeks, pendingWeek, todayISO, nutritionByDate = {} }: WeekBrowserProps) {
+export default function WeekBrowser({ weeks, pendingWeek, todayISO, nutritionByDate = {}, coachNoteByDate = {} }: WeekBrowserProps) {
   const allWeeks = pendingWeek ? [...weeks, pendingWeek] : weeks
 
   const defaultDayForWeek = (week: WeekDoc) =>
@@ -199,6 +200,7 @@ export default function WeekBrowser({ weeks, pendingWeek, todayISO, nutritionByD
           todayISO={isCurrent ? todayISO : ''}
           garminRecovery={selected.garmin_recovery ?? {}}
           nutritionByDate={nutritionByDate}
+          coachNoteByDate={coachNoteByDate}
           readOnly={!isCurrent}
           collapsibleOnMobile={isCurrent}
         />
@@ -210,6 +212,7 @@ export default function WeekBrowser({ weeks, pendingWeek, todayISO, nutritionByD
           todayISO={isCurrent ? todayISO : ''}
           garminRecovery={selected.garmin_recovery ?? {}}
           nutritionByDate={nutritionByDate}
+          coachNoteByDate={coachNoteByDate}
           readOnly={!isCurrent}
         />
       </div>

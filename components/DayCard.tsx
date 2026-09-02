@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import type { Session, GarminRecoveryDay, NutritionLogEntry } from '@/lib/schema'
+import type { Session, GarminRecoveryDay, NutritionLogEntry, CoachNote } from '@/lib/schema'
 import GarminRecoveryCard from './GarminRecoveryCard'
 
 interface DayCardProps {
@@ -11,6 +11,7 @@ interface DayCardProps {
   isToday: boolean
   recovery?: GarminRecoveryDay | null
   nutrition?: NutritionLogEntry | null
+  coachNote?: CoachNote | null
   readOnly?: boolean
   collapsibleOnMobile?: boolean
 }
@@ -34,6 +35,7 @@ export default function DayCard({
   isToday,
   recovery,
   nutrition,
+  coachNote,
   readOnly = false,
   collapsibleOnMobile = false,
 }: DayCardProps) {
@@ -63,7 +65,7 @@ export default function DayCard({
     : null
   const balance = dailyBurn != null && nutrition ? dailyBurn - nutrition.estimatedCalories : null
 
-  const hasExtraDetails = Boolean(session.notes) || (session.exercises?.length ?? 0) > 0 || nutrition != null || dailyBurn != null
+  const hasExtraDetails = Boolean(session.notes) || (session.exercises?.length ?? 0) > 0 || nutrition != null || dailyBurn != null || coachNote != null
   const isMobileCollapsible = !readOnly && collapsibleOnMobile
   const showDetails = (readOnly || isMobileCollapsible) ? expanded : true
 
@@ -179,6 +181,13 @@ export default function DayCard({
               </p>
             </div>
           )}
+        </div>
+      )}
+
+      {showDetails && coachNote && (
+        <div className="pt-2 border-t border-zinc-800/60">
+          <p className="text-cyan-500 text-[10px] font-mono tracking-widest uppercase mb-1">Coach</p>
+          <p className="text-zinc-300 text-xs font-mono leading-relaxed">{coachNote.text}</p>
         </div>
       )}
 
