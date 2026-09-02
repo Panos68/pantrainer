@@ -943,7 +943,7 @@ export default function LogDayPage() {
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 space-y-6">
 
         {/* Header */}
-        <header className="flex items-center justify-between gap-4">
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <p className="text-lime-400 text-xs font-mono font-bold tracking-[0.3em] uppercase mb-1">
               PanTrainer
@@ -952,7 +952,7 @@ export default function LogDayPage() {
               {session.day}
             </h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             {session.type === 'Strength' && session.garmin_pull_status !== 'pulled' && (
               <button
                 onClick={pushToGarmin}
@@ -973,9 +973,10 @@ export default function LogDayPage() {
             <button
               onClick={handleRefreshGarmin}
               disabled={refreshingGarmin || saving}
-              className="px-3 py-1.5 rounded-full border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-mono font-bold tracking-widest uppercase transition-colors disabled:opacity-50"
+              title="Refresh Garmin activity data"
+              className="h-8 w-8 inline-flex items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-sm transition-colors disabled:opacity-50"
             >
-              {refreshingGarmin ? 'Refreshing...' : '↻ Refresh Garmin'}
+              {refreshingGarmin ? '…' : '↻'}
             </button>
             <button
               onClick={() => router.push('/')}
