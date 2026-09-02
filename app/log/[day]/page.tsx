@@ -974,9 +974,10 @@ export default function LogDayPage() {
               onClick={handleRefreshGarmin}
               disabled={refreshingGarmin || saving}
               title="Refresh Garmin activity data"
-              className="h-8 w-8 inline-flex items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-sm transition-colors disabled:opacity-50"
+              className="h-9 px-3 inline-flex items-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-mono font-bold tracking-widest uppercase transition-colors disabled:opacity-50"
             >
-              {refreshingGarmin ? '…' : '↻'}
+              <span aria-hidden>↻</span>
+              {refreshingGarmin ? 'Refreshing...' : 'Refresh Garmin'}
             </button>
             <button
               onClick={() => router.push('/')}
