@@ -1,6 +1,6 @@
 import type { WeekDoc, NutritionLogEntry } from './schema'
 import { computeDailyScore } from './daily-score'
-import { readArchivedWeeks, readAppState, readNutritionLogForRange } from './data'
+import { readArchivedWeeks, readAppState, readNutritionLogForRange, readNutritionLogEntry } from './data'
 import { sessionToLoadPoint, type TrainingLoadPoint } from './training-load'
 import { calcOverloadInsights } from './overload'
 import { isMidDaySnapshot } from './recovery-freshness'
@@ -88,6 +88,20 @@ export interface CoachContext {
     avg_burn_kcal: number | null
     avg_balance_kcal: number | null
     balance_days_count: number
+    // Today, kept separate from the averages above since it's still in
+    // progress — logged so far can still be useful context (e.g. "already
+    // short on protein with dinner not logged yet"), it's just not a
+    // complete day total and is_final is always false for it.
+    today: {
+      date: string
+      logged: boolean
+      calories: number | null
+      protein_g: number | null
+      carbs_g: number | null
+      fat_g: number | null
+      burn_kcal_so_far: number | null
+      is_final: false
+    }
   }
 }
 
@@ -122,6 +136,8 @@ function buildCoachContext(
   archivedWeeks: WeekDoc[],
   training_load_history: TrainingLoadPoint[],
   nutritionEntries: NutritionLogEntry[],
+  todayEntry: NutritionLogEntry | null,
+  todayDateStr: string,
 ): CoachContext {
   const planned_total = currentWeek.sessions.length
   const completedSessions = currentWeek.sessions.filter((s) => s.status === 'completed')
@@ -285,6 +301,21 @@ function buildCoachContext(
       ? round1(avg_burn_kcal - balanceEntries.reduce((sum, e) => sum + e.estimatedCalories, 0) / balanceEntries.length)
       : null
 
+  const todayRecovery = recoveryByDate.get(todayDateStr)
+  const today = {
+    date: todayDateStr,
+    logged: todayEntry != null,
+    calories: todayEntry?.estimatedCalories ?? null,
+    protein_g: todayEntry?.macros?.protein ?? null,
+    carbs_g: todayEntry?.macros?.carbs ?? null,
+    fat_g: todayEntry?.macros?.fat ?? null,
+    burn_kcal_so_far:
+      typeof todayRecovery?.total_kilocalories === 'number' && todayRecovery.total_kilocalories > 0
+        ? todayRecovery.total_kilocalories
+        : null,
+    is_final: false as const,
+  }
+
   return {
     adherence: {
       completed,
@@ -356,6 +387,7 @@ function buildCoachContext(
       avg_burn_kcal,
       avg_balance_kcal,
       balance_days_count: balanceEntries.length,
+      today,
     },
   }
 }
@@ -412,11 +444,21 @@ export async function buildExportV2(
   const today = format(new Date(), 'yyyy-MM-dd')
   const nutritionStart = format(subDays(parseISO(today), NUTRITION_SUMMARY_LOOKBACK_DAYS), 'yyyy-MM-dd')
   const nutritionEnd = format(subDays(parseISO(today), 1), 'yyyy-MM-dd')
-  const nutritionEntries = await readNutritionLogForRange(nutritionStart, nutritionEnd)
+  const [nutritionEntries, todayEntry] = await Promise.all([
+    readNutritionLogForRange(nutritionStart, nutritionEnd),
+    readNutritionLogEntry(today),
+  ])
 
   return {
     ...base,
     export_version: 'v2',
-    coach_context: buildCoachContext(currentWeek, archivedWeeks, base.training_load_history, nutritionEntries),
+    coach_context: buildCoachContext(
+      currentWeek,
+      archivedWeeks,
+      base.training_load_history,
+      nutritionEntries,
+      todayEntry,
+      today,
+    ),
   }
 }
