@@ -58,7 +58,12 @@ export default function DayCard({
     isSkipped && 'opacity-40',
   )
 
-  const hasExtraDetails = Boolean(session.notes) || (session.exercises?.length ?? 0) > 0 || nutrition != null
+  const dailyBurn = typeof recovery?.total_kilocalories === 'number' && recovery.total_kilocalories > 0
+    ? recovery.total_kilocalories
+    : null
+  const balance = dailyBurn != null && nutrition ? dailyBurn - nutrition.estimatedCalories : null
+
+  const hasExtraDetails = Boolean(session.notes) || (session.exercises?.length ?? 0) > 0 || nutrition != null || dailyBurn != null
   const isMobileCollapsible = !readOnly && collapsibleOnMobile
   const showDetails = (readOnly || isMobileCollapsible) ? expanded : true
 
@@ -137,22 +142,42 @@ export default function DayCard({
         )
       )}
 
-      {showDetails && nutrition && (
-        <div className="pt-2 border-t border-zinc-800/60">
-          <p className="text-zinc-600 text-[10px] font-mono tracking-widest uppercase mb-1">Nutrition</p>
-          <p className="text-zinc-200 text-sm font-mono font-bold">
-            {nutrition.estimatedCalories.toLocaleString()} cal
-          </p>
-          {nutrition.macros && (
-            <p className="text-zinc-500 text-xs font-mono">
-              {[
-                nutrition.macros.protein != null ? `${nutrition.macros.protein}g protein` : null,
-                nutrition.macros.carbs != null ? `${nutrition.macros.carbs}g carbs` : null,
-                nutrition.macros.fat != null ? `${nutrition.macros.fat}g fat` : null,
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </p>
+      {showDetails && (nutrition || dailyBurn != null) && (
+        <div className="pt-2 border-t border-zinc-800/60 flex flex-wrap items-start gap-x-4 gap-y-1">
+          {nutrition && (
+            <div>
+              <p className="text-zinc-600 text-[10px] font-mono tracking-widest uppercase mb-1">Nutrition</p>
+              <p className="text-zinc-200 text-sm font-mono font-bold">
+                {nutrition.estimatedCalories.toLocaleString()} cal
+              </p>
+              {nutrition.macros && (
+                <p className="text-zinc-500 text-xs font-mono">
+                  {[
+                    nutrition.macros.protein != null ? `${nutrition.macros.protein}g protein` : null,
+                    nutrition.macros.carbs != null ? `${nutrition.macros.carbs}g carbs` : null,
+                    nutrition.macros.fat != null ? `${nutrition.macros.fat}g fat` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              )}
+            </div>
+          )}
+          {dailyBurn != null && (
+            <div>
+              <p className="text-zinc-600 text-[10px] font-mono tracking-widest uppercase mb-1">Burn</p>
+              <p className="text-zinc-200 text-sm font-mono font-bold">{dailyBurn.toLocaleString()} cal</p>
+            </div>
+          )}
+          {balance != null && (
+            <div>
+              <p className="text-zinc-600 text-[10px] font-mono tracking-widest uppercase mb-1">
+                {balance > 0 ? 'Deficit' : 'Surplus'}
+              </p>
+              <p className={cn('text-sm font-mono font-bold', balance > 0 ? 'text-lime-400' : 'text-amber-400')}>
+                {Math.abs(Math.round(balance)).toLocaleString()} cal
+              </p>
+            </div>
           )}
         </div>
       )}
