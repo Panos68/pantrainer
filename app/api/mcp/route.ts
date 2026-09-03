@@ -14,6 +14,7 @@ import {
   writeCoachNote,
   readPantry,
   seedPantryIfEmpty,
+  readFoodInventory,
 } from '@/lib/data'
 import { formatPantryBrief } from '@/lib/pantry-brief'
 import { buildExportV2 } from '@/lib/export'
@@ -21,12 +22,23 @@ import { validateImport } from '@/lib/import'
 import { todayIsoInAppTimeZone, formatTimeInAppTimeZone } from '@/lib/app-timezone'
 import { SessionSchema, ProposedPlanRunTypeSchema } from '@/lib/schema'
 import type { WeekDoc, NutritionLogEntry } from '@/lib/schema'
+import { getSession, isAutomationToken } from '@/lib/auth'
 
 // ---------------------------------------------------------------------------
 // MCP tool definitions
 // ---------------------------------------------------------------------------
 
 const TOOLS = [
+  {
+    name: 'get_food_at_home',
+    description:
+      'Fetch the current shared household food inventory for recipe suggestions. Quantities are approximate. Prioritize items marked as past date, use today, or use tomorrow; identify missing ingredients rather than assuming absent food is available.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
   {
     name: 'get_current_week',
     description:
@@ -814,6 +826,14 @@ async function dispatch(req: McpRequest): Promise<Response> {
     const { name, arguments: args = {} } = (req as Extract<McpRequest, { method: 'tools/call' }>).params
 
     try {
+      if (name === 'get_food_at_home') {
+        const items = await readFoodInventory()
+        return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify({
+          items,
+          guidance: 'This is a shared at-home inventory, not the athlete\'s private nutrition staples. Product images, when present, identify the scanned product only.',
+        }, null, 2) }] })
+      }
+
       if (name === 'get_current_week') {
         const result = await handleGetCurrentWeek()
         if ('error' in result) {
@@ -871,6 +891,14 @@ async function dispatch(req: McpRequest): Promise<Response> {
 // ---------------------------------------------------------------------------
 
 export async function POST(request: Request) {
+
+  if ((await getSession(request))?.role === 'food') {
+    return new Response('Forbidden', { status: 403, headers: CORS_HEADERS })
+  }
+
+  if (!await isAutomationToken(request)) {
+    return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS })
+  }
 
   let body: unknown
   try {

@@ -14,7 +14,7 @@ const ITEMS = [
 export default function MobileBottomNav() {
   const pathname = usePathname()
 
-  if (pathname === '/login' || pathname === '/setup') return null
+  if (pathname === '/login' || pathname === '/setup' || pathname === '/food' || pathname.startsWith('/food/')) return null
 
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur">

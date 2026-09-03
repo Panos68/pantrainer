@@ -24,8 +24,9 @@ function LoginForm() {
     })
 
     if (res.ok) {
-      localStorage.setItem('auth_token', password)
-      router.push(returnTo ?? '/')
+      const body = await res.json() as { redirectTo: string }
+      const destination = body.redirectTo === '/food' ? '/food' : (returnTo?.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/')
+      router.push(destination)
       router.refresh()
     } else {
       setError('Wrong password')

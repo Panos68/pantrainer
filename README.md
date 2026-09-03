@@ -76,7 +76,9 @@ npm run dev
 |---|---|
 | `MONGODB_URI` | MongoDB connection string (week docs, nutrition log, pantry) |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob store token (from Vercel dashboard → Storage) |
-| `AUTH_PASSWORD` | Password to access the app |
+| `AUTH_PASSWORD` | Owner password with full Pantrainer and MCP access |
+| `FOOD_ACCESS_PASSWORD` | Restricted shared-food password; only accesses `/food` |
+| `AUTH_SESSION_SECRET` | Long random value used to sign browser role sessions |
 | `AUTOMATION_API_TOKEN` | Bearer token used by scheduled cowork jobs to write proposed plans |
 | `GARMIN_EMAIL` | Garmin Connect account email (optional — Garmin features disabled if unset) |
 | `GARMIN_PASSWORD` | Garmin Connect account password |
