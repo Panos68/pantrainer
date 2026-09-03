@@ -12,7 +12,8 @@ async function requireFoodAccess(request: Request): Promise<Response | null> {
 export async function GET(request: Request) {
   const denied = await requireFoodAccess(request)
   if (denied) return denied
-  return Response.json({ items: await readFoodInventory() })
+  const session = await getSession(request)
+  return Response.json({ items: await readFoodInventory(), canManageStaples: session?.role === 'owner' })
 }
 
 export async function POST(request: Request) {

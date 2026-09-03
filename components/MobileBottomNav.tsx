@@ -9,7 +9,6 @@ const ITEMS = [
   { href: '/export', label: 'Plan', icon: '🧠' },
   { href: '/progress', label: 'Progress', icon: '📈' },
   { href: '/food', label: 'Food', icon: '🧺' },
-  { href: '/pantry', label: 'Pantry', icon: '🥣' },
 ]
 
 export default function MobileBottomNav() {
@@ -19,7 +18,7 @@ export default function MobileBottomNav() {
 
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur">
-      <div className="grid grid-cols-5 gap-1 px-2 py-2">
+      <div className="grid grid-cols-4 gap-1 px-2 py-2">
         {ITEMS.map((item) => {
           const active = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
           return (

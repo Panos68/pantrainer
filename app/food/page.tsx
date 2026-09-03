@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import BarcodeScanner, { isBarcodeDetectorAvailable } from '@/components/BarcodeScanner'
 import ExpiryScanner, { isTextDetectorAvailable } from '@/components/ExpiryScanner'
 import type { FoodInventoryItem, FoodLocation } from '@/lib/schema'
@@ -30,6 +31,7 @@ function isoDateAfter(days: number): string {
 
 export default function FoodPage() {
   const [items, setItems] = useState<FoodInventoryItem[] | null>(null)
+  const [canManageStaples, setCanManageStaples] = useState(false)
   const [location, setLocation] = useState<FoodLocation>('fridge')
   const [name, setName] = useState('')
   const [quantity, setQuantity] = useState('1 item')
@@ -37,6 +39,9 @@ export default function FoodPage() {
   const [barcode, setBarcode] = useState('')
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [brand, setBrand] = useState<string | null>(null)
+  const [per100g, setPer100g] = useState<{ calories: number; protein: number; carbs: number; fat: number } | null>(null)
+  const [saveAsStaple, setSaveAsStaple] = useState(false)
+  const [usualGrams, setUsualGrams] = useState('')
   const [scanNote, setScanNote] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
   const [scanningExpiry, setScanningExpiry] = useState(false)
@@ -48,8 +53,9 @@ export default function FoodPage() {
 
   const load = useCallback(async () => {
     const response = await fetch('/api/food/inventory', { cache: 'no-store' })
-    const data = await response.json() as { items: FoodInventoryItem[] }
+    const data = await response.json() as { items: FoodInventoryItem[]; canManageStaples: boolean }
     setItems(data.items)
+    setCanManageStaples(data.canManageStaples)
   }, [])
 
   useEffect(() => { void load() }, [load])
@@ -65,12 +71,23 @@ export default function FoodPage() {
         body: JSON.stringify({ name: name.trim(), quantity, location, barcode: barcode || undefined, brand: brand || undefined, imageUrl: imageUrl || undefined, expiresOn: expiresOn || null }),
       })
       if (!response.ok) throw new Error('Could not add food')
+      if (saveAsStaple && per100g) {
+        const stapleResponse = await fetch('/api/food/staples', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name.trim(), barcode, per100g, usualGrams: Number(usualGrams) || 100 }),
+        })
+        if (!stapleResponse.ok) throw new Error('Could not save staple')
+      }
       setName('')
       setQuantity('1 item')
       setExpiresOn('')
       setBarcode('')
       setImageUrl(null)
       setBrand(null)
+      setPer100g(null)
+      setSaveAsStaple(false)
+      setUsualGrams('')
       setScanNote(null)
       await load()
     } catch {
@@ -86,11 +103,12 @@ export default function FoodPage() {
     setScanNote('Looking up barcode...')
     try {
       const response = await fetch(`/api/food/lookup?barcode=${encodeURIComponent(code)}`)
-      const data = await response.json() as { found: boolean; name?: string; brands?: string; imageUrl?: string }
+      const data = await response.json() as { found: boolean; name?: string; brands?: string; imageUrl?: string; per100g?: { calories: number; protein: number; carbs: number; fat: number } }
       if (data.found && data.name) {
         setName(data.name)
         setImageUrl(data.imageUrl ?? null)
         setBrand(data.brands ?? null)
+        setPer100g(data.per100g ?? null)
         setScanNote(`Found ${data.name}${data.brands ? ` (${data.brands})` : ''}. Add the quantity and expiry date.`)
       } else {
         setScanNote(`Barcode ${code} was not found. Add the product name manually.`)
@@ -121,6 +139,7 @@ export default function FoodPage() {
           <p className="text-lime-400 text-xs font-mono font-bold tracking-[0.3em] uppercase">PanTrainer</p>
           <h1 className="text-3xl font-black tracking-tight uppercase">Food at home</h1>
           <p className="text-zinc-500 text-sm">Scan groceries or add what needs using up.</p>
+          {canManageStaples && <Link href="/pantry" className="inline-block text-[10px] font-mono font-bold tracking-widest uppercase text-lime-400">My nutrition staples</Link>}
         </header>
 
         <div className="grid grid-cols-3 gap-2">
@@ -148,6 +167,7 @@ export default function FoodPage() {
             {([['Today', 0], ['Tomorrow', 1], ['+3 days', 3], ['+1 week', 7]] as const).map(([label, days]) => <button key={label} type="button" onClick={() => setExpiresOn(isoDateAfter(days))} className="rounded border border-zinc-700 px-2 py-1 text-[10px] font-mono font-bold uppercase text-zinc-400 hover:border-lime-400 hover:text-lime-400">{label}</button>)}
             {expiresOn && <button type="button" onClick={() => setExpiresOn('')} className="px-1 text-[10px] font-mono font-bold uppercase text-zinc-600">No date</button>}
           </div>
+          {canManageStaples && per100g && <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 space-y-2"><label className="flex items-center gap-2 text-xs text-zinc-300"><input type="checkbox" checked={saveAsStaple} onChange={(event) => setSaveAsStaple(event.target.checked)} /> Save as my staple</label>{saveAsStaple && <label className="block text-[10px] font-mono uppercase tracking-widest text-zinc-500">Usual portion (g)<input type="number" min="1" value={usualGrams} onChange={(event) => setUsualGrams(event.target.value)} placeholder="100" className="mt-1 block w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100 focus:border-lime-400 focus:outline-none" /></label>}<p className="text-[10px] text-zinc-600">Private to your nutrition estimates, not visible to food-only access.</p></div>}
           <button disabled={saving || !name.trim()} className="w-full rounded-lg bg-lime-400 py-2.5 text-xs font-mono font-bold tracking-widest uppercase text-zinc-950 disabled:opacity-50">{saving ? 'Adding...' : 'Add food'}</button>
         </form>
 
