@@ -490,6 +490,26 @@ export async function readFoodInventory(): Promise<FoodInventoryItem[]> {
   return docs.map((doc) => FoodInventoryItemSchema.parse(doc))
 }
 
+export async function readFoodRestockSuggestions(limit = 8): Promise<FoodInventoryItem[]> {
+  const db = await getDb()
+  const [history, active] = await Promise.all([
+    db.collection('food_inventory').find({}).sort({ updatedAt: -1 }).limit(100).toArray(),
+    db.collection('food_inventory').find({ status: 'available' }).project({ barcode: 1, name: 1 }).toArray(),
+  ])
+  const activeKeys = new Set(active.flatMap((item) => [item.barcode ? `barcode:${item.barcode}` : '', `name:${String(item.name).toLowerCase()}`]).filter(Boolean))
+  const seen = new Set<string>()
+  const suggestions: FoodInventoryItem[] = []
+  for (const doc of history) {
+    const item = FoodInventoryItemSchema.parse(doc)
+    const key = item.barcode ? `barcode:${item.barcode}` : `name:${item.name.toLowerCase()}`
+    if (activeKeys.has(key) || seen.has(key)) continue
+    seen.add(key)
+    suggestions.push(item)
+    if (suggestions.length >= limit) break
+  }
+  return suggestions
+}
+
 export async function writeFoodInventoryItem(item: FoodInventoryItem): Promise<void> {
   const db = await getDb()
   await db.collection('food_inventory').replaceOne({ _id: item._id as never }, item, { upsert: true })

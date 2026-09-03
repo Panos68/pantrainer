@@ -31,9 +31,12 @@ function isoDateAfter(days: number): string {
 
 export default function FoodPage() {
   const [items, setItems] = useState<FoodInventoryItem[] | null>(null)
+  const [restockSuggestions, setRestockSuggestions] = useState<FoodInventoryItem[]>([])
+  const [stapleSuggestions, setStapleSuggestions] = useState<Array<{ name: string; barcode?: string }>>([])
   const [canManageStaples, setCanManageStaples] = useState(false)
   const [location, setLocation] = useState<FoodLocation>('fridge')
   const [name, setName] = useState('')
+  const [quickNames, setQuickNames] = useState('')
   const [quantity, setQuantity] = useState('1 item')
   const [expiresOn, setExpiresOn] = useState('')
   const [barcode, setBarcode] = useState('')
@@ -54,12 +57,47 @@ export default function FoodPage() {
 
   const load = useCallback(async () => {
     const response = await fetch('/api/food/inventory', { cache: 'no-store' })
-    const data = await response.json() as { items: FoodInventoryItem[]; canManageStaples: boolean }
+    const data = await response.json() as { items: FoodInventoryItem[]; restockSuggestions: FoodInventoryItem[]; stapleSuggestions: Array<{ name: string; barcode?: string }>; canManageStaples: boolean }
     setItems(data.items)
+    setRestockSuggestions(data.restockSuggestions)
+    setStapleSuggestions(data.stapleSuggestions)
     setCanManageStaples(data.canManageStaples)
   }, [])
 
   useEffect(() => { void load() }, [load])
+
+  async function quickAdd(event: React.FormEvent) {
+    event.preventDefault()
+    const names = quickNames.split(/[,\n]/).map((value) => value.trim()).filter(Boolean)
+    if (names.length === 0) return
+    setSaving(true)
+    try {
+      const response = await fetch('/api/food/inventory', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ names, location }),
+      })
+      if (!response.ok) throw new Error('Could not add food')
+      setQuickNames('')
+      await load()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function restock(item: Pick<FoodInventoryItem, 'name'> & Partial<FoodInventoryItem>) {
+    setSaving(true)
+    try {
+      const response = await fetch('/api/food/inventory', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+          name: item.name, barcode: item.barcode, brand: item.brand, imageUrl: item.imageUrl,
+          location: item.location ?? location, quantity: item.quantity ?? '1 item', expiresOn: null,
+        }),
+      })
+      if (!response.ok) throw new Error('Could not restock food')
+      await load()
+    } finally {
+      setSaving(false)
+    }
+  }
 
   async function addItem(event: React.FormEvent) {
     event.preventDefault()
@@ -176,9 +214,17 @@ export default function FoodPage() {
           ))}
         </div>
 
+        <form onSubmit={(event) => void quickAdd(event)} className="rounded-xl border border-lime-400/20 bg-lime-400/5 p-4 space-y-3">
+          <div><p className="text-zinc-100 text-xs font-mono font-bold tracking-widest uppercase">Quick add to {location}</p><p className="mt-1 text-zinc-500 text-xs">Separate foods with commas or new lines. Details are optional.</p></div>
+          <textarea value={quickNames} onChange={(event) => setQuickNames(event.target.value)} rows={2} placeholder="Chicken, broccoli, feta" className="w-full resize-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm placeholder:text-zinc-700 focus:border-lime-400 focus:outline-none" />
+          <button disabled={saving || !quickNames.trim()} className="w-full rounded-lg bg-lime-400 py-2.5 text-xs font-mono font-bold tracking-widest uppercase text-zinc-950 disabled:opacity-50">Add foods</button>
+        </form>
+
+        {(restockSuggestions.length > 0 || stapleSuggestions.length > 0) && <section className="space-y-2"><p className="text-zinc-500 text-[10px] font-mono font-bold tracking-widest uppercase">Add again</p><div className="flex gap-2 overflow-x-auto pb-1">{restockSuggestions.map((item) => <button key={`recent-${item._id}`} onClick={() => void restock(item)} disabled={saving} className="flex shrink-0 items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-300 disabled:opacity-50">{item.imageUrl && <img src={item.imageUrl} alt="" className="h-6 w-6 rounded object-cover" />}{item.name}</button>)}{stapleSuggestions.filter((staple) => !restockSuggestions.some((recent) => recent.name.toLowerCase() === staple.name.toLowerCase())).map((staple) => <button key={`staple-${staple.name}`} onClick={() => void restock({ ...staple, location })} disabled={saving} className="shrink-0 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-300 disabled:opacity-50">{staple.name}</button>)}</div></section>}
+
         <form onSubmit={(event) => void addItem(event)} className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-zinc-300 text-xs font-mono font-bold tracking-widest uppercase">Add to {location}</p>
+            <p className="text-zinc-300 text-xs font-mono font-bold tracking-widest uppercase">Add with details</p>
             {canScan && <button type="button" onClick={() => { setScanNote(null); setScanning(true) }} className="text-[10px] font-mono font-bold tracking-widest uppercase text-lime-400">Scan barcode</button>}
           </div>
           {scanNote && <p className="text-zinc-400 text-xs leading-relaxed">{scanNote}</p>}

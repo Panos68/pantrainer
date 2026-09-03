@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto'
 import { FoodInventoryItemSchema } from '@/lib/schema'
-import { readFoodInventory, readFoodInventoryItem, writeFoodInventoryItem, updateFoodInventoryStatus } from '@/lib/data'
+import type { FoodInventoryItem } from '@/lib/schema'
+import { readFoodInventory, readFoodInventoryItem, readFoodRestockSuggestions, readPantry, writeFoodInventoryItem, updateFoodInventoryStatus } from '@/lib/data'
 import { getSession } from '@/lib/auth'
 
 async function requireFoodAccess(request: Request): Promise<Response | null> {
@@ -13,7 +14,17 @@ export async function GET(request: Request) {
   const denied = await requireFoodAccess(request)
   if (denied) return denied
   const session = await getSession(request)
-  return Response.json({ items: await readFoodInventory(), canManageStaples: session?.role === 'owner' })
+  const [items, restockSuggestions, staples] = await Promise.all([
+    readFoodInventory(),
+    readFoodRestockSuggestions(),
+    session?.role === 'owner' ? readPantry() : Promise.resolve([]),
+  ])
+  return Response.json({
+    items,
+    restockSuggestions,
+    stapleSuggestions: staples.map((item) => ({ name: item.name, barcode: item.barcode })),
+    canManageStaples: session?.role === 'owner',
+  })
 }
 
 export async function POST(request: Request) {
@@ -21,6 +32,21 @@ export async function POST(request: Request) {
   if (denied) return denied
   const body = await request.json()
   const now = new Date().toISOString()
+  if (Array.isArray(body.names)) {
+    const names = body.names.filter((name: unknown) => typeof name === 'string').map((name: string) => name.trim()).filter(Boolean).slice(0, 20)
+    if (names.length === 0) return Response.json({ error: 'At least one food name is required' }, { status: 400 })
+    const items: FoodInventoryItem[] = []
+    for (const name of names) {
+      const parsed = FoodInventoryItemSchema.safeParse({
+        _id: randomUUID(), name, location: body.location, quantity: 'some', expiresOn: null,
+        status: 'available', createdAt: now, updatedAt: now,
+      })
+      if (!parsed.success) return Response.json({ error: 'Invalid food items' }, { status: 400 })
+      items.push(parsed.data)
+    }
+    await Promise.all(items.map(writeFoodInventoryItem))
+    return Response.json({ items }, { status: 201 })
+  }
   const parsed = FoodInventoryItemSchema.safeParse({
     ...body,
     _id: randomUUID(),
