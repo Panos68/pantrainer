@@ -9,6 +9,7 @@ export interface BarcodeLookup {
   barcode: string
   name?: string
   brands?: string
+  imageUrl?: string
   per100g?: { calories: number; protein: number; carbs: number; fat: number }
   /** Set when the product exists but has no usable nutriment data. */
   missingNutriments?: boolean
@@ -17,7 +18,7 @@ export interface BarcodeLookup {
 // OFF asks API clients to identify themselves; anonymous traffic gets throttled.
 const USER_AGENT = 'pantrainer/1.0 (personal training log; github.com/Panos68/pantrainer)'
 
-const FIELDS = 'product_name,product_name_sv,brands,nutriments'
+const FIELDS = 'product_name,product_name_sv,brands,nutriments,image_small_url'
 
 function num(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
@@ -41,7 +42,7 @@ export async function lookupBarcode(barcode: string): Promise<BarcodeLookup> {
 
   const json = await res.json() as {
     status?: number
-    product?: { product_name?: string; product_name_sv?: string; brands?: string; nutriments?: Record<string, unknown> }
+    product?: { product_name?: string; product_name_sv?: string; brands?: string; image_small_url?: string; nutriments?: Record<string, unknown> }
   }
 
   if (json.status !== 1 || !json.product) {
@@ -61,7 +62,7 @@ export async function lookupBarcode(barcode: string): Promise<BarcodeLookup> {
   const name = p.product_name_sv || p.product_name
 
   if (calories === null) {
-    return { found: true, barcode, name, brands: p.brands, missingNutriments: true }
+    return { found: true, barcode, name, brands: p.brands, imageUrl: p.image_small_url, missingNutriments: true }
   }
 
   return {
@@ -69,6 +70,7 @@ export async function lookupBarcode(barcode: string): Promise<BarcodeLookup> {
     barcode,
     name,
     brands: p.brands,
+    imageUrl: p.image_small_url,
     per100g: { calories, protein: protein ?? 0, carbs: carbs ?? 0, fat: fat ?? 0 },
   }
 }

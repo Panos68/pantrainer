@@ -173,6 +173,29 @@ export const PantryItemSchema = z.object({
 
 export type PantryItem = z.infer<typeof PantryItemSchema>
 
+// ─── Shared food inventory ──────────────────────────────────────────────────
+// Quantity is deliberately freeform ("1 pack", "half", "some") so this stays
+// useful without demanding exact stock accounting.
+export const FoodLocationSchema = z.enum(['fridge', 'freezer', 'cupboard'])
+
+export const FoodInventoryItemSchema = z.object({
+  _id: z.string(),
+  name: z.string().min(1).max(120),
+  barcode: z.string().regex(/^\d{6,14}$/).optional(),
+  brand: z.string().max(120).optional(),
+  imageUrl: z.string().url().optional(),
+  location: FoodLocationSchema.default('fridge'),
+  quantity: z.string().min(1).max(60).default('1 item'),
+  expiresOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
+  opened: z.boolean().default(false),
+  status: z.enum(['available', 'used', 'discarded']).default('available'),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+export type FoodLocation = z.infer<typeof FoodLocationSchema>
+export type FoodInventoryItem = z.infer<typeof FoodInventoryItemSchema>
+
 // Week summary
 export const WeekSummarySchema = z.object({
   total_sessions: z.number().default(0),

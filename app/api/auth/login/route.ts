@@ -1,19 +1,15 @@
 import { NextResponse } from 'next/server'
+import { authCookieOptions, createSession, roleForPassword } from '@/lib/auth'
 
 export async function POST(request: Request) {
   const { password } = await request.json()
 
-  if (password !== process.env.AUTH_PASSWORD) {
+  const role = await roleForPassword(password)
+  if (!role) {
     return NextResponse.json({ error: 'Wrong password' }, { status: 401 })
   }
 
-  const res = NextResponse.json({ ok: true })
-  res.cookies.set('auth', password, {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'strict',
-    maxAge: 60 * 60 * 24 * 365,
-    path: '/',
-  })
+  const res = NextResponse.json({ ok: true, role, redirectTo: role === 'food' ? '/food' : '/' })
+  res.cookies.set('auth', await createSession(role), authCookieOptions)
   return res
 }

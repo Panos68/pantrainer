@@ -1,4 +1,5 @@
 import crypto from 'crypto'
+import { getSession } from '@/lib/auth'
 
 // Stateless signed auth codes — no in-memory store, works across serverless instances.
 // Code: <timestamp_hex>.<hmac_hex>  HMAC key: AUTOMATION_API_TOKEN
@@ -28,7 +29,19 @@ export function verifyCode(code: string, redirectUri: string): boolean {
   }
 }
 
-export function GET(request: Request) {
+async function requireOwner(request: Request): Promise<Response | null> {
+  const session = await getSession(request)
+  if (session?.role === 'owner') return null
+  if (session?.role === 'food') return new Response('Forbidden', { status: 403 })
+
+  const loginUrl = new URL('/login', request.url)
+  loginUrl.searchParams.set('returnTo', `${new URL(request.url).pathname}${new URL(request.url).search}`)
+  return Response.redirect(loginUrl, 302)
+}
+
+export async function GET(request: Request) {
+  const denied = await requireOwner(request)
+  if (denied) return denied
   const { searchParams } = new URL(request.url)
   const redirectUri = searchParams.get('redirect_uri') ?? ''
   const state = searchParams.get('state') ?? ''
@@ -72,6 +85,8 @@ export function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const denied = await requireOwner(request)
+  if (denied) return denied
   const form = await request.formData()
   const redirectUri = (form.get('redirect_uri') as string) ?? ''
   const state = (form.get('state') as string) ?? ''

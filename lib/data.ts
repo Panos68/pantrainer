@@ -10,6 +10,7 @@ import {
   FoodNoteSchema,
   CoachNoteSchema,
   PantryItemSchema,
+  FoodInventoryItemSchema,
 } from './schema'
 import type {
   WeekDoc,
@@ -23,6 +24,7 @@ import type {
   FoodNote,
   CoachNote,
   PantryItem,
+  FoodInventoryItem,
 } from './schema'
 import { format, parseISO } from 'date-fns'
 import { getDb } from './mongodb'
@@ -478,4 +480,26 @@ export async function seedPantryIfEmpty(): Promise<number> {
   if (count > 0) return 0
   await db.collection('pantry').insertMany(PANTRY_SEED as never[])
   return PANTRY_SEED.length
+}
+
+// ─── Shared food inventory ──────────────────────────────────────────────────
+
+export async function readFoodInventory(): Promise<FoodInventoryItem[]> {
+  const db = await getDb()
+  const docs = await db.collection('food_inventory').find({ status: 'available' }).sort({ expiresOn: 1, updatedAt: -1 }).toArray()
+  return docs.map((doc) => FoodInventoryItemSchema.parse(doc))
+}
+
+export async function writeFoodInventoryItem(item: FoodInventoryItem): Promise<void> {
+  const db = await getDb()
+  await db.collection('food_inventory').replaceOne({ _id: item._id as never }, item, { upsert: true })
+}
+
+export async function updateFoodInventoryStatus(id: string, status: 'used' | 'discarded'): Promise<boolean> {
+  const db = await getDb()
+  const result = await db.collection('food_inventory').updateOne(
+    { _id: id as never, status: 'available' },
+    { $set: { status, updatedAt: new Date().toISOString() } },
+  )
+  return result.matchedCount === 1
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { isAutomationAuthorized } from '@/lib/automation-auth'
+import { isApiPath, isFoodPath, parseSession } from '@/lib/auth'
 
 const PUBLIC_PATHS = [
   '/login',
@@ -19,8 +20,24 @@ const PUBLIC_PATHS = [
   '/api/cron/',
 ]
 
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+    return NextResponse.next()
+  }
+
+  const session = await parseSession(request.cookies.get('auth')?.value)
+
+  if (session?.role === 'food' && !isFoodPath(pathname)) {
+    if (isApiPath(pathname)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    const foodUrl = request.nextUrl.clone()
+    foodUrl.pathname = '/food'
+    foodUrl.search = ''
+    return NextResponse.redirect(foodUrl)
+  }
 
   // Allow unauthenticated photo reads so previews/open-in-new-tab work on mobile browsers/PWAs.
   if (pathname.startsWith('/api/photos') && request.method === 'GET') {
@@ -34,17 +51,13 @@ export function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
-  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
-    return NextResponse.next()
-  }
-
-  const auth = request.cookies.get('auth')?.value
-  if (auth === process.env.AUTH_PASSWORD) {
+  if (session) {
     return NextResponse.next()
   }
 
   const loginUrl = request.nextUrl.clone()
   loginUrl.pathname = '/login'
+  loginUrl.searchParams.set('returnTo', pathname)
   return NextResponse.redirect(loginUrl)
 }
 
