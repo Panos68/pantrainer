@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import BarcodeScanner, { isBarcodeDetectorAvailable } from '@/components/BarcodeScanner'
-import ExpiryScanner, { isTextDetectorAvailable } from '@/components/ExpiryScanner'
+import ExpiryScanner from '@/components/ExpiryScanner'
 import type { FoodInventoryItem, FoodLocation } from '@/lib/schema'
 
 const LOCATIONS: Array<{ value: FoodLocation; label: string }> = [
@@ -46,10 +46,11 @@ export default function FoodPage() {
   const [scanning, setScanning] = useState(false)
   const [scanningExpiry, setScanningExpiry] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState<FoodInventoryItem | null>(null)
   const [loggingOut, setLoggingOut] = useState(false)
   const router = useRouter()
   const canScan = useSyncExternalStore(() => () => {}, isBarcodeDetectorAvailable, () => false)
-  const canScanExpiry = useSyncExternalStore(() => () => {}, isTextDetectorAvailable, () => false)
 
   const load = useCallback(async () => {
     const response = await fetch('/api/food/inventory', { cache: 'no-store' })
@@ -123,6 +124,31 @@ export default function FoodPage() {
     await load()
   }
 
+  async function saveEdit() {
+    if (!editDraft) return
+    setSaving(true)
+    try {
+      const response = await fetch('/api/food/inventory', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editDraft._id,
+          name: editDraft.name,
+          quantity: editDraft.quantity,
+          location: editDraft.location,
+          expiresOn: editDraft.expiresOn,
+          opened: editDraft.opened,
+        }),
+      })
+      if (!response.ok) throw new Error('Could not update food')
+      setEditingId(null)
+      setEditDraft(null)
+      await load()
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function logout() {
     setLoggingOut(true)
     await fetch('/api/auth/logout', { method: 'POST' })
@@ -163,7 +189,7 @@ export default function FoodPage() {
             <input type="date" value={expiresOn} onChange={(event) => setExpiresOn(event.target.value)} className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-400 focus:border-lime-400 focus:outline-none" />
           </div>
           <div className="flex flex-wrap gap-2">
-            {canScanExpiry && <button type="button" onClick={() => setScanningExpiry(true)} className="rounded border border-lime-400/30 px-2 py-1 text-[10px] font-mono font-bold uppercase text-lime-400">Scan expiry label</button>}
+            <button type="button" onClick={() => setScanningExpiry(true)} className="rounded border border-lime-400/30 px-2 py-1 text-[10px] font-mono font-bold uppercase text-lime-400">Scan expiry label</button>
             {([['Today', 0], ['Tomorrow', 1], ['+3 days', 3], ['+1 week', 7]] as const).map(([label, days]) => <button key={label} type="button" onClick={() => setExpiresOn(isoDateAfter(days))} className="rounded border border-zinc-700 px-2 py-1 text-[10px] font-mono font-bold uppercase text-zinc-400 hover:border-lime-400 hover:text-lime-400">{label}</button>)}
             {expiresOn && <button type="button" onClick={() => setExpiresOn('')} className="px-1 text-[10px] font-mono font-bold uppercase text-zinc-600">No date</button>}
           </div>
@@ -175,9 +201,9 @@ export default function FoodPage() {
           <p className="text-zinc-500 text-[10px] font-mono font-bold tracking-widest uppercase">{visibleItems.length} available</p>
           {items === null ? <p className="py-8 text-center text-zinc-600 text-sm">Loading...</p> : visibleItems.length === 0 ? <p className="rounded-xl border border-dashed border-zinc-800 py-8 text-center text-zinc-600 text-sm">Nothing recorded in the {location}.</p> : visibleItems.map((item) => {
             const expiry = expiryLabel(item.expiresOn)
+            const editing = editingId === item._id && editDraft
             return <div key={item._id} className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
-              <div className="flex justify-between gap-3"><div className="flex min-w-0 items-center gap-3">{item.imageUrl ? <img src={item.imageUrl} alt="" className="h-10 w-10 shrink-0 rounded-md bg-zinc-800 object-cover" /> : <div className="h-10 w-10 shrink-0 rounded-md bg-zinc-800" />}<div className="min-w-0"><p className="truncate font-bold text-sm">{item.name}</p><p className="text-zinc-500 text-xs">{item.quantity}{item.opened ? ' - opened' : ''}</p></div></div>{expiry && <span className={`shrink-0 text-[10px] font-mono font-bold uppercase ${expiry.urgent ? 'text-amber-400' : 'text-zinc-500'}`}>{expiry.text}</span>}</div>
-              <div className="flex gap-2"><button onClick={() => void removeItem(item._id, 'used')} className="rounded border border-lime-400/30 px-3 py-1.5 text-[10px] font-mono font-bold tracking-widest uppercase text-lime-400">Used</button><button onClick={() => void removeItem(item._id, 'discarded')} className="rounded border border-zinc-700 px-3 py-1.5 text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-500">Discard</button></div>
+              {editing ? <><input value={editDraft.name} onChange={(event) => setEditDraft({ ...editDraft, name: event.target.value })} className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm" /><div className="grid grid-cols-2 gap-2"><input value={editDraft.quantity} onChange={(event) => setEditDraft({ ...editDraft, quantity: event.target.value })} className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm" /><input type="date" value={editDraft.expiresOn ?? ''} onChange={(event) => setEditDraft({ ...editDraft, expiresOn: event.target.value || null })} className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm" /></div><div className="flex items-center gap-3"><select value={editDraft.location} onChange={(event) => setEditDraft({ ...editDraft, location: event.target.value as FoodLocation })} className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs">{LOCATIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><label className="text-xs text-zinc-400"><input type="checkbox" checked={editDraft.opened} onChange={(event) => setEditDraft({ ...editDraft, opened: event.target.checked })} /> Opened</label></div><div className="flex gap-2"><button onClick={() => void saveEdit()} disabled={saving || !editDraft.name.trim()} className="rounded border border-lime-400/30 px-3 py-1.5 text-[10px] font-mono font-bold uppercase text-lime-400">Save</button><button onClick={() => { setEditingId(null); setEditDraft(null) }} className="text-[10px] font-mono font-bold uppercase text-zinc-500">Cancel</button></div></> : <><div className="flex justify-between gap-3"><div className="flex min-w-0 items-center gap-3">{item.imageUrl ? <img src={item.imageUrl} alt="" className="h-10 w-10 shrink-0 rounded-md bg-zinc-800 object-cover" /> : <div className="h-10 w-10 shrink-0 rounded-md bg-zinc-800" />}<div className="min-w-0"><p className="truncate font-bold text-sm">{item.name}</p><p className="text-zinc-500 text-xs">{item.quantity}{item.opened ? ' - opened' : ''}</p></div></div>{expiry && <span className={`shrink-0 text-[10px] font-mono font-bold uppercase ${expiry.urgent ? 'text-amber-400' : 'text-zinc-500'}`}>{expiry.text}</span>}</div><div className="flex gap-2"><button onClick={() => { setEditingId(item._id); setEditDraft(item) }} className="rounded border border-zinc-700 px-3 py-1.5 text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-300">Edit</button><button onClick={() => void removeItem(item._id, 'used')} className="rounded border border-lime-400/30 px-3 py-1.5 text-[10px] font-mono font-bold tracking-widest uppercase text-lime-400">Used</button><button onClick={() => void removeItem(item._id, 'discarded')} className="rounded border border-zinc-700 px-3 py-1.5 text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-500">Discard</button></div></>}
             </div>
           })}
         </section>

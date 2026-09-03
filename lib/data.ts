@@ -495,6 +495,12 @@ export async function writeFoodInventoryItem(item: FoodInventoryItem): Promise<v
   await db.collection('food_inventory').replaceOne({ _id: item._id as never }, item, { upsert: true })
 }
 
+export async function readFoodInventoryItem(id: string): Promise<FoodInventoryItem | null> {
+  const db = await getDb()
+  const doc = await db.collection('food_inventory').findOne({ _id: id as never, status: 'available' })
+  return doc ? FoodInventoryItemSchema.parse(doc) : null
+}
+
 export async function updateFoodInventoryStatus(id: string, status: 'used' | 'discarded'): Promise<boolean> {
   const db = await getDb()
   const result = await db.collection('food_inventory').updateOne(

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { extractExpiryDate } from '@/lib/expiry-date'
 
 interface TextDetectorLike {
@@ -21,14 +21,13 @@ export function isTextDetectorAvailable(): boolean {
 export default function ExpiryScanner({ onDetected, onClose }: { onDetected: (date: string) => void; onClose: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const [message, setMessage] = useState('Point the camera at the printed best-before or use-by date')
+  const [message, setMessage] = useState('Frame the printed best-before or use-by date, then tap Read date')
+  const [reading, setReading] = useState(false)
   const Detector = getDetectorCtor()
 
   useEffect(() => {
     if (!Detector) return
     let cancelled = false
-    let frame = 0
-    const detector = new Detector()
     const stop = () => {
       streamRef.current?.getTracks().forEach((track) => track.stop())
       streamRef.current = null
@@ -42,29 +41,36 @@ export default function ExpiryScanner({ onDetected, onClose }: { onDetected: (da
         if (!video) return
         video.srcObject = stream
         await video.play()
-        const scan = async () => {
-          if (cancelled) return
-          if (video.readyState >= video.HAVE_ENOUGH_DATA) {
-            try {
-              const date = extractExpiryDate((await detector.detect(video)).map((result) => result.rawValue).join('\n'))
-              if (date) {
-                cancelled = true
-                stop()
-                onDetected(date)
-                return
-              }
-            } catch {
-              // A failed frame should not close a camera scan.
-            }
-          }
-          frame = requestAnimationFrame(() => void scan())
-        }
-        void scan()
       })
       .catch(() => setMessage('Could not access the camera. Check the site permission.'))
 
-    return () => { cancelled = true; cancelAnimationFrame(frame); stop() }
+    return () => { cancelled = true; stop() }
+  }, [Detector])
+
+  const readDate = useCallback(async () => {
+    const video = videoRef.current
+    if (!Detector || !video || video.readyState < video.HAVE_ENOUGH_DATA) return
+    setReading(true)
+    setMessage('Reading date locally...')
+    try {
+      const canvas = document.createElement('canvas')
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      canvas.getContext('2d')?.drawImage(video, 0, 0)
+      const text = (await new Detector().detect(canvas)).map((result) => result.rawValue).join('\n')
+      const date = extractExpiryDate(text)
+      if (date) onDetected(date)
+      else setMessage('No date found. Move closer, avoid glare, and try again.')
+    } catch {
+      setMessage('Could not read that frame. Try again with the date in focus.')
+    } finally {
+      setReading(false)
+    }
   }, [Detector, onDetected])
 
-  return <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4"><video ref={videoRef} playsInline muted className="w-full max-w-md rounded-lg border border-zinc-700" /><p className="mt-3 max-w-xs text-center text-zinc-400 text-xs font-mono">{message}</p><button onClick={onClose} className="mt-5 rounded border border-zinc-700 px-4 py-2 text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-400">Cancel</button></div>
+  if (!Detector) {
+    return <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4"><p className="max-w-sm text-center text-zinc-300 text-sm font-mono">This browser does not support local text detection yet. Use the date field or a quick expiry option instead.</p><button onClick={onClose} className="mt-5 rounded border border-zinc-700 px-4 py-2 text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-400">Back</button></div>
+  }
+
+  return <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4"><video ref={videoRef} playsInline muted className="w-full max-w-md rounded-lg border border-zinc-700" /><p className="mt-3 max-w-xs text-center text-zinc-400 text-xs font-mono">{message}</p><button onClick={() => void readDate()} disabled={reading} className="mt-4 rounded bg-lime-400 px-4 py-2 text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-950 disabled:opacity-50">{reading ? 'Reading...' : 'Read date'}</button><button onClick={onClose} className="mt-3 rounded border border-zinc-700 px-4 py-2 text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-400">Cancel</button></div>
 }
