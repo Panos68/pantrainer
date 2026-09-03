@@ -1,6 +1,7 @@
 import { put } from '@vercel/blob'
 import { blobUrl } from '@/lib/blob-url'
 import { createHmac, timingSafeEqual } from 'crypto'
+import { getSession } from '@/lib/auth'
 
 export function signPhotoUrl(baseUrl: string, pathname: string, ttlSeconds = 3600): string {
   const exp = Math.floor(Date.now() / 1000) + ttlSeconds
@@ -88,10 +89,11 @@ export async function GET(request: Request) {
     return Response.json({ error: 'Invalid pathname' }, { status: 403 })
   }
 
-  // Cookie-authenticated browser requests skip sig check (middleware already validated auth cookie)
-  const cookie = request.headers.get('cookie') ?? ''
-  const authCookie = cookie.split(';').find((c) => c.trim().startsWith('auth='))?.split('=')[1]?.trim()
-  const isSessionAuthed = authCookie === process.env.AUTH_PASSWORD
+  // Cookie-authenticated browser requests skip sig check. The auth cookie
+  // holds a signed session token (see lib/auth.ts), not the raw password —
+  // must go through getSession, a plain equality check never matches.
+  const session = await getSession(request)
+  const isSessionAuthed = session?.role === 'owner' || session?.role === 'food'
 
   if (!isSessionAuthed) {
     const exp = sp.get('exp')

@@ -2,11 +2,14 @@ import { put, list, del } from '@vercel/blob'
 import { blobUrl } from '@/lib/blob-url'
 import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
 import { createHmac, timingSafeEqual } from 'crypto'
+import { getSession } from '@/lib/auth'
 
-function isCookieAuthed(request: Request): boolean {
-  const cookie = request.headers.get('cookie') ?? ''
-  const authCookie = cookie.split(';').find((c) => c.trim().startsWith('auth='))?.split('=')[1]?.trim()
-  return authCookie === process.env.AUTH_PASSWORD
+// The auth cookie holds a signed session token (see lib/auth.ts), not the raw
+// password — this must go through getSession, a plain equality check against
+// AUTH_PASSWORD never matches and silently locks every browser request out.
+async function isCookieAuthed(request: Request): Promise<boolean> {
+  const session = await getSession(request)
+  return session?.role === 'owner' || session?.role === 'food'
 }
 
 export function signFoodPhotoUrl(baseUrl: string, pathname: string, ttlSeconds = 3600): string {
@@ -91,7 +94,7 @@ export async function GET(request: Request) {
   const date = sp.get('date')
 
   if (!pathname && date) {
-    if (!isCookieAuthed(request)) {
+    if (!(await isCookieAuthed(request))) {
       return Response.json({ error: 'Not authenticated' }, { status: 403 })
     }
     try {
@@ -117,7 +120,7 @@ export async function GET(request: Request) {
     return Response.json({ error: 'Invalid pathname' }, { status: 403 })
   }
 
-  if (!isCookieAuthed(request)) {
+  if (!(await isCookieAuthed(request))) {
     const exp = sp.get('exp')
     const sig = sp.get('sig')
     if (!exp || !sig || !verifyFoodPhotoSig(pathname, exp, sig)) {
@@ -157,7 +160,7 @@ export async function DELETE(request: Request) {
     )
   }
 
-  if (!isCookieAuthed(request)) {
+  if (!(await isCookieAuthed(request))) {
     return Response.json({ error: 'Not authenticated' }, { status: 403 })
   }
 
