@@ -227,6 +227,20 @@ export const GarminRecoveryDaySchema = z.object({
   fetched_at: z.string().optional(),
 })
 
+// Renpho weight/body-composition measurement for a single day
+export const RenphoMeasurementDaySchema = z.object({
+  weight_kg: z.number().nullable().optional(),
+  bmi: z.number().nullable().optional(),
+  body_fat_pct: z.number().nullable().optional(),
+  water_pct: z.number().nullable().optional(),
+  muscle_kg: z.number().nullable().optional(),
+  bone_kg: z.number().nullable().optional(),
+  bmr: z.number().nullable().optional(),
+  visceral_fat: z.number().nullable().optional(),
+  protein_pct: z.number().nullable().optional(),
+  fetched_at: z.string().optional(),
+})
+
 // Daily subjective check-in
 export const DailyReadinessSchema = z.object({
   date: z.string(),             // YYYY-MM-DD
@@ -295,6 +309,7 @@ export const WeekDocSchema = z.object({
   health_flags: z.array(HealthFlagSchema).default([]),
   next_week_plan: NextWeekPlanSchema.default({}),
   garmin_recovery: z.record(z.string(), GarminRecoveryDaySchema).default({}),
+  renpho_measurements: z.record(z.string(), RenphoMeasurementDaySchema).default({}),
   daily_readiness: z.record(z.string(), DailyReadinessSchema).default({}),
   daily_scores: z.record(z.string(), RecoveryScoreBreakdownSchema).default({}),
 })
@@ -389,6 +404,7 @@ export type SessionStatus = z.infer<typeof SessionStatusSchema>
 export type WeekSummary = z.infer<typeof WeekSummarySchema>
 export type LiftProgression = z.infer<typeof LiftProgressionSchema>
 export type GarminRecoveryDay = z.infer<typeof GarminRecoveryDaySchema>
+export type RenphoMeasurementDay = z.infer<typeof RenphoMeasurementDaySchema>
 export type HealthFlag = z.infer<typeof HealthFlagSchema>
 export type NextWeekPlan = z.infer<typeof NextWeekPlanSchema>
 export type WeekDoc = z.infer<typeof WeekDocSchema>

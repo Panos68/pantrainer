@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import type { Session, GarminRecoveryDay } from '@/lib/schema'
+import type { Session, GarminRecoveryDay, RenphoMeasurementDay } from '@/lib/schema'
 import GarminRecoveryCard from '@/components/GarminRecoveryCard'
+import WeightCard from '@/components/WeightCard'
 
 const TYPE_COLORS: Record<string, string> = {
   Strength: 'text-violet-400',
@@ -41,6 +42,7 @@ export default function ArchivedDayPage() {
   const [session, setSession] = useState<Session | null>(null)
   const [isCurrent, setIsCurrent] = useState(false)
   const [recovery, setRecovery] = useState<GarminRecoveryDay | null>(null)
+  const [weight, setWeight] = useState<RenphoMeasurementDay | null>(null)
   const [nutritionEntry, setNutritionEntry] = useState<NutritionEntry | null>(null)
   const [foodPhotos, setFoodPhotos] = useState<string[]>([])
   const [foodNote, setFoodNote] = useState<string | null>(null)
@@ -56,17 +58,19 @@ export default function ArchivedDayPage() {
       setLoading(true)
       setError(null)
       try {
-        const [sessionRes, nutrition, photos, note, coach] = await Promise.all([
+        const [sessionRes, nutrition, photos, note, coach, weightRes] = await Promise.all([
           fetch(`/api/session/by-date/${date}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : Promise.reject(r))),
           fetch(`/api/nutrition-log?date=${date}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
           fetch(`/api/food-photos?date=${date}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
           fetch(`/api/food-notes?date=${date}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
           fetch(`/api/coach-note?date=${date}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          fetch(`/api/renpho/measurement?date=${date}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
         ])
         if (cancelled) return
         setSession(sessionRes.session)
         setIsCurrent(Boolean(sessionRes.isCurrent))
         setRecovery(sessionRes.recovery ?? null)
+        setWeight(weightRes?.measurement ?? null)
         setNutritionEntry(nutrition ?? null)
         setFoodPhotos(Array.isArray(photos?.photos) ? photos.photos : Array.isArray(photos) ? photos : [])
         setFoodNote(note?.text ?? null)
@@ -248,6 +252,8 @@ export default function ArchivedDayPage() {
           <div className="text-zinc-500 text-[10px] font-mono tracking-widest uppercase mb-2">Recovery</div>
           <GarminRecoveryCard date={date} recovery={recovery} interactive={false} />
         </div>
+
+        {weight?.weight_kg != null && <WeightCard measurement={weight} />}
 
         {/* Nutrition */}
         {(nutritionEntry || foodPhotos.length > 0 || foodNote || coachNote) && (

@@ -4,12 +4,16 @@
 export const APP_TIMEZONE = process.env.APP_TIMEZONE ?? 'Europe/Stockholm'
 
 export function todayIsoInAppTimeZone(): string {
+  return isoDateInAppTimeZone(new Date())
+}
+
+export function isoDateInAppTimeZone(date: Date): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: APP_TIMEZONE,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).format(new Date())
+  }).format(date)
 }
 
 export function formatTimeInAppTimeZone(date: Date | string): string {
