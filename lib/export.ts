@@ -42,6 +42,13 @@ export interface CoachContext {
     resting_hr_avg_7d: number | null
     resting_hr_delta_vs_baseline: number | null
   }
+  weight_summary: {
+    latest_weight_kg: number | null
+    latest_weight_date: string | null
+    weight_avg_7d: number | null
+    weight_trend_kg_vs_prev_7d: number | null
+    latest_body_fat_pct: number | null
+  }
   lift_summary: {
     current_lifts: Record<string, number>
     pr_lifts: string[]
@@ -280,6 +287,33 @@ function buildCoachContext(
       ? Math.round((recentRpe.reduce((sum, r) => sum + r.rpe, 0) / recentRpe.length) * 10) / 10
       : null
 
+  const allWeight = [...archivedWeeks, currentWeek]
+    .flatMap((w) =>
+      Object.entries(w.renpho_measurements ?? {}).map(([date, m]) => ({
+        date,
+        weight_kg: m.weight_kg ?? null,
+        body_fat_pct: m.body_fat_pct ?? null,
+      })),
+    )
+    .sort((a, b) => a.date.localeCompare(b.date))
+  const latestWeightEntry = allWeight.length > 0 ? allWeight[allWeight.length - 1] : null
+  const weightLatestDate = latestWeightEntry?.date ?? format(new Date(), 'yyyy-MM-dd')
+  const weightStart7 = format(subDays(parseISO(weightLatestDate), 6), 'yyyy-MM-dd')
+  const weightStartPrev7 = format(subDays(parseISO(weightLatestDate), 13), 'yyyy-MM-dd')
+  const weightEndPrev7 = format(subDays(parseISO(weightLatestDate), 7), 'yyyy-MM-dd')
+  const recentWeight = allWeight
+    .filter((w) => w.date >= weightStart7 && w.date <= weightLatestDate)
+    .map((w) => w.weight_kg)
+    .filter((v): v is number => v != null)
+  const prevWeight = allWeight
+    .filter((w) => w.date >= weightStartPrev7 && w.date <= weightEndPrev7)
+    .map((w) => w.weight_kg)
+    .filter((v): v is number => v != null)
+  const weight_avg_7d = recentWeight.length > 0 ? round1(recentWeight.reduce((a, b) => a + b, 0) / recentWeight.length) : null
+  const weight_avg_prev_7d = prevWeight.length > 0 ? round1(prevWeight.reduce((a, b) => a + b, 0) / prevWeight.length) : null
+  const weight_trend_kg_vs_prev_7d =
+    weight_avg_7d != null && weight_avg_prev_7d != null ? round1(weight_avg_7d - weight_avg_prev_7d) : null
+
   const recoveryByDate = new Map(allRecovery.map((r) => [r.date, r]))
   const avgOrNull = (values: number[]) =>
     values.length > 0 ? round1(values.reduce((a, b) => a + b, 0) / values.length) : null
@@ -337,6 +371,13 @@ function buildCoachContext(
       sleep_trend_hours,
       resting_hr_avg_7d,
       resting_hr_delta_vs_baseline,
+    },
+    weight_summary: {
+      latest_weight_kg: latestWeightEntry?.weight_kg ?? null,
+      latest_weight_date: latestWeightEntry?.date ?? null,
+      weight_avg_7d,
+      weight_trend_kg_vs_prev_7d,
+      latest_body_fat_pct: latestWeightEntry?.body_fat_pct ?? null,
     },
     lift_summary: {
       current_lifts: currentLifts,

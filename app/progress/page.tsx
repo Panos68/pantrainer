@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { readAllArchivedWeeks, readCurrentWeek, readAthleteProfile } from '@/lib/data'
 import LiftProgressChart from '@/components/LiftProgressChart'
 import ActivityTrendChart from '@/components/ActivityTrendChart'
+import WeightTrendChart from '@/components/WeightTrendChart'
 import PmcChart from '@/components/PmcChart'
 import OverloadInsights from '@/components/OverloadInsights'
 import { calcPmc } from '@/lib/pmc'
@@ -92,6 +93,9 @@ export default async function ProgressPage() {
 
         {/* Activity Trend Chart */}
         <ActivityTrendChart weeks={weeks} athlete={athlete} />
+
+        {/* Weight Trend Chart */}
+        <WeightTrendChart weeks={weeks} />
 
       </div>
     </main>

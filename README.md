@@ -83,6 +83,8 @@ npm run dev
 | `AUTOMATION_API_TOKEN` | Bearer token used by scheduled cowork jobs to write proposed plans |
 | `GARMIN_EMAIL` | Garmin Connect account email (optional — Garmin features disabled if unset) |
 | `GARMIN_PASSWORD` | Garmin Connect account password |
+| `RENPHO_EMAIL` | Renpho account email (optional — weight/body-composition sync disabled if unset) |
+| `RENPHO_PASSWORD` | Renpho account password |
 | `CRON_SECRET` | Bearer token Vercel Cron sends to authorize the nightly finalize-day job |
 
 ## Proposed plan automation (daily/weekly)

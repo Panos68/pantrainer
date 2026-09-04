@@ -3,8 +3,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import type { Session, GarminRecoveryDay, ExerciseGroup, SetEntry } from '@/lib/schema'
+import type { Session, GarminRecoveryDay, RenphoMeasurementDay, ExerciseGroup, SetEntry } from '@/lib/schema'
 import GarminRecoveryCard from '@/components/GarminRecoveryCard'
+import WeightCard from '@/components/WeightCard'
 import MuscleMap from '@/components/MuscleMap'
 import ExerciseDemo from '@/components/ExerciseDemo'
 import { deriveExerciseAggregates, applyExerciseTableEditToSetLog, parseTimedSeconds } from '@/lib/liveSession'
@@ -295,6 +296,7 @@ export default function LogDayPage() {
     activity_id?: number
   }>({})
   const [garminRecovery, setGarminRecovery] = useState<GarminRecoveryDay | null>(null)
+  const [weight, setWeight] = useState<RenphoMeasurementDay | null>(null)
   const [garminTraining, setGarminTraining] = useState<{
     aerobic_training_effect?: number | null
     anaerobic_training_effect?: number | null
@@ -424,6 +426,13 @@ export default function LogDayPage() {
         const sessionData: Session = await sessionRes.json()
 
         setSession(sessionData)
+
+        // Read-only — never triggers a Renpho login, just whatever the
+        // nightly renpho-sync cron already stored.
+        fetch(`/api/renpho/measurement?date=${sessionData.date}`, { cache: 'no-store' })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((json) => setWeight(json?.measurement ?? null))
+          .catch(() => setWeight(null))
 
         // Pre-fill form
         setType(sessionData.type)
@@ -1335,6 +1344,7 @@ export default function LogDayPage() {
           recovery={garminRecovery}
           onFetched={(data) => setGarminRecovery(data)}
         />
+        {weight?.weight_kg != null && <WeightCard measurement={weight} />}
         </>
         )}
 

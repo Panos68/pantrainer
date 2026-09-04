@@ -7,7 +7,7 @@ const session = {
 } as const
 const week = {
   week: 'Sep 1-7, 2026', athlete: { name: 'Panos', age: 40, weight_kg: 80, smm_kg: 35, bf_pct: 15, bmr_kcal: 1800, rhr_bpm: 50, smm_target_kg: 37 }, sessions: [session],
-  week_summary: { total_sessions: 1, high_output_days: 0, strength_days: 1, recovery_days: 0, total_calories: 0 }, lift_progression: {}, health_flags: [], next_week_plan: {}, garmin_recovery: {}, daily_readiness: {}, daily_scores: {},
+  week_summary: { total_sessions: 1, high_output_days: 0, strength_days: 1, recovery_days: 0, total_calories: 0 }, lift_progression: {}, health_flags: [], next_week_plan: {}, garmin_recovery: {}, renpho_measurements: {}, daily_readiness: {}, daily_scores: {},
 } as never
 
 const context = buildCurrentContext(week, {} as never, null, null, '2026-09-04')
