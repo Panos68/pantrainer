@@ -26,6 +26,7 @@ A personal training management app with Garmin sync, AI-generated weekly plans, 
 `/api/mcp` exposes an [MCP](https://modelcontextprotocol.io) server so Claude can act on your training data directly in conversation, rather than through copy/paste export-import. Tools include:
 
 - `get_current_week` / `get_lift_history` — read current sessions and exercise history
+- `get_current_context` — compact daily coaching context with today’s full session, weekly schedule, summaries, and rules without repeated set-log history
 - `submit_proposed_plan` / `submit_proposal_by_date` — write a candidate plan for review in the app
 - `get_garmin_recovery_freshness` — check whether cached recovery/burn data for a date is present and final before trusting it
 - `list_food_photos_for_range` / `save_nutrition_estimate` / `get_nutrition_summary_for_range` — analyze food photos and notes against the pantry, save macro estimates, and find days with unanalyzed content

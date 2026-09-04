@@ -23,12 +23,23 @@ import { todayIsoInAppTimeZone, formatTimeInAppTimeZone } from '@/lib/app-timezo
 import { SessionSchema, ProposedPlanRunTypeSchema } from '@/lib/schema'
 import type { WeekDoc, NutritionLogEntry } from '@/lib/schema'
 import { getSession, isAutomationToken } from '@/lib/auth'
+import { buildCurrentContext } from '@/lib/mcp-current-context'
 
 // ---------------------------------------------------------------------------
 // MCP tool definitions
 // ---------------------------------------------------------------------------
 
 const TOOLS = [
+  {
+    name: 'get_current_context',
+    description:
+      'Fetch compact daily coaching context: today\'s full session, a set-log-free weekly schedule, load/recovery/readiness/nutrition summaries, active health flags, complete automation notes/coaching rules, and only today\'s proposed session. Prefer this over get_current_week for daily decisions and mid-week coaching to avoid output truncation. Use get_current_week only when the complete week document and full per-set history are actually required.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
   {
     name: 'get_food_at_home',
     description:
@@ -509,6 +520,17 @@ async function handleGetCurrentWeek() {
   }
 }
 
+async function handleGetCurrentContext() {
+  const currentWeek = await readCurrentWeekDirect()
+  if (!currentWeek) return { error: 'No current week found' }
+  const [payload, notes, proposed] = await Promise.all([
+    buildExportV2(currentWeek),
+    readAutomationNotes(),
+    readProposedPlan(),
+  ])
+  return buildCurrentContext(currentWeek, payload.coach_context, notes, proposed, todayIsoInAppTimeZone())
+}
+
 async function handleSubmitProposedPlan(args: Record<string, unknown>) {
   const json = args.json
   if (typeof json !== 'string' || json.trim().length === 0) {
@@ -826,6 +848,11 @@ async function dispatch(req: McpRequest): Promise<Response> {
     const { name, arguments: args = {} } = (req as Extract<McpRequest, { method: 'tools/call' }>).params
 
     try {
+      if (name === 'get_current_context') {
+        const result = await handleGetCurrentContext()
+        return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] })
+      }
+
       if (name === 'get_food_at_home') {
         const items = await readFoodInventory()
         return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify({
