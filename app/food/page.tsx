@@ -26,15 +26,23 @@ const SORTS: Array<{ value: SortBy; label: string }> = [
   { value: 'expiry', label: 'Expiry' },
 ]
 
-// Only items whose quantity is a plain count ("3 items") get a +/- stepper —
-// free-text quantities like "500g" or "2 packs" keep the old text until
-// edited, since incrementing them wouldn't mean anything.
-function parseCount(quantity: string): number | null {
-  const match = quantity.match(/^(\d+)\s*items?$/i)
-  return match ? parseInt(match[1], 10) : null
+// Quantity is stored as one free-text string, but when it matches
+// "<count> x <unit>" (e.g. "2 x 1000g") or a plain "<count> item(s)", the
+// leading count becomes steppable while the unit (grams, "pack", etc.) is
+// preserved untouched — so you can track "2 kefir, 1000g each" and just
+// bump the 2. Anything else (legacy free text like "500g" alone) keeps its
+// old text until edited, since there's no count to increment.
+function parseQuantity(quantity: string): { count: number; unit: string | null } | null {
+  const withUnit = quantity.match(/^(\d+)\s*[x×]\s*(.+)$/i)
+  if (withUnit) return { count: parseInt(withUnit[1], 10), unit: withUnit[2].trim() }
+  const itemsOnly = quantity.match(/^(\d+)\s*items?$/i)
+  if (itemsOnly) return { count: parseInt(itemsOnly[1], 10), unit: null }
+  return null
 }
 
-function formatCount(count: number): string {
+function formatQuantity(count: number, unit: string | null): string {
+  const trimmedUnit = unit?.trim()
+  if (trimmedUnit) return `${count} x ${trimmedUnit}`
   return `${count} item${count === 1 ? '' : 's'}`
 }
 
@@ -68,11 +76,8 @@ export default function FoodPage() {
   const [name, setName] = useState('')
   const [quickNames, setQuickNames] = useState('')
   const [quantityCount, setQuantityCount] = useState(1)
-  const [netQuantityText, setNetQuantityText] = useState<string | null>(null)
-  // True when netQuantityText is an unambiguous multipack ("4 x 100 g") — the
-  // stepper count already captures that case. False/null means it's a plain
-  // weight ("400 g") with no count semantics, which the stepper can't express.
-  const [hasPackCount, setHasPackCount] = useState(false)
+  // Free-text unit alongside the count, e.g. "1000g", "pack" — optional.
+  const [unit, setUnit] = useState('')
   const [expiresOn, setExpiresOn] = useState('')
   const [barcode, setBarcode] = useState('')
   const [imageUrl, setImageUrl] = useState<string | null>(null)
@@ -149,17 +154,9 @@ export default function FoodPage() {
       const response = await fetch('/api/food/inventory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // A plain weight from the scan ("400 g") has no count semantics the
-        // stepper can express, so it's saved verbatim rather than collapsed
-        // to "1 item" and lost — combined with the stepper count only if the
-        // athlete actually bumped it up (e.g. "2 x 400 g"). A detected
-        // multipack ("4 x 100 g") already has its count on the stepper, so
-        // that one stays as a plain count.
         body: JSON.stringify({
           name: name.trim(),
-          quantity: netQuantityText && !hasPackCount
-            ? (quantityCount > 1 ? `${quantityCount} x ${netQuantityText}` : netQuantityText)
-            : formatCount(quantityCount),
+          quantity: formatQuantity(quantityCount, unit || null),
           location: targetLocation, barcode: barcode || undefined, brand: brand || undefined, imageUrl: imageUrl || undefined, expiresOn: expiresOn || null,
         }),
       })
@@ -174,8 +171,7 @@ export default function FoodPage() {
       }
       setName('')
       setQuantityCount(1)
-      setNetQuantityText(null)
-      setHasPackCount(false)
+      setUnit('')
       setExpiresOn('')
       setBarcode('')
       setImageUrl(null)
@@ -204,15 +200,22 @@ export default function FoodPage() {
         setImageUrl(data.imageUrl ?? null)
         setBrand(data.brands ?? null)
         setPer100g(data.per100g ?? null)
-        setNetQuantityText(data.netQuantityText ?? null)
-        setHasPackCount(Boolean(data.packCount))
-        // Prefill from the pack count when OFF's text is unambiguous (e.g. "4 x
-        // 100 g") — still just a starting value on the stepper, not a silent save.
-        if (data.packCount) setQuantityCount(data.packCount)
-        const quantityNote = data.packCount
-          ? ` Quantity pre-filled to ${data.packCount} from the pack (${data.netQuantityText}) — check it.`
-          : data.netQuantityText
-          ? ` Will be saved as "${data.netQuantityText}". Add the expiry date.`
+        // Prefill both count and unit from OFF's pack text — still just a
+        // starting point on the form, not a silent save.
+        if (data.packCount) {
+          setQuantityCount(data.packCount)
+          // "4 x 100 g" -> "100 g" (the per-unit portion, not the whole pack text)
+          const perUnit = data.netQuantityText?.match(/^\d+\s*[x×]\s*(.+)$/i)?.[1]
+          setUnit(perUnit?.trim() ?? '')
+        } else if (data.netQuantityText) {
+          setQuantityCount(1)
+          setUnit(data.netQuantityText)
+        } else {
+          setQuantityCount(1)
+          setUnit('')
+        }
+        const quantityNote = data.netQuantityText
+          ? ` Quantity/weight pre-filled from the pack (${data.netQuantityText}) — check it.`
           : ' Add the quantity and expiry date.'
         setScanNote(`Found ${data.name}${data.brands ? ` (${data.brands})` : ''}.${quantityNote}`)
       } else {
@@ -229,16 +232,28 @@ export default function FoodPage() {
   }
 
   async function adjustItemQuantity(item: FoodInventoryItem, delta: number) {
-    const current = parseCount(item.quantity)
-    if (current === null) return
-    const next = Math.max(1, current + delta)
-    if (next === current) return
+    const parsed = parseQuantity(item.quantity)
+    if (parsed === null) return
+    const next = Math.max(1, parsed.count + delta)
+    if (next === parsed.count) return
+    const nextQuantity = formatQuantity(next, parsed.unit)
     // Optimistic update — the stepper needs to feel instant.
-    setItems((prev) => prev?.map((i) => (i._id === item._id ? { ...i, quantity: formatCount(next) } : i)) ?? prev)
+    setItems((prev) => prev?.map((i) => (i._id === item._id ? { ...i, quantity: nextQuantity } : i)) ?? prev)
     await fetch('/api/food/inventory', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: item._id, quantity: formatCount(next) }),
+      body: JSON.stringify({ id: item._id, quantity: nextQuantity }),
+    })
+  }
+
+  async function toggleOpened(item: FoodInventoryItem) {
+    const nextOpened = !item.opened
+    // Optimistic — this should feel like a single tap, not a form submit.
+    setItems((prev) => prev?.map((i) => (i._id === item._id ? { ...i, opened: nextOpened } : i)) ?? prev)
+    await fetch('/api/food/inventory', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: item._id, opened: nextOpened }),
     })
   }
 
@@ -334,7 +349,7 @@ export default function FoodPage() {
             <button type="button" onClick={() => { setScanNote(null); setScanning(true) }} className="text-[10px] font-mono font-bold tracking-widest uppercase text-lime-400">Scan barcode</button>
           </div>
           {scanNote && <p className="text-zinc-400 text-xs leading-relaxed">{scanNote}</p>}
-          {imageUrl && <div className="flex items-center gap-3 rounded-lg bg-zinc-950 p-2"><img src={imageUrl} alt="" className="h-12 w-12 rounded-md object-cover" /><p className="text-xs text-zinc-400">Product image from barcode lookup{netQuantityText ? ` · ${netQuantityText}` : ''}</p></div>}
+          {imageUrl && <div className="flex items-center gap-3 rounded-lg bg-zinc-950 p-2"><img src={imageUrl} alt="" className="h-12 w-12 rounded-md object-cover" /><p className="text-xs text-zinc-400">Product image from barcode lookup</p></div>}
           <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Food name" className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm placeholder:text-zinc-700 focus:border-lime-400 focus:outline-none" />
           <div className="grid grid-cols-2 gap-2">
             <div className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1.5">
@@ -342,8 +357,9 @@ export default function FoodPage() {
               <span className="flex-1 text-center text-sm font-mono">{quantityCount}</span>
               <button type="button" onClick={() => setQuantityCount((n) => n + 1)} className="h-7 w-7 rounded bg-zinc-800 text-sm font-bold text-zinc-300 hover:bg-zinc-700">+</button>
             </div>
-            <input type="date" value={expiresOn} onChange={(event) => setExpiresOn(event.target.value)} className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-400 focus:border-lime-400 focus:outline-none" />
+            <input value={unit} onChange={(event) => setUnit(event.target.value)} placeholder="Unit, e.g. 1000g (optional)" className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm placeholder:text-zinc-700 focus:border-lime-400 focus:outline-none" />
           </div>
+          <input type="date" value={expiresOn} onChange={(event) => setExpiresOn(event.target.value)} className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-400 focus:border-lime-400 focus:outline-none" />
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => setScanningExpiry(true)} className="rounded border border-lime-400/30 px-2 py-1 text-[10px] font-mono font-bold uppercase text-lime-400">Scan expiry label</button>
             {([['Today', 0], ['Tomorrow', 1], ['+3 days', 3], ['+1 week', 7]] as const).map(([label, days]) => <button key={label} type="button" onClick={() => setExpiresOn(isoDateAfter(days))} className="rounded border border-zinc-700 px-2 py-1 text-[10px] font-mono font-bold uppercase text-zinc-400 hover:border-lime-400 hover:text-lime-400">{label}</button>)}
@@ -365,9 +381,9 @@ export default function FoodPage() {
           {items === null ? <p className="py-8 text-center text-zinc-600 text-sm">Loading...</p> : visibleItems.length === 0 ? <p className="rounded-xl border border-dashed border-zinc-800 py-8 text-center text-zinc-600 text-sm">{search.trim() ? 'No matches.' : `Nothing recorded${location === 'all' ? '' : ` in the ${location}`}.`}</p> : visibleItems.map((item) => {
             const expiry = expiryLabel(item.expiresOn)
             const editing = editingId === item._id && editDraft
-            const count = parseCount(item.quantity)
+            const parsedQuantity = parseQuantity(item.quantity)
             return <div key={item._id} className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
-              {editing ? <><input value={editDraft.name} onChange={(event) => setEditDraft({ ...editDraft, name: event.target.value })} className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm" /><div className="grid grid-cols-2 gap-2"><input value={editDraft.quantity} onChange={(event) => setEditDraft({ ...editDraft, quantity: event.target.value })} className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm" /><input type="date" value={editDraft.expiresOn ?? ''} onChange={(event) => setEditDraft({ ...editDraft, expiresOn: event.target.value || null })} className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm" /></div><div className="flex items-center gap-3"><select value={editDraft.location} onChange={(event) => setEditDraft({ ...editDraft, location: event.target.value as FoodLocation })} className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs">{LOCATIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><label className="text-xs text-zinc-400"><input type="checkbox" checked={editDraft.opened} onChange={(event) => setEditDraft({ ...editDraft, opened: event.target.checked })} /> Opened</label></div><div className="flex gap-2"><button onClick={() => void saveEdit()} disabled={saving || !editDraft.name.trim()} className="rounded border border-lime-400/30 px-3 py-1.5 text-[10px] font-mono font-bold uppercase text-lime-400">Save</button><button onClick={() => { setEditingId(null); setEditDraft(null) }} className="text-[10px] font-mono font-bold uppercase text-zinc-500">Cancel</button></div></> : <><div className="flex justify-between gap-3"><div className="flex min-w-0 items-center gap-3">{item.imageUrl ? <img src={item.imageUrl} alt="" className="h-10 w-10 shrink-0 rounded-md bg-zinc-800 object-cover" /> : <div className="h-10 w-10 shrink-0 rounded-md bg-zinc-800" />}<div className="min-w-0"><p className="truncate font-bold text-sm">{item.name}{location === 'all' && <span className="ml-2 text-zinc-600 text-[10px] font-mono uppercase tracking-widest">{LOCATION_LABEL[item.location]}</span>}</p><div className="flex items-center gap-2">{count !== null ? <div className="flex items-center gap-1.5"><button onClick={() => void adjustItemQuantity(item, -1)} className="h-5 w-5 rounded bg-zinc-800 text-xs font-bold text-zinc-300 hover:bg-zinc-700">-</button><span className="text-zinc-500 text-xs font-mono">{item.quantity}</span><button onClick={() => void adjustItemQuantity(item, 1)} className="h-5 w-5 rounded bg-zinc-800 text-xs font-bold text-zinc-300 hover:bg-zinc-700">+</button></div> : <p className="text-zinc-500 text-xs">{item.quantity}</p>}{item.opened && <span className="text-zinc-500 text-xs">- opened</span>}</div></div></div>{expiry && <span className={`shrink-0 text-[10px] font-mono font-bold uppercase ${expiry.urgent ? 'text-amber-400' : 'text-zinc-500'}`}>{expiry.text}</span>}</div><div className="flex gap-2"><button onClick={() => { setEditingId(item._id); setEditDraft(item) }} className="rounded border border-zinc-700 px-3 py-1.5 text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-300">Edit</button><button onClick={() => void removeItem(item._id, 'used')} className="rounded border border-lime-400/30 px-3 py-1.5 text-[10px] font-mono font-bold tracking-widest uppercase text-lime-400">Used</button><button onClick={() => void removeItem(item._id, 'discarded')} className="rounded border border-zinc-700 px-3 py-1.5 text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-500">Discard</button></div></>}
+              {editing ? <><input value={editDraft.name} onChange={(event) => setEditDraft({ ...editDraft, name: event.target.value })} className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm" /><div className="grid grid-cols-2 gap-2"><input value={editDraft.quantity} onChange={(event) => setEditDraft({ ...editDraft, quantity: event.target.value })} className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm" /><input type="date" value={editDraft.expiresOn ?? ''} onChange={(event) => setEditDraft({ ...editDraft, expiresOn: event.target.value || null })} className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm" /></div><div className="flex items-center gap-3"><select value={editDraft.location} onChange={(event) => setEditDraft({ ...editDraft, location: event.target.value as FoodLocation })} className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs">{LOCATIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><label className="text-xs text-zinc-400"><input type="checkbox" checked={editDraft.opened} onChange={(event) => setEditDraft({ ...editDraft, opened: event.target.checked })} /> Opened</label></div><div className="flex gap-2"><button onClick={() => void saveEdit()} disabled={saving || !editDraft.name.trim()} className="rounded border border-lime-400/30 px-3 py-1.5 text-[10px] font-mono font-bold uppercase text-lime-400">Save</button><button onClick={() => { setEditingId(null); setEditDraft(null) }} className="text-[10px] font-mono font-bold uppercase text-zinc-500">Cancel</button></div></> : <><div className="flex justify-between gap-3"><div className="flex min-w-0 items-center gap-3">{item.imageUrl ? <img src={item.imageUrl} alt="" className="h-10 w-10 shrink-0 rounded-md bg-zinc-800 object-cover" /> : <div className="h-10 w-10 shrink-0 rounded-md bg-zinc-800" />}<div className="min-w-0"><p className="truncate font-bold text-sm">{item.name}{location === 'all' && <span className="ml-2 text-zinc-600 text-[10px] font-mono uppercase tracking-widest">{LOCATION_LABEL[item.location]}</span>}</p><div className="flex flex-wrap items-center gap-2">{parsedQuantity !== null ? <div className="flex items-center gap-1.5"><button onClick={() => void adjustItemQuantity(item, -1)} className="h-5 w-5 rounded bg-zinc-800 text-xs font-bold text-zinc-300 hover:bg-zinc-700">-</button><span className="text-zinc-500 text-xs font-mono">{item.quantity}</span><button onClick={() => void adjustItemQuantity(item, 1)} className="h-5 w-5 rounded bg-zinc-800 text-xs font-bold text-zinc-300 hover:bg-zinc-700">+</button></div> : <p className="text-zinc-500 text-xs">{item.quantity}</p>}<button onClick={() => void toggleOpened(item)} className={`text-[10px] font-mono font-bold uppercase tracking-widest ${item.opened ? 'text-amber-400' : 'text-zinc-600 hover:text-zinc-400'}`}>{item.opened ? '✓ Opened' : 'Mark opened'}</button></div></div></div>{expiry && <span className={`shrink-0 text-[10px] font-mono font-bold uppercase ${expiry.urgent ? 'text-amber-400' : 'text-zinc-500'}`}>{expiry.text}</span>}</div><div className="flex gap-2"><button onClick={() => { setEditingId(item._id); setEditDraft(item) }} className="rounded border border-zinc-700 px-3 py-1.5 text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-300">Edit</button><button onClick={() => void removeItem(item._id, 'used')} className="rounded border border-lime-400/30 px-3 py-1.5 text-[10px] font-mono font-bold tracking-widest uppercase text-lime-400">Used</button><button onClick={() => void removeItem(item._id, 'discarded')} className="rounded border border-zinc-700 px-3 py-1.5 text-[10px] font-mono font-bold tracking-widest uppercase text-zinc-500">Discard</button></div></>}
             </div>
           })}
         </section>
