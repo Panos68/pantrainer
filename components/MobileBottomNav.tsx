@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import type { AuthRole } from '@/lib/auth'
 
 const ITEMS = [
   { href: '/', label: 'Home', icon: '🏠' },
@@ -11,10 +12,19 @@ const ITEMS = [
   { href: '/food', label: 'Food', icon: '🧺' },
 ]
 
-export default function MobileBottomNav() {
+interface MobileBottomNavProps {
+  role: AuthRole | null
+}
+
+export default function MobileBottomNav({ role }: MobileBottomNavProps) {
   const pathname = usePathname()
 
-  if (pathname === '/login' || pathname === '/setup' || pathname === '/food' || pathname.startsWith('/food/')) return null
+  if (pathname === '/login' || pathname === '/setup') return null
+  // The food-only role is deliberately locked to /food with no way to
+  // navigate elsewhere. The owner role should always see the full nav,
+  // including on /food, so they can get back to the rest of the app.
+  const isFoodPath = pathname === '/food' || pathname.startsWith('/food/')
+  if (isFoodPath && role !== 'owner') return null
 
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur">
