@@ -1,6 +1,7 @@
 import { fetchRecentMeasurements, type RenphoMeasurement } from './renpho'
 import { readCurrentWeekDirect, writeCurrentWeek } from './data'
-import { isoDateInAppTimeZone } from './app-timezone'
+import { isoDateInAppTimeZone, todayIsoInAppTimeZone } from './app-timezone'
+import { isoDaysAgoInAppTimeZone } from './recovery-freshness'
 import type { RenphoMeasurementDay } from './schema'
 
 function toDayEntry(m: RenphoMeasurement): RenphoMeasurementDay {
@@ -21,14 +22,13 @@ function toDayEntry(m: RenphoMeasurement): RenphoMeasurementDay {
 /**
  * Fetch the most recent Renpho measurements and bucket the latest reading
  * per calendar day (app time zone) onto the current week doc. Renpho has no
- * date-range query, so this always pulls a fixed recent window and lets
- * callers rely on "most recent measurement wins" per day.
- *
- * Only dates the current week doc actually tracks (i.e. one of its session
- * dates) are stored — same rule finalize-day uses for Garmin recovery.
- * Without this, a wide lookback window would misfile older readings onto
- * the current week doc instead of the archived week that actually owns
- * that date.
+ * date-range query, so this always pulls the last raw readings off the
+ * scale's own history — which, for an account with any older measurements
+ * sitting in that table, keeps re-surfacing those same old dates on every
+ * run. This is a once-a-day morning weigh-in, not a backfill job, so only
+ * today and yesterday (a small buffer for a late/missed cron run) are ever
+ * accepted — anything older is discarded even if it's technically within
+ * the current week's date range.
  */
 export async function fetchAndStoreRenphoMeasurements(): Promise<{ updated: string[] }> {
   const measurements = await fetchRecentMeasurements(30)
@@ -37,12 +37,12 @@ export async function fetchAndStoreRenphoMeasurements(): Promise<{ updated: stri
   const week = await readCurrentWeekDirect()
   if (!week) return { updated: [] }
 
-  const trackedDates = new Set(week.sessions?.map((s) => s.date) ?? [])
+  const acceptedDates = new Set([todayIsoInAppTimeZone(), isoDaysAgoInAppTimeZone(1)])
 
   const latestPerDay = new Map<string, RenphoMeasurement>()
   for (const m of measurements) {
     const date = isoDateInAppTimeZone(new Date(m.time_stamp * 1000))
-    if (!trackedDates.has(date)) continue
+    if (!acceptedDates.has(date)) continue
     const existing = latestPerDay.get(date)
     if (!existing || m.time_stamp > existing.time_stamp) {
       latestPerDay.set(date, m)
