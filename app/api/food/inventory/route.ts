@@ -3,6 +3,7 @@ import { FoodInventoryItemSchema } from '@/lib/schema'
 import type { FoodInventoryItem } from '@/lib/schema'
 import { readFoodInventory, readFoodInventoryItem, readFoodRestockSuggestions, readPantry, writeFoodInventoryItem, updateFoodInventoryStatus } from '@/lib/data'
 import { getSession } from '@/lib/auth'
+import { searchProductImageByName } from '@/lib/openfoodfacts'
 
 async function requireFoodAccess(request: Request): Promise<Response | null> {
   const session = await getSession(request)
@@ -35,11 +36,17 @@ export async function POST(request: Request) {
   if (Array.isArray(body.names)) {
     const names = body.names.filter((name: unknown) => typeof name === 'string').map((name: string) => name.trim()).filter(Boolean).slice(0, 20)
     if (names.length === 0) return Response.json({ error: 'At least one food name is required' }, { status: 400 })
+    // Best-effort images — no barcode to look up, so this is a name search
+    // against OFF's branded-product database. Approximate by nature (a
+    // generic name like "chicken" can match the wrong specific product);
+    // a failed/no-match lookup just leaves the item without an image.
+    const imageUrls = await Promise.all(names.map((name: string) => searchProductImageByName(name)))
     const items: FoodInventoryItem[] = []
-    for (const name of names) {
+    for (let i = 0; i < names.length; i++) {
+      const imageUrl = imageUrls[i]
       const parsed = FoodInventoryItemSchema.safeParse({
-        _id: randomUUID(), name, location: body.location, quantity: 'some', expiresOn: null,
-        status: 'available', createdAt: now, updatedAt: now,
+        _id: randomUUID(), name: names[i], location: body.location, quantity: '1 item', expiresOn: null,
+        status: 'available', createdAt: now, updatedAt: now, ...(imageUrl ? { imageUrl } : {}),
       })
       if (!parsed.success) return Response.json({ error: 'Invalid food items' }, { status: 400 })
       items.push(parsed.data)
