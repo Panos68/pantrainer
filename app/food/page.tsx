@@ -69,6 +69,10 @@ export default function FoodPage() {
   const [quickNames, setQuickNames] = useState('')
   const [quantityCount, setQuantityCount] = useState(1)
   const [netQuantityText, setNetQuantityText] = useState<string | null>(null)
+  // True when netQuantityText is an unambiguous multipack ("4 x 100 g") — the
+  // stepper count already captures that case. False/null means it's a plain
+  // weight ("400 g") with no count semantics, which the stepper can't express.
+  const [hasPackCount, setHasPackCount] = useState(false)
   const [expiresOn, setExpiresOn] = useState('')
   const [barcode, setBarcode] = useState('')
   const [imageUrl, setImageUrl] = useState<string | null>(null)
@@ -145,7 +149,19 @@ export default function FoodPage() {
       const response = await fetch('/api/food/inventory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), quantity: formatCount(quantityCount), location: targetLocation, barcode: barcode || undefined, brand: brand || undefined, imageUrl: imageUrl || undefined, expiresOn: expiresOn || null }),
+        // A plain weight from the scan ("400 g") has no count semantics the
+        // stepper can express, so it's saved verbatim rather than collapsed
+        // to "1 item" and lost — combined with the stepper count only if the
+        // athlete actually bumped it up (e.g. "2 x 400 g"). A detected
+        // multipack ("4 x 100 g") already has its count on the stepper, so
+        // that one stays as a plain count.
+        body: JSON.stringify({
+          name: name.trim(),
+          quantity: netQuantityText && !hasPackCount
+            ? (quantityCount > 1 ? `${quantityCount} x ${netQuantityText}` : netQuantityText)
+            : formatCount(quantityCount),
+          location: targetLocation, barcode: barcode || undefined, brand: brand || undefined, imageUrl: imageUrl || undefined, expiresOn: expiresOn || null,
+        }),
       })
       if (!response.ok) throw new Error('Could not add food')
       if (saveAsStaple && per100g) {
@@ -159,6 +175,7 @@ export default function FoodPage() {
       setName('')
       setQuantityCount(1)
       setNetQuantityText(null)
+      setHasPackCount(false)
       setExpiresOn('')
       setBarcode('')
       setImageUrl(null)
@@ -188,11 +205,14 @@ export default function FoodPage() {
         setBrand(data.brands ?? null)
         setPer100g(data.per100g ?? null)
         setNetQuantityText(data.netQuantityText ?? null)
+        setHasPackCount(Boolean(data.packCount))
         // Prefill from the pack count when OFF's text is unambiguous (e.g. "4 x
         // 100 g") — still just a starting value on the stepper, not a silent save.
         if (data.packCount) setQuantityCount(data.packCount)
         const quantityNote = data.packCount
           ? ` Quantity pre-filled to ${data.packCount} from the pack (${data.netQuantityText}) — check it.`
+          : data.netQuantityText
+          ? ` Will be saved as "${data.netQuantityText}". Add the expiry date.`
           : ' Add the quantity and expiry date.'
         setScanNote(`Found ${data.name}${data.brands ? ` (${data.brands})` : ''}.${quantityNote}`)
       } else {
