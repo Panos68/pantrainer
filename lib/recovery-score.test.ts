@@ -23,7 +23,7 @@ function testFullDataProducesHighConfidence() {
 function testMissingHrvDegradesConfidenceNotCrash() {
   const garmin: GarminRecoveryDay = { sleep_hours: 7.5, deep_sleep_hours: 1.5, resting_hr_bpm: 48 }
   const result = calcRecoveryScore(garmin, 50, 0.9, null, fullBaselines)
-  assert.ok(result.confidence < 1)
+  assert.ok(result.confidence! < 1)
   assert.equal(result.hrv, null)
 }
 
@@ -31,7 +31,7 @@ function testLowConfidenceSuppressesLabel() {
   // Only sleep hours present, no HRV baseline, no RHR baseline, no ACWR, no readiness
   const garmin: GarminRecoveryDay = { sleep_hours: 7.5 }
   const result = calcRecoveryScore(garmin, 50, null, null, noBaselines)
-  assert.ok(result.confidence < CONFIDENCE_FLOOR)
+  assert.ok(result.confidence! < CONFIDENCE_FLOOR)
   assert.equal(result.label, null)
   assert.equal(result.color, null)
   assert.ok(typeof result.total === 'number') // numeric score still present
@@ -51,7 +51,7 @@ function testWeightRedistributionWhenLoadOptsOut() {
   const garmin: GarminRecoveryDay = { sleep_hours: 7.5, deep_sleep_hours: 1.5, resting_hr_bpm: 48, hrv_overnight_ms: 60 }
   const result = calcRecoveryScore(garmin, 50, null, { date: '2026-09-15', energy_level: 4, sleep_quality: 4, mood: 4, logged_at: '' }, fullBaselines)
   assert.equal(result.load, 15)
-  assert.equal(Math.round(result.confidence * 100), 80)
+  assert.equal(Math.round(result.confidence! * 100), 80)
 }
 
 testFullDataProducesHighConfidence()

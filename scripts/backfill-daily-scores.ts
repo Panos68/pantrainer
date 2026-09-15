@@ -80,4 +80,7 @@ async function main() {
 import('../lib/data').then((mod) => {
   dataModule = mod
   return main()
+}).catch((e) => {
+  console.error(e)
+  process.exit(1)
 })

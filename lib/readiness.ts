@@ -73,8 +73,8 @@ export function buildReadinessSnapshot(
     return calcRecoveryScore(garmin, profile.rhr_bpm, acwr, readiness, baselines)
   })()
 
-  // Real trailing 7 days ending the day before `date`, pulled from current +
-  // archived weeks — the old version averaged every entry ever stored in the
+  // Real trailing 7 days including `date` itself (i = 0..6 days back), pulled
+  // from current + archived weeks — the old version averaged every entry ever stored in the
   // current week's garmin_recovery map, which drifted wildly in size and
   // ignored week rollovers entirely.
   const allRecovery: Record<string, GarminRecoveryDay> = {

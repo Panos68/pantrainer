@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { calcACWR } from './daily-score'
+import type { TrainingLoadPoint } from './training-load'
 
-function point(date: string, load: number) {
-  return { date, training_load: load, source: 'srpe' as const }
+function point(date: string, load: number): TrainingLoadPoint {
+  return { date, training_load: load, source: 'srpe' as const } as unknown as TrainingLoadPoint
 }
 
 function testAnchorsOnAsOfDateNotLastSessionDate() {

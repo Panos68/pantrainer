@@ -1,11 +1,12 @@
 export const dynamic = 'force-dynamic'
 
 import { redirect } from 'next/navigation'
-import { format, differenceInDays, parseISO, subDays, startOfWeek, subWeeks, addDays } from 'date-fns'
+import { format, parseISO, startOfWeek, subWeeks, addDays } from 'date-fns'
 import Link from 'next/link'
 import { readAthleteProfile, readCurrentWeek, readAppState, readArchivedWeeks, readPendingWeek, readNutritionLogForRange, readCoachNotesForRange } from '@/lib/data'
 import { isPendingWeekDue } from '@/lib/week-activation'
 import { sessionToLoadPoint } from '@/lib/training-load'
+import { calcACWR } from '@/lib/daily-score'
 import { calcAdaptiveAlert } from '@/lib/adaptive-alert'
 import { buildReadinessSnapshot } from '@/lib/readiness'
 import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
@@ -141,19 +142,7 @@ export default async function Home() {
     .filter((p): p is NonNullable<typeof p> => p !== null)
     .sort((a, b) => a.date.localeCompare(b.date))
 
-  const acwr = (() => {
-    if (allLoadPoints.length < 3) return null
-    const oldest = allLoadPoints[0].date
-    const latest = allLoadPoints[allLoadPoints.length - 1].date
-    if (differenceInDays(parseISO(latest), parseISO(oldest)) < 21) return null
-    const acuteStart = format(subDays(parseISO(latest), 6), 'yyyy-MM-dd')
-    const chronicStart = format(subDays(parseISO(latest), 27), 'yyyy-MM-dd')
-    const acute = allLoadPoints.filter((p) => p.date >= acuteStart).reduce((s, p) => s + p.training_load, 0)
-    const chronicPts = allLoadPoints.filter((p) => p.date >= chronicStart && p.date <= latest)
-    const chronic = chronicPts.length > 0 ? chronicPts.reduce((s, p) => s + p.training_load, 0) / 4 : null
-    if (!chronic || chronic === 0) return null
-    return Math.round((acute / chronic) * 100) / 100
-  })()
+  const acwr = calcACWR(allLoadPoints, todayISO)
 
   const loadZone: { label: string; color: string } | null = acwr == null ? null
     : acwr >= 0.8 && acwr <= 1.0 ? { label: 'Optimal', color: 'text-emerald-400' }

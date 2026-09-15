@@ -100,7 +100,7 @@ export function calcRecoveryScore(
   const rhr = rhrComp ? Math.round((rhrComp.points / 20) * 30) : 15
   const load = loadComp ? Math.round(loadComp.points) : 15
   const subjective = subjectiveComp ? Math.round((subjectiveComp.points / 10) * 10) : 5
-  const hrv = hrvComp ? Math.round((hrvComp.points / 25) * 100) / 100 : null
+  const hrv = hrvComp ? Math.round(hrvComp.points * 10) / 10 : null
 
   const { label, color } = labelFor(total)
   const showLabel = confidence >= CONFIDENCE_FLOOR

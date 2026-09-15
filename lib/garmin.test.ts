@@ -43,7 +43,7 @@ function testParsesFullDto() {
 
 function testMissingExtendedFieldsAreNull() {
   const dto = { sleepTimeSeconds: 27000, deepSleepSeconds: 5400, remSleepSeconds: 3600 }
-  const result = parseSleepDto(dto)
+  const result = parseSleepDto(dto)!
   assert.equal(result.hrv_overnight_ms, null)
   assert.equal(result.hrv_status, null)
   assert.equal(result.sleep_score, null)
