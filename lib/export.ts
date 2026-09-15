@@ -5,6 +5,7 @@ import { sessionToLoadPoint, type TrainingLoadPoint } from './training-load'
 import { calcOverloadInsights } from './overload'
 import { isMidDaySnapshot } from './recovery-freshness'
 import { format, parseISO, subDays } from 'date-fns'
+import { todayIsoInAppTimeZone } from './app-timezone'
 
 export interface ExportPayload {
   week: string
@@ -163,10 +164,7 @@ function buildCoachContext(
     }),
   )
 
-  const latestLoadDate =
-    training_load_history.length > 0
-      ? training_load_history[training_load_history.length - 1].date
-      : format(new Date(), 'yyyy-MM-dd')
+  const latestLoadDate = todayIsoInAppTimeZone()
   const acuteStart = format(subDays(parseISO(latestLoadDate), 6), 'yyyy-MM-dd')
   const chronicStart = format(subDays(parseISO(latestLoadDate), 27), 'yyyy-MM-dd')
 
@@ -203,8 +201,7 @@ function buildCoachContext(
       })),
     )
     .sort((a, b) => a.date.localeCompare(b.date))
-  const recoveryLatestDate =
-    allRecovery.length > 0 ? allRecovery[allRecovery.length - 1].date : format(new Date(), 'yyyy-MM-dd')
+  const recoveryLatestDate = todayIsoInAppTimeZone()
   const recoveryStart7 = format(subDays(parseISO(recoveryLatestDate), 6), 'yyyy-MM-dd')
   const recoveryStartPrev7 = format(subDays(parseISO(recoveryLatestDate), 13), 'yyyy-MM-dd')
   const recoveryEndPrev7 = format(subDays(parseISO(recoveryLatestDate), 7), 'yyyy-MM-dd')
