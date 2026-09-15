@@ -224,6 +224,15 @@ export const GarminRecoveryDaySchema = z.object({
   fitness_age: z.number().nullable().optional(),
   achievable_fitness_age: z.number().nullable().optional(),
   total_kilocalories: z.number().nullable().optional(), // Garmin's own daily total burn (BMR + active), live/same-day
+  hrv_overnight_ms: z.number().nullable().optional(),
+  hrv_status: z.string().nullable().optional(),
+  sleep_score: z.number().nullable().optional(),
+  avg_sleep_stress: z.number().nullable().optional(),
+  awake_count: z.number().nullable().optional(),
+  respiration_avg: z.number().nullable().optional(),
+  hrv_baseline_low: z.number().nullable().optional(),
+  hrv_baseline_high: z.number().nullable().optional(),
+  spo2_avg: z.number().nullable().optional(),
   fetched_at: z.string().optional(),
 })
 

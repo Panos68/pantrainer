@@ -94,6 +94,33 @@ function run() {
     })
     assert.equal(result.success, true, 'accepts explicit null for any new field (genuinely-no-data case)')
   }
+  {
+    const result = GarminRecoveryDaySchema.safeParse({
+      sleep_hours: 7.2,
+      resting_hr_bpm: 48,
+      fetched_at: '2026-01-01T06:00:00.000Z',
+    })
+    assert.equal(result.success, true, 'old document without new HRV/sleep-score/SpO2 fields still parses')
+    assert.equal(result.success && result.data.hrv_overnight_ms, undefined, 'missing HRV field is undefined')
+  }
+  {
+    const result = GarminRecoveryDaySchema.safeParse({
+      sleep_hours: 7.2,
+      hrv_overnight_ms: 58,
+      hrv_status: 'BALANCED',
+      sleep_score: 80,
+      avg_sleep_stress: 25,
+      awake_count: 2,
+      respiration_avg: 14.5,
+      hrv_baseline_low: 40,
+      hrv_baseline_high: 100,
+      spo2_avg: 97,
+    })
+    assert.equal(result.success, true, 'new document with all HRV/sleep-score/SpO2 fields parses')
+    assert.equal(result.success && result.data.hrv_overnight_ms, 58, 'hrv_overnight_ms round-trips')
+    assert.equal(result.success && result.data.hrv_status, 'BALANCED', 'hrv_status round-trips')
+    assert.equal(result.success && result.data.sleep_score, 80, 'sleep_score round-trips')
+  }
   console.log('lib/schema.test.ts: all assertions passed')
 }
 
