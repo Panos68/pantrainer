@@ -360,6 +360,7 @@ export async function fetchSpo2(date: string): Promise<GarminSpo2Result | null> 
     ) as { averageSpO2?: number }
     if (!raw) return null
     return {
+      // 0 is not a physiologically valid SpO2 reading — treat as no data
       spo2_avg: typeof raw.averageSpO2 === 'number' && raw.averageSpO2 > 0 ? raw.averageSpO2 : null,
     }
   } catch {
