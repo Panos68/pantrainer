@@ -78,6 +78,12 @@ export type GarminSleepResult = {
   sleep_hours: number
   deep_sleep_hours: number
   rem_sleep_hours: number
+  hrv_overnight_ms: number | null
+  hrv_status: string | null
+  sleep_score: number | null
+  avg_sleep_stress: number | null
+  awake_count: number | null
+  respiration_avg: number | null
 }
 
 export type GarminHRResult = {
@@ -158,17 +164,36 @@ export async function fetchActivityStrengthSets(
   }
 }
 
+export function parseSleepDto(dto: {
+  sleepTimeSeconds?: number
+  deepSleepSeconds?: number
+  remSleepSeconds?: number
+  avgOvernightHrv?: number
+  hrvStatus?: string
+  sleepScores?: { overall?: { value?: number } }
+  avgSleepStress?: number
+  awakeCount?: number
+  averageRespirationValue?: number
+} | null | undefined): GarminSleepResult | null {
+  if (!dto || !dto.sleepTimeSeconds) return null
+  return {
+    sleep_hours: Math.round((dto.sleepTimeSeconds / 3600) * 10) / 10,
+    deep_sleep_hours: Math.round(((dto.deepSleepSeconds ?? 0) / 3600) * 10) / 10,
+    rem_sleep_hours: Math.round(((dto.remSleepSeconds ?? 0) / 3600) * 10) / 10,
+    hrv_overnight_ms: typeof dto.avgOvernightHrv === 'number' ? dto.avgOvernightHrv : null,
+    hrv_status: typeof dto.hrvStatus === 'string' ? dto.hrvStatus : null,
+    sleep_score: typeof dto.sleepScores?.overall?.value === 'number' ? dto.sleepScores.overall.value : null,
+    avg_sleep_stress: typeof dto.avgSleepStress === 'number' ? dto.avgSleepStress : null,
+    awake_count: typeof dto.awakeCount === 'number' ? dto.awakeCount : null,
+    respiration_avg: typeof dto.averageRespirationValue === 'number' ? dto.averageRespirationValue : null,
+  }
+}
+
 export async function fetchSleepData(date: string): Promise<GarminSleepResult | null> {
   const client = await createClient()
   const dateObj = new Date(date + 'T12:00:00')
   const raw = await client.getSleepData(dateObj)
-  const dto = raw?.dailySleepDTO
-  if (!dto || !dto.sleepTimeSeconds) return null
-  return {
-    sleep_hours: Math.round((dto.sleepTimeSeconds / 3600) * 10) / 10,
-    deep_sleep_hours: Math.round((dto.deepSleepSeconds / 3600) * 10) / 10,
-    rem_sleep_hours: Math.round((dto.remSleepSeconds / 3600) * 10) / 10,
-  }
+  return parseSleepDto(raw?.dailySleepDTO)
 }
 
 export async function fetchHRData(date: string): Promise<GarminHRResult> {
@@ -293,6 +318,49 @@ export async function fetchFitnessAge(date: string): Promise<GarminFitnessAgeRes
     return {
       fitness_age: typeof raw.fitnessAge === 'number' ? raw.fitnessAge : null,
       achievable_fitness_age: typeof raw.achievableFitnessAge === 'number' ? raw.achievableFitnessAge : null,
+    }
+  } catch {
+    return null
+  }
+}
+
+export type GarminHrvBaselineResult = {
+  hrv_baseline_low: number | null
+  hrv_baseline_high: number | null
+}
+
+export async function fetchHrvBaseline(date: string): Promise<GarminHrvBaselineResult | null> {
+  try {
+    const client: any = await createClient()
+    const base = client.url.GC_API
+    const raw = await client.client.get(
+      `${base}/hrv-service/hrv/${date}`
+    ) as { hrvSummary?: { baseline?: { balancedLow?: number; balancedUpper?: number } } }
+    const baseline = raw?.hrvSummary?.baseline
+    if (!baseline) return null
+    return {
+      hrv_baseline_low: typeof baseline.balancedLow === 'number' ? baseline.balancedLow : null,
+      hrv_baseline_high: typeof baseline.balancedUpper === 'number' ? baseline.balancedUpper : null,
+    }
+  } catch {
+    return null
+  }
+}
+
+export type GarminSpo2Result = {
+  spo2_avg: number | null
+}
+
+export async function fetchSpo2(date: string): Promise<GarminSpo2Result | null> {
+  try {
+    const client: any = await createClient()
+    const base = client.url.GC_API
+    const raw = await client.client.get(
+      `${base}/wellness-service/wellness/daily/spo2/${date}`
+    ) as { averageSpO2?: number }
+    if (!raw) return null
+    return {
+      spo2_avg: typeof raw.averageSpO2 === 'number' && raw.averageSpO2 > 0 ? raw.averageSpO2 : null,
     }
   } catch {
     return null
