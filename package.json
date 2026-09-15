@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "for f in lib/*.test.ts; do npx tsx -r ./lib/test-setup.js \"$f\" || exit 1; done"
+    "test": "dotenvx run -f .env.local -- sh -c 'for f in lib/*.test.ts; do npx tsx \"$f\" || exit 1; done'"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",
