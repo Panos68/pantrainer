@@ -1,5 +1,7 @@
+import { list, del } from '@vercel/blob'
 import { fetchAndStoreRecovery, isMidDaySnapshot, isoDaysAgoInAppTimeZone } from '@/lib/garmin-recovery'
-import { readCurrentWeekDirect, deleteCoachNote } from '@/lib/data'
+import { readCurrentWeekDirect, deleteCoachNote, readNutritionLogForRange } from '@/lib/data'
+import { selectFoodPhotosToDelete } from '@/lib/food-photo-cleanup'
 
 // Scheduled at 01:01 UTC (see vercel.json) = 03:01 Europe/Stockholm in summer,
 // 02:01 in winter. Vercel crons are UTC-only, so this is deliberately not
@@ -13,6 +15,47 @@ export const maxDuration = 120
 // days let a missed or failed run catch up on the next night instead of
 // leaving a partial burn frozen in the week doc forever.
 const LOOKBACK_DAYS = 3
+
+// Food photos are kept for 2 weeks after they've been folded into a saved
+// nutrition estimate — long enough to review or re-check a day, short enough
+// to keep Blob storage/transfer bounded. Pending (not yet analyzed) photos
+// are never swept, regardless of age.
+const FOOD_PHOTO_RETENTION_DAYS = 14
+
+// Vercel Hobby plans cap the number of cron jobs, so this piggybacks on the
+// existing daily finalize-day run instead of registering a separate cron.
+async function cleanupOldFoodPhotos(): Promise<{ deleted: number; scanned: number } | { error: string }> {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return { error: 'BLOB_READ_WRITE_TOKEN is not configured' }
+  }
+
+  const cutoffDate = isoDaysAgoInAppTimeZone(FOOD_PHOTO_RETENTION_DAYS)
+
+  const pathnames: string[] = []
+  let cursor: string | undefined
+  do {
+    const page = await list({
+      prefix: 'data/food-photos/',
+      cursor,
+      token: process.env.BLOB_READ_WRITE_TOKEN,
+    })
+    pathnames.push(...page.blobs.map((b) => b.pathname))
+    cursor = page.hasMore ? page.cursor : undefined
+  } while (cursor)
+
+  // Nutrition-log entries are keyed by date string, so any date far enough
+  // back covers the full history of entries that could still be pending
+  // deletion (earlier ones were already swept on a prior day's run).
+  const entries = await readNutritionLogForRange('0000-01-01', cutoffDate)
+  const analyzedPathnames = new Set(entries.flatMap((e) => e.analyzedPhotoPathnames ?? []))
+
+  const toDelete = selectFoodPhotosToDelete(pathnames, analyzedPathnames, cutoffDate)
+  if (toDelete.length > 0) {
+    await del(toDelete, { token: process.env.BLOB_READ_WRITE_TOKEN })
+  }
+
+  return { deleted: toDelete.length, scanned: pathnames.length }
+}
 
 function isAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET
@@ -70,5 +113,13 @@ export async function GET(req: Request) {
     }
   }
 
-  return Response.json({ ok: true, results })
+  let foodPhotoCleanup: Awaited<ReturnType<typeof cleanupOldFoodPhotos>>
+  try {
+    foodPhotoCleanup = await cleanupOldFoodPhotos()
+  } catch (err) {
+    console.error('finalize-day: food photo cleanup failed', err)
+    foodPhotoCleanup = { error: err instanceof Error ? err.message : 'unknown error' }
+  }
+
+  return Response.json({ ok: true, results, foodPhotoCleanup })
 }
