@@ -110,7 +110,7 @@ const TOOLS = [
   {
     name: 'get_garmin_recovery_freshness',
     description:
-      'Check whether cached Garmin recovery data for a given date is actually present and current, before using it to give advice. Returns sleep, resting/max HR, Body Battery, Stress, VO2 max, Fitness Age, and total_kilocalories (Garmin\'s own daily calorie burn — use this to compute calorie balance against logged intake) (whichever are cached), the recovery score breakdown is NOT included here — use the score directly from the week doc if needed. Includes an explicit warning when data is missing or stale, a same_day flag, and a per-field field_warnings object distinguishing "not synced yet", "Garmin genuinely has no data for this field on this date" (e.g. VO2 max is only recomputed periodically, not daily), and — for Body Battery/Stress/total_kilocalories specifically when same_day is true — "still accumulating, not a final total yet" (sleep/RHR are overnight-derived and already final by morning, so this third case never applies to them). Use this before trusting any of these numbers.',
+      'Check whether cached Garmin recovery data for a given date is actually present and current, before using it to give advice. Returns sleep, sleep score, overnight HRV and HRV status, sleep stress, awake count, respiration rate, SpO2, resting/max HR, Body Battery, Stress, VO2 max, Fitness Age, and total_kilocalories (Garmin\'s own daily calorie burn — use this to compute calorie balance against logged intake) (whichever are cached), the recovery score breakdown is NOT included here — use the score directly from the week doc if needed. Includes an explicit warning when data is missing or stale, a same_day flag, and a per-field field_warnings object distinguishing "not synced yet", "Garmin genuinely has no data for this field on this date" (e.g. VO2 max is only recomputed periodically, not daily), and — for Body Battery/Stress/total_kilocalories specifically when same_day is true — "still accumulating, not a final total yet" (sleep/RHR/HRV are overnight-derived and already final by morning, so this third case never applies to them). Use this before trusting any of these numbers.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -702,6 +702,7 @@ async function handleGetGarminRecoveryFreshness(args: Record<string, unknown>) {
     total_kilocalories:
       fieldWarning('Total calorie burn', recovery?.total_kilocalories, 'likely the watch wasn\'t worn that day') ??
       (isSameDay && recovery?.total_kilocalories != null ? sameDayCaveat('Total calorie burn') : null),
+    hrv: fieldWarning('HRV', recovery?.hrv_overnight_ms, 'likely the watch wasn\'t worn overnight, or HRV tracking is disabled'),
   }
 
   return {
@@ -722,6 +723,13 @@ async function handleGetGarminRecoveryFreshness(args: Record<string, unknown>) {
     fitness_age: recovery?.fitness_age ?? null,
     achievable_fitness_age: recovery?.achievable_fitness_age ?? null,
     total_kilocalories: recovery?.total_kilocalories ?? null,
+    hrv_overnight_ms: recovery?.hrv_overnight_ms ?? null,
+    hrv_status: recovery?.hrv_status ?? null,
+    sleep_score: recovery?.sleep_score ?? null,
+    avg_sleep_stress: recovery?.avg_sleep_stress ?? null,
+    awake_count: recovery?.awake_count ?? null,
+    respiration_avg: recovery?.respiration_avg ?? null,
+    spo2_avg: recovery?.spo2_avg ?? null,
     fetched_at: recovery?.fetched_at ?? null,
     fetched_hours_ago: fetchedHoursAgo,
     server_now: serverNow.toISOString(),
