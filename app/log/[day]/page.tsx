@@ -1716,6 +1716,14 @@ export default function LogDayPage() {
               placeholder="What did you eat today? (alternative to a photo)"
               className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-zinc-100 text-sm font-mono placeholder:text-zinc-600 focus:outline-none focus:border-lime-400/50 focus:ring-1 focus:ring-lime-400/20 transition-colors resize-y leading-relaxed"
             />
+            <button
+              type="button"
+              onClick={() => void saveFoodNote()}
+              disabled={foodNoteSaving}
+              className="w-full h-11 rounded-xl border border-zinc-600 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-bold text-xs tracking-[0.15em] uppercase transition-colors disabled:opacity-50"
+            >
+              {foodNoteSaving ? 'Saving...' : 'Save Note'}
+            </button>
             {foodNoteSaving && (
               <p className="text-zinc-500 text-[10px] font-mono">Saving note...</p>
             )}
@@ -1805,7 +1813,7 @@ export default function LogDayPage() {
         )}
 
         {/* Action buttons */}
-        {!showSkip && (
+        {activeTab === 'log' && !showSkip && (
           <div className="grid grid-cols-1 gap-3 pt-2">
             {session.status === 'completed' || session.status === 'skipped' ? (
               <button
