@@ -436,7 +436,7 @@ function buildCoachContext(
     },
     readiness_summary: {
       today_score: todayScore.total,
-      today_label: todayScore.label,
+      today_label: todayScore.label ?? null,
       recent_rpe: recentRpe,
       avg_rpe_7d,
     },
