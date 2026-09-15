@@ -266,8 +266,11 @@ export const RecoveryScoreBreakdownSchema = z.object({
   rhr: z.number(),
   load: z.number(),
   subjective: z.number(),
-  label: z.enum(['Ready', 'Moderate', 'Rest']),
-  color: z.enum(['green', 'amber', 'red']),
+  hrv: z.number().nullable().optional(),
+  confidence: z.number().optional(),
+  version: z.number().optional(),
+  label: z.enum(['Ready', 'Moderate', 'Rest']).nullable().optional(),
+  color: z.enum(['green', 'amber', 'red']).nullable().optional(),
 })
 export type RecoveryScoreBreakdown = z.infer<typeof RecoveryScoreBreakdownSchema>
 

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { ExerciseSchema, SessionSchema, GarminRecoveryDaySchema } from './schema'
+import { ExerciseSchema, SessionSchema, GarminRecoveryDaySchema, RecoveryScoreBreakdownSchema } from './schema'
 
 function run() {
   {
@@ -120,6 +120,20 @@ function run() {
     assert.equal(result.success && result.data.hrv_overnight_ms, 58, 'hrv_overnight_ms round-trips')
     assert.equal(result.success && result.data.hrv_status, 'BALANCED', 'hrv_status round-trips')
     assert.equal(result.success && result.data.sleep_score, 80, 'sleep_score round-trips')
+  }
+  {
+    const result = RecoveryScoreBreakdownSchema.parse({
+      total: 75, sleep: 30, rhr: 25, load: 15, subjective: 5, label: 'Ready', color: 'green',
+    })
+    assert.equal(result.version, undefined)
+    assert.equal(result.hrv, undefined)
+  }
+  {
+    const result = RecoveryScoreBreakdownSchema.parse({
+      total: 50, sleep: 20, rhr: 15, load: 10, subjective: 5, hrv: null, confidence: 0.3, version: 2, label: null, color: null,
+    })
+    assert.equal(result.label, null)
+    assert.equal(result.version, 2)
   }
   console.log('lib/schema.test.ts: all assertions passed')
 }
