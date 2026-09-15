@@ -96,10 +96,10 @@ export function calcRecoveryScore(
   // (sleep 0-40, rhr 0-30, load 0-20, subjective 0-10) for UI/backward compat
   // with RecoveryScorePanel's existing bar maxes — only `total` and
   // `confidence` reflect the new weighted-redistribution math.
-  const sleep = sleepComp ? sleepRaw : 0
-  const rhr = rhrComp ? Math.round((rhrComp.points / 20) * 30) : 0
-  const load = loadComp ? Math.round(loadComp.points) : 0
-  const subjective = subjectiveComp ? Math.round((subjectiveComp.points / 10) * 10) : 0
+  const sleep = garmin ? sleepRaw : 20
+  const rhr = rhrComp ? Math.round((rhrComp.points / 20) * 30) : 15
+  const load = loadComp ? Math.round(loadComp.points) : 15
+  const subjective = subjectiveComp ? Math.round((subjectiveComp.points / 10) * 10) : 5
   const hrv = hrvComp ? Math.round((hrvComp.points / 25) * 100) / 100 : null
 
   const { label, color } = labelFor(total)

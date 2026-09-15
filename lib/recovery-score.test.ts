@@ -50,7 +50,7 @@ function testWeightRedistributionWhenLoadOptsOut() {
   // (hrv+sleep+rhr+subjective = 25+25+20+10 = 80), not crash or zero the total.
   const garmin: GarminRecoveryDay = { sleep_hours: 7.5, deep_sleep_hours: 1.5, resting_hr_bpm: 48, hrv_overnight_ms: 60 }
   const result = calcRecoveryScore(garmin, 50, null, { date: '2026-09-15', energy_level: 4, sleep_quality: 4, mood: 4, logged_at: '' }, fullBaselines)
-  assert.equal(result.load, 0)
+  assert.equal(result.load, 15)
   assert.equal(Math.round(result.confidence * 100), 80)
 }
 
