@@ -164,7 +164,7 @@ export default async function Home() {
   const todaySession = week.sessions.find((s) => s.date === todayISO) ?? null
   const readinessSnapshot = buildReadinessSnapshot(todayISO, week, profile, archivedWeeks)
   const adaptiveAlert = todaySession
-    ? calcAdaptiveAlert(readinessSnapshot.score.total, todaySession.type, todaySession.subtype, todaySession.status)
+    ? calcAdaptiveAlert(readinessSnapshot.score.total, readinessSnapshot.score.confidence ?? 1, todaySession.type, todaySession.subtype, todaySession.status)
     : null
 
   return (

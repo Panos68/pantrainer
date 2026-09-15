@@ -1,3 +1,5 @@
+import { CONFIDENCE_FLOOR } from './recovery-score'
+
 export type AlertLevel = 'warn' | 'caution' | null
 
 export interface AdaptiveAlert {
@@ -22,11 +24,15 @@ function sessionIntensity(type: string, subtype: string | null | undefined): 'hi
 
 export function calcAdaptiveAlert(
   recoveryScore: number,
+  confidence: number,
   sessionType: string,
   sessionSubtype: string | null | undefined,
   sessionStatus: string,
 ): AdaptiveAlert | null {
   if (sessionStatus === 'completed' || sessionStatus === 'skipped') return null
+  // A suppressed label means the score itself isn't trustworthy enough to
+  // anchor a warn/caution message against — no-label branch.
+  if (confidence < CONFIDENCE_FLOOR) return null
 
   const intensity = sessionIntensity(sessionType, sessionSubtype)
 
