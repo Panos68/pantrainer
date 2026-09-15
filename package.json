@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "for f in lib/*.test.ts; do npx tsx -r ./lib/test-setup.js \"$f\" || exit 1; done"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",
