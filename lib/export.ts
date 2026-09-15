@@ -42,6 +42,11 @@ export interface CoachContext {
     sleep_trend_hours: number | null
     resting_hr_avg_7d: number | null
     resting_hr_delta_vs_baseline: number | null
+    hrv_avg_7d: number | null
+    hrv_trend_vs_prev_7d: number | null
+    hrv_status: string | null
+    body_battery_avg_7d: number | null
+    stress_avg_7d: number | null
   }
   weight_summary: {
     latest_weight_kg: number | null
@@ -198,6 +203,10 @@ function buildCoachContext(
         resting_hr: r.resting_hr_bpm ?? null,
         total_kilocalories: r.total_kilocalories ?? null,
         fetched_at: r.fetched_at ?? null,
+        hrv: r.hrv_overnight_ms ?? null,
+        hrv_status: r.hrv_status ?? null,
+        body_battery: r.body_battery_charged ?? null,
+        stress: r.avg_stress_level ?? null,
       })),
     )
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -220,6 +229,21 @@ function buildCoachContext(
   const resting_hr_avg_7d = recentRhr.length > 0 ? round1(recentRhr.reduce((a, b) => a + b, 0) / recentRhr.length) : null
   const resting_hr_delta_vs_baseline =
     resting_hr_avg_7d != null ? round1(resting_hr_avg_7d - currentWeek.athlete.rhr_bpm) : null
+
+  const recentHrv = recentRecovery.map((r) => r.hrv).filter((v): v is number => v != null)
+  const prevHrv = prevRecovery.map((r) => r.hrv).filter((v): v is number => v != null)
+  const hrv_avg_7d = recentHrv.length > 0 ? round1(recentHrv.reduce((a, b) => a + b, 0) / recentHrv.length) : null
+  const hrv_avg_prev_7d = prevHrv.length > 0 ? round1(prevHrv.reduce((a, b) => a + b, 0) / prevHrv.length) : null
+  const hrv_trend_vs_prev_7d = hrv_avg_7d != null && hrv_avg_prev_7d != null ? round1(hrv_avg_7d - hrv_avg_prev_7d) : null
+  const latestHrvStatus = [...recentRecovery].reverse().find((r) => r.hrv_status != null)?.hrv_status ?? null
+
+  const recentBodyBattery = recentRecovery.map((r) => r.body_battery).filter((v): v is number => v != null)
+  const body_battery_avg_7d = recentBodyBattery.length > 0
+    ? round1(recentBodyBattery.reduce((a, b) => a + b, 0) / recentBodyBattery.length) : null
+
+  const recentStress = recentRecovery.map((r) => r.stress).filter((v): v is number => v != null)
+  const stress_avg_7d = recentStress.length > 0
+    ? round1(recentStress.reduce((a, b) => a + b, 0) / recentStress.length) : null
 
   const currentLifts = numericLifts(currentWeek)
   const priorLiftValuesByKey = new Map<string, number[]>()
@@ -368,6 +392,11 @@ function buildCoachContext(
       sleep_trend_hours,
       resting_hr_avg_7d,
       resting_hr_delta_vs_baseline,
+      hrv_avg_7d,
+      hrv_trend_vs_prev_7d,
+      hrv_status: latestHrvStatus,
+      body_battery_avg_7d,
+      stress_avg_7d,
     },
     weight_summary: {
       latest_weight_kg: latestWeightEntry?.weight_kg ?? null,
