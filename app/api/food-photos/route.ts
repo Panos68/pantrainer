@@ -3,6 +3,7 @@ import { blobUrl } from '@/lib/blob-url'
 import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { getSession } from '@/lib/auth'
+import { resizeFoodPhoto } from '@/lib/image-resize'
 
 // The auth cookie holds a signed session token (see lib/auth.ts), not the raw
 // password — this must go through getSession, a plain equality check against
@@ -60,14 +61,31 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Only image uploads are supported' }, { status: 415 })
   }
 
-  const filename = sanitizeFilename(file.name || 'photo.jpg') || 'photo.jpg'
+  const originalFilename = sanitizeFilename(file.name || 'photo.jpg') || 'photo.jpg'
+
+  // Camera-resolution originals are the main driver of Blob storage/transfer
+  // growth — downscale + re-encode before it ever reaches Blob. If a source
+  // image can't be processed (unsupported format, corrupt file), fall back to
+  // storing the original rather than blocking the upload entirely.
+  let body: Buffer | File = file
+  let contentType = file.type
+  let filename = originalFilename
+  try {
+    const inputBuffer = Buffer.from(await file.arrayBuffer())
+    body = await resizeFoodPhoto(inputBuffer)
+    contentType = 'image/jpeg'
+    filename = originalFilename.replace(/\.[a-z0-9]+$/i, '') + '.jpg'
+  } catch (error) {
+    console.error('food-photos: resize failed, storing original', error)
+  }
+
   const pathname = `data/food-photos/${date}/${Date.now()}-${filename}`
 
   try {
-    await put(pathname, file, {
+    await put(pathname, body, {
       access: 'private',
       addRandomSuffix: false,
-      contentType: file.type,
+      contentType,
     })
 
     return Response.json({
