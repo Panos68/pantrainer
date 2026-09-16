@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -12,12 +13,27 @@ const ITEMS = [
   { href: '/food', label: 'Food', icon: '🧺' },
 ]
 
-interface MobileBottomNavProps {
-  role: AuthRole | null
-}
-
-export default function MobileBottomNav({ role }: MobileBottomNavProps) {
+export default function MobileBottomNav() {
   const pathname = usePathname()
+  // Fetched client-side rather than read via cookies() in the root layout —
+  // that forced every route in the app to render dynamically, since the
+  // layout wraps every page. This is a UI-only nav-visibility decision, not
+  // a security boundary, so a brief null-role render while this loads is
+  // harmless (it defaults to hiding the nav on /food, same as the food role).
+  const [role, setRole] = useState<AuthRole | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/session/role')
+      .then((res) => res.json())
+      .then((data: { role: AuthRole | null }) => {
+        if (!cancelled) setRole(data.role)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   if (pathname === '/login' || pathname === '/setup') return null
   // The food-only role is deliberately locked to /food with no way to
