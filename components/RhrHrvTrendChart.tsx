@@ -8,10 +8,13 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  ReferenceArea,
 } from 'recharts'
 import { format, parseISO, subDays } from 'date-fns'
 import { useState } from 'react'
 import type { WeekDoc } from '@/lib/schema'
+import { calcBaselines } from '@/lib/baselines'
+import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
 
 interface RhrHrvTrendChartProps {
   weeks: WeekDoc[]
@@ -52,6 +55,12 @@ export default function RhrHrvTrendChart({ weeks }: RhrHrvTrendChartProps) {
   // axis/line/legend entirely rather than showing a dead right-hand axis.
   const hasHrvData = allPoints.some((p) => p.hrv_overnight_ms != null)
 
+  // Same rolling median+MAD baseline the recovery score itself compares
+  // against — without it, a narrow-range RHR (e.g. 33-39 bpm) just reads as
+  // noise. Showing the band makes "is today inside my normal range" visible
+  // at a glance instead of only living inside the score's math.
+  const rhrBaseline = calcBaselines(todayIsoInAppTimeZone(), weeks).rhr
+
   return (
     <div className="bg-zinc-900 rounded-xl p-5 space-y-4">
       <div className="flex items-center gap-3">
@@ -80,6 +89,12 @@ export default function RhrHrvTrendChart({ weeks }: RhrHrvTrendChartProps) {
           <span className="w-4 h-0.5 inline-block bg-violet-400 rounded" />
           <span className="text-xs font-mono text-zinc-400 uppercase tracking-widest">RHR (bpm)</span>
         </div>
+        {rhrBaseline && (
+          <div className="flex items-center gap-1.5">
+            <span className="w-4 h-2.5 inline-block bg-violet-400/15 border border-violet-400/30 rounded-sm" />
+            <span className="text-xs font-mono text-zinc-400 uppercase tracking-widest">Your baseline</span>
+          </div>
+        )}
         {hasHrvData && (
           <div className="flex items-center gap-1.5">
             <span className="w-4 inline-block border-t-2 border-dashed border-cyan-400" />
@@ -122,6 +137,17 @@ export default function RhrHrvTrendChart({ weeks }: RhrHrvTrendChartProps) {
                   axisLine={false}
                   tickLine={false}
                   width={36}
+                />
+              )}
+              {rhrBaseline && (
+                <ReferenceArea
+                  yAxisId="rhr"
+                  y1={rhrBaseline.median - rhrBaseline.spread}
+                  y2={rhrBaseline.median + rhrBaseline.spread}
+                  fill="#a78bfa"
+                  fillOpacity={0.12}
+                  stroke="none"
+                  ifOverflow="extendDomain"
                 />
               )}
               <Tooltip

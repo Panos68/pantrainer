@@ -21,6 +21,7 @@ type WeightPoint = {
   date: string
   weight_kg: number | null
   body_fat_pct: number | null
+  muscle_kg: number | null
 }
 
 const RANGES = [
@@ -39,6 +40,7 @@ export default function WeightTrendChart({ weeks }: WeightTrendChartProps) {
       date,
       weight_kg: m.weight_kg ?? null,
       body_fat_pct: m.body_fat_pct ?? null,
+      muscle_kg: m.muscle_kg ?? null,
     }))
     .sort((a, b) => a.date.localeCompare(b.date))
 
@@ -47,6 +49,8 @@ export default function WeightTrendChart({ weeks }: WeightTrendChartProps) {
   const points = cutoff == null ? allPoints : allPoints.filter((p) => p.date >= cutoff)
 
   if (allPoints.length === 0) return null
+
+  const hasMuscleData = allPoints.some((p) => p.muscle_kg != null)
 
   return (
     <div className="bg-zinc-900 rounded-xl p-5 space-y-4">
@@ -80,6 +84,12 @@ export default function WeightTrendChart({ weeks }: WeightTrendChartProps) {
           <span className="w-4 inline-block border-t-2 border-dashed border-amber-400" />
           <span className="text-xs font-mono text-zinc-400 uppercase tracking-widest">Body Fat %</span>
         </div>
+        {hasMuscleData && (
+          <div className="flex items-center gap-1.5">
+            <span className="w-4 inline-block border-t-2 border-dotted border-emerald-400" />
+            <span className="text-xs font-mono text-zinc-400 uppercase tracking-widest">Muscle (kg)</span>
+          </div>
+        )}
       </div>
 
       <div className="h-64">
@@ -115,6 +125,10 @@ export default function WeightTrendChart({ weeks }: WeightTrendChartProps) {
                 tickLine={false}
                 width={36}
               />
+              {/* Muscle mass shares the kg unit with weight but not its scale — give
+                  it its own domain so it isn't visually flattened, without adding a
+                  third visible axis. */}
+              {hasMuscleData && <YAxis yAxisId="muscle" domain={['dataMin - 1', 'dataMax + 1']} hide />}
               <Tooltip
                 content={({ active, payload }) => {
                   if (!active || !payload?.length) return null
@@ -138,6 +152,9 @@ export default function WeightTrendChart({ weeks }: WeightTrendChartProps) {
                       <p style={{ color: '#38bdf8', fontWeight: 700 }}>{p.weight_kg} kg</p>
                       {p.body_fat_pct != null && (
                         <p style={{ color: '#fbbf24', marginTop: 2 }}>{p.body_fat_pct}% body fat</p>
+                      )}
+                      {p.muscle_kg != null && (
+                        <p style={{ color: '#34d399', marginTop: 2 }}>{p.muscle_kg} kg muscle</p>
                       )}
                     </div>
                   )
@@ -164,6 +181,19 @@ export default function WeightTrendChart({ weeks }: WeightTrendChartProps) {
                 activeDot={false}
                 connectNulls
               />
+              {hasMuscleData && (
+                <Line
+                  yAxisId="muscle"
+                  type="monotone"
+                  dataKey="muscle_kg"
+                  stroke="#34d399"
+                  strokeWidth={1.5}
+                  strokeDasharray="1 3"
+                  dot={false}
+                  activeDot={false}
+                  connectNulls
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
         )}
