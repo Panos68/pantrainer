@@ -38,6 +38,24 @@ import type { WeekDoc } from '../lib/schema'
 type DataModule = typeof import('../lib/data')
 let dataModule: DataModule
 
+// writeCurrentWeek/writeArchivedWeek write to Mongo first, then call
+// revalidateTag to invalidate Next.js's request-scoped cache — a call that
+// only makes sense inside a live Next.js server and throws
+// "static generation store missing" in a bare script. The Mongo write has
+// already completed by the time that throw happens, so it's safe to log and
+// continue rather than treat it as a failed write.
+async function writeIgnoringRevalidate(fn: () => Promise<void>, label: string) {
+  try {
+    await fn()
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('static generation store missing')) {
+      console.log(`${label}: written (cache revalidation skipped — no Next.js server running here)`)
+    } else {
+      throw e
+    }
+  }
+}
+
 async function backfillWeek(week: WeekDoc, allWeeksForContext: WeekDoc[], label: string, dryRun: boolean): Promise<WeekDoc> {
   const dates = Object.keys(week.daily_scores ?? {})
   let changed = 0
@@ -66,12 +84,12 @@ async function main() {
 
   if (current) {
     const updated = await backfillWeek(current, allWeeks, 'current', dryRun)
-    if (!dryRun) await writeCurrentWeek(updated)
+    if (!dryRun) await writeIgnoringRevalidate(() => writeCurrentWeek(updated), 'current')
   }
 
   for (const { id, week } of archivedWithIds) {
     const updated = await backfillWeek(week, allWeeks, id, dryRun)
-    if (!dryRun) await writeArchivedWeek(id, updated)
+    if (!dryRun) await writeIgnoringRevalidate(() => writeArchivedWeek(id, updated), id)
   }
 
   console.log(dryRun ? 'DRY RUN — nothing written' : 'Backfill complete')
