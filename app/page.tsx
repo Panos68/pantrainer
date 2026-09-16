@@ -227,6 +227,12 @@ export default async function Home() {
           >
             Pantry
           </Link>
+          <Link
+            href="/food"
+            className="text-xs font-mono font-bold tracking-widest uppercase text-zinc-500 hover:text-zinc-300 transition-colors"
+          >
+            Food
+          </Link>
         </footer>
 
       </div>

@@ -8,6 +8,7 @@ import WeightTrendChart from '@/components/WeightTrendChart'
 import RhrHrvTrendChart from '@/components/RhrHrvTrendChart'
 import PmcChart from '@/components/PmcChart'
 import OverloadInsights from '@/components/OverloadInsights'
+import CollapsibleSection from '@/components/CollapsibleSection'
 import { calcPmc } from '@/lib/pmc'
 import { calcOverloadInsights } from '@/lib/overload'
 import { sessionToLoadPoint } from '@/lib/training-load'
@@ -83,23 +84,20 @@ export default async function ProgressPage() {
           </div>
         </section>
 
-        {/* Performance Management Chart */}
-        <PmcChart data={pmcData} />
+        <CollapsibleSection title="Training Load" defaultOpen>
+          <PmcChart data={pmcData} />
+          <OverloadInsights insights={overloadInsights} />
+          <LiftProgressChart weeks={weeks} />
+          <ActivityTrendChart weeks={weeks} athlete={athlete} />
+        </CollapsibleSection>
 
-        {/* Strength Progression Insights */}
-        <OverloadInsights insights={overloadInsights} />
+        <CollapsibleSection title="Body Composition">
+          <WeightTrendChart weeks={weeks} />
+        </CollapsibleSection>
 
-        {/* Lift Progress Chart */}
-        <LiftProgressChart weeks={weeks} />
-
-        {/* Activity Trend Chart */}
-        <ActivityTrendChart weeks={weeks} athlete={athlete} />
-
-        {/* Weight Trend Chart */}
-        <WeightTrendChart weeks={weeks} />
-
-        {/* RHR/HRV Trend Chart */}
-        <RhrHrvTrendChart weeks={weeks} />
+        <CollapsibleSection title="Recovery">
+          <RhrHrvTrendChart weeks={weeks} />
+        </CollapsibleSection>
 
       </div>
     </main>
