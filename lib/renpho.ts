@@ -30,7 +30,7 @@ export type RenphoMeasurement = {
   bmi: number | null
   bodyfat: number | null
   water: number | null
-  muscle: number | null
+  muscle_kg: number | null
   bone: number | null
   bmr: number | null
   visceral_fat: number | null
@@ -205,7 +205,9 @@ function mapMeasurement(m: Record<string, unknown>): RenphoMeasurement & { id: s
     bmi: (m.bmi as number) ?? null,
     bodyfat: (m.bodyfat as number) ?? null,
     water: (m.water as number) ?? null,
-    muscle: (m.muscle as number) ?? null,
+    // `muscle` in the raw payload is skeletal muscle *percentage*, not mass —
+    // `sinew` is the field that actually matches the Renpho app's Muscle Mass (kg).
+    muscle_kg: (m.sinew as number) ?? null,
     bone: (m.bone as number) ?? null,
     bmr: (m.bmr as number) ?? null,
     visceral_fat: (m.visfat as number) ?? null,

@@ -10,7 +10,7 @@ function toDayEntry(m: RenphoMeasurement): RenphoMeasurementDay {
     bmi: m.bmi,
     body_fat_pct: m.bodyfat,
     water_pct: m.water,
-    muscle_kg: m.muscle,
+    muscle_kg: m.muscle_kg,
     bone_kg: m.bone,
     bmr: m.bmr,
     visceral_fat: m.visceral_fat,
