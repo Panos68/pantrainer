@@ -16,12 +16,14 @@ import {
   readPantry,
   seedPantryIfEmpty,
   readFoodInventory,
+  readFoodInventoryItem,
+  writeFoodInventoryItem,
 } from '@/lib/data'
 import { formatPantryBrief } from '@/lib/pantry-brief'
 import { buildExportV2 } from '@/lib/export'
 import { validateImport } from '@/lib/import'
 import { todayIsoInAppTimeZone, formatTimeInAppTimeZone } from '@/lib/app-timezone'
-import { SessionSchema, ProposedPlanRunTypeSchema } from '@/lib/schema'
+import { SessionSchema, ProposedPlanRunTypeSchema, FoodInventoryItemSchema } from '@/lib/schema'
 import type { WeekDoc, NutritionLogEntry } from '@/lib/schema'
 import { getSession, isAutomationToken } from '@/lib/auth'
 import { buildCurrentContext } from '@/lib/mcp-current-context'
@@ -49,6 +51,41 @@ const TOOLS = [
       type: 'object',
       properties: {},
       required: [],
+    },
+  },
+  {
+    name: 'update_food_inventory',
+    description:
+      'Update inventory items after the athlete confirms they made a recipe suggested from get_food_at_home — one entry per ingredient that was actually used. For an ingredient fully used up, set status: \'used\' (removes it from future get_food_at_home results). For one partially used where you can reasonably estimate what remains (e.g. "3 items" used 2 of → "1 item"), set quantity to the new remaining amount instead. For one partially used where the remainder is too vague to estimate (a splash of milk, a pinch of something), just set opened: true and leave quantity alone. Do not use status: \'used\' for an item that still has some left — that would make it disappear from inventory even though some remains.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          description: 'One entry per ingredient used in the recipe.',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', description: 'The inventory item\'s id, from get_food_at_home. Required.' },
+              status: {
+                type: 'string',
+                enum: ['used'],
+                description: 'Set to \'used\' when this ingredient was fully consumed by the recipe.',
+              },
+              quantity: {
+                type: 'string',
+                description: 'The new remaining quantity (e.g. "1 item", "250g"), when partial use leaves an amount you can reasonably estimate.',
+              },
+              opened: {
+                type: 'boolean',
+                description: 'Set true when the item was opened/partially used but the remaining amount is too vague to estimate as a quantity.',
+              },
+            },
+            required: ['id'],
+          },
+        },
+      },
+      required: ['items'],
     },
   },
   {
@@ -437,6 +474,47 @@ async function handleSaveNutritionEstimate(args: Record<string, unknown>) {
 
   await writeNutritionLogEntry(entry)
   return { saved: true, date, mode }
+}
+
+async function handleUpdateFoodInventory(args: Record<string, unknown>) {
+  const rawItems = Array.isArray(args.items) ? args.items : []
+  const updated: string[] = []
+  const notFound: string[] = []
+
+  for (const raw of rawItems) {
+    if (typeof raw !== 'object' || raw === null || typeof (raw as Record<string, unknown>).id !== 'string') continue
+    const { id, status, quantity, opened } = raw as { id: string; status?: unknown; quantity?: unknown; opened?: unknown }
+
+    const existing = await readFoodInventoryItem(id)
+    if (!existing) {
+      notFound.push(id)
+      continue
+    }
+
+    // Same merge-and-validate pattern as the app's own PATCH /api/food/inventory
+    // route: read the current item, overlay only the fields this call sent, write
+    // the whole item back — rather than a separate partial-update code path.
+    const patch: Partial<typeof existing> = {}
+    if (status === 'used') patch.status = 'used'
+    if (typeof quantity === 'string') patch.quantity = quantity
+    if (typeof opened === 'boolean') patch.opened = opened
+
+    const parsed = FoodInventoryItemSchema.safeParse({
+      ...existing,
+      ...patch,
+      _id: existing._id,
+      createdAt: existing.createdAt,
+      updatedAt: new Date().toISOString(),
+    })
+    if (!parsed.success) {
+      notFound.push(id)
+      continue
+    }
+    await writeFoodInventoryItem(parsed.data)
+    updated.push(id)
+  }
+
+  return { updated, not_found: notFound }
 }
 
 async function handleSaveCoachNote(args: Record<string, unknown>) {
@@ -899,6 +977,11 @@ async function dispatch(req: McpRequest): Promise<Response> {
           items,
           guidance: 'This is a shared at-home inventory, not the athlete\'s private nutrition staples. Product images, when present, identify the scanned product only.',
         }, null, 2) }] })
+      }
+
+      if (name === 'update_food_inventory') {
+        const result = await handleUpdateFoodInventory(args)
+        return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] })
       }
 
       if (name === 'get_current_week') {
