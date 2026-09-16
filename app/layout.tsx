@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 import { Geist, Geist_Mono, Chakra_Petch } from "next/font/google";
 import { Toaster } from "sonner";
 import MobileBottomNav from "@/components/MobileBottomNav";
-import { parseSession } from "@/lib/auth";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,14 +25,11 @@ export const metadata: Metadata = {
   description: "Personal training management",
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const cookieStore = await cookies();
-  const session = await parseSession(cookieStore.get("auth")?.value);
-
   return (
     <html
       lang="en"
@@ -42,7 +37,7 @@ export default async function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-zinc-950 pb-20 md:pb-0">
         {children}
-        <MobileBottomNav role={session?.role ?? null} />
+        <MobileBottomNav />
         <Toaster position="bottom-right" theme="dark" />
       </body>
     </html>

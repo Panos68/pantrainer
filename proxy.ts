@@ -18,6 +18,11 @@ const PUBLIC_PATHS = [
   // login cookie — without this it would be redirected to /login and the job
   // would silently never run. The route authorizes the secret itself.
   '/api/cron/',
+  // Reflects only the caller's own session (or null) — safe for any role,
+  // including food, to read. Without this the food role's 403 here would
+  // still leave MobileBottomNav's role state falsy and the nav correctly
+  // hidden, but only by accident of the error response's shape.
+  '/api/session/role',
 ]
 
 export async function proxy(request: NextRequest) {
