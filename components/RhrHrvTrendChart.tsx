@@ -48,6 +48,10 @@ export default function RhrHrvTrendChart({ weeks }: RhrHrvTrendChartProps) {
 
   if (allPoints.length === 0) return null
 
+  // No HRV-capable watch means this series is permanently empty — skip its
+  // axis/line/legend entirely rather than showing a dead right-hand axis.
+  const hasHrvData = allPoints.some((p) => p.hrv_overnight_ms != null)
+
   return (
     <div className="bg-zinc-900 rounded-xl p-5 space-y-4">
       <div className="flex items-center gap-3">
@@ -76,10 +80,12 @@ export default function RhrHrvTrendChart({ weeks }: RhrHrvTrendChartProps) {
           <span className="w-4 h-0.5 inline-block bg-violet-400 rounded" />
           <span className="text-xs font-mono text-zinc-400 uppercase tracking-widest">RHR (bpm)</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="w-4 inline-block border-t-2 border-dashed border-cyan-400" />
-          <span className="text-xs font-mono text-zinc-400 uppercase tracking-widest">HRV (ms)</span>
-        </div>
+        {hasHrvData && (
+          <div className="flex items-center gap-1.5">
+            <span className="w-4 inline-block border-t-2 border-dashed border-cyan-400" />
+            <span className="text-xs font-mono text-zinc-400 uppercase tracking-widest">HRV (ms)</span>
+          </div>
+        )}
       </div>
 
       <div className="h-64">
@@ -107,15 +113,17 @@ export default function RhrHrvTrendChart({ weeks }: RhrHrvTrendChartProps) {
                 tickLine={false}
                 width={46}
               />
-              <YAxis
-                yAxisId="hrv"
-                orientation="right"
-                domain={['auto', 'auto']}
-                tick={{ fill: '#22d3ee', fontSize: 11, fontFamily: 'var(--font-geist-mono)' }}
-                axisLine={false}
-                tickLine={false}
-                width={36}
-              />
+              {hasHrvData && (
+                <YAxis
+                  yAxisId="hrv"
+                  orientation="right"
+                  domain={['auto', 'auto']}
+                  tick={{ fill: '#22d3ee', fontSize: 11, fontFamily: 'var(--font-geist-mono)' }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={36}
+                />
+              )}
               <Tooltip
                 content={({ active, payload }) => {
                   if (!active || !payload?.length) return null
@@ -156,17 +164,19 @@ export default function RhrHrvTrendChart({ weeks }: RhrHrvTrendChartProps) {
                 activeDot={{ r: 5, strokeWidth: 0, fill: '#a78bfa' }}
                 connectNulls
               />
-              <Line
-                yAxisId="hrv"
-                type="monotone"
-                dataKey="hrv_overnight_ms"
-                stroke="#22d3ee"
-                strokeWidth={1.5}
-                strokeDasharray="4 3"
-                dot={false}
-                activeDot={false}
-                connectNulls
-              />
+              {hasHrvData && (
+                <Line
+                  yAxisId="hrv"
+                  type="monotone"
+                  dataKey="hrv_overnight_ms"
+                  stroke="#22d3ee"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                  dot={false}
+                  activeDot={false}
+                  connectNulls
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
         )}

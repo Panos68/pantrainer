@@ -112,8 +112,6 @@ function run() {
       avg_sleep_stress: 25,
       awake_count: 2,
       respiration_avg: 14.5,
-      hrv_baseline_low: 40,
-      hrv_baseline_high: 100,
       spo2_avg: 97,
     })
     assert.equal(result.success, true, 'new document with all HRV/sleep-score/SpO2 fields parses')

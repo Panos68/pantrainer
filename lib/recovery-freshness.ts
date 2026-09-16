@@ -36,8 +36,6 @@ export function sanitizeRecovery(recovery: {
   avg_sleep_stress?: number | null
   awake_count?: number | null
   respiration_avg?: number | null
-  hrv_baseline_low?: number | null
-  hrv_baseline_high?: number | null
   spo2_avg?: number | null
   fetched_at?: string
 }) {
@@ -61,8 +59,6 @@ export function sanitizeRecovery(recovery: {
     avg_sleep_stress: recovery.avg_sleep_stress != null && recovery.avg_sleep_stress >= 0 ? recovery.avg_sleep_stress : null,
     awake_count: nonNegativeOrNull(recovery.awake_count),
     respiration_avg: positiveOrNull(recovery.respiration_avg),
-    hrv_baseline_low: positiveOrNull(recovery.hrv_baseline_low),
-    hrv_baseline_high: positiveOrNull(recovery.hrv_baseline_high),
     spo2_avg: positiveOrNull(recovery.spo2_avg),
     fetched_at: recovery.fetched_at ?? new Date().toISOString(),
   }

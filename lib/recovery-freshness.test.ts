@@ -9,15 +9,12 @@ function testSanitizesHrvFields() {
     avg_sleep_stress: 18,
     awake_count: 0,
     respiration_avg: 14.2,
-    hrv_baseline_low: 45,
-    hrv_baseline_high: 65,
     spo2_avg: 96,
   })
   assert.equal(result.hrv_overnight_ms, 58)
   assert.equal(result.hrv_status, 'BALANCED')
   assert.equal(result.sleep_score, 84)
   assert.equal(result.awake_count, 0) // zero is a valid, meaningful value — must not become null
-  assert.equal(result.hrv_baseline_low, 45)
   assert.equal(result.spo2_avg, 96)
 }
 

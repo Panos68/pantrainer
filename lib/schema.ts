@@ -230,8 +230,6 @@ export const GarminRecoveryDaySchema = z.object({
   avg_sleep_stress: z.number().nullable().optional(),
   awake_count: z.number().nullable().optional(),
   respiration_avg: z.number().nullable().optional(),
-  hrv_baseline_low: z.number().nullable().optional(),
-  hrv_baseline_high: z.number().nullable().optional(),
   spo2_avg: z.number().nullable().optional(),
   fetched_at: z.string().optional(),
 })

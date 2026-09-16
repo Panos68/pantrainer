@@ -324,29 +324,6 @@ export async function fetchFitnessAge(date: string): Promise<GarminFitnessAgeRes
   }
 }
 
-export type GarminHrvBaselineResult = {
-  hrv_baseline_low: number | null
-  hrv_baseline_high: number | null
-}
-
-export async function fetchHrvBaseline(date: string): Promise<GarminHrvBaselineResult | null> {
-  try {
-    const client: any = await createClient()
-    const base = client.url.GC_API
-    const raw = await client.client.get(
-      `${base}/hrv-service/hrv/${date}`
-    ) as { hrvSummary?: { baseline?: { balancedLow?: number; balancedUpper?: number } } }
-    const baseline = raw?.hrvSummary?.baseline
-    if (!baseline) return null
-    return {
-      hrv_baseline_low: typeof baseline.balancedLow === 'number' ? baseline.balancedLow : null,
-      hrv_baseline_high: typeof baseline.balancedUpper === 'number' ? baseline.balancedUpper : null,
-    }
-  } catch {
-    return null
-  }
-}
-
 export type GarminSpo2Result = {
   spo2_avg: number | null
 }

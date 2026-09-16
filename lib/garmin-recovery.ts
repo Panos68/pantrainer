@@ -1,4 +1,4 @@
-import { fetchSleepData, fetchHRData, fetchBodyBattery, fetchStress, fetchVO2Max, fetchFitnessAge, fetchDailySummary, fetchHrvBaseline, fetchSpo2 } from './garmin'
+import { fetchSleepData, fetchHRData, fetchBodyBattery, fetchStress, fetchVO2Max, fetchFitnessAge, fetchDailySummary, fetchSpo2 } from './garmin'
 import { readCurrentWeekDirect, writeCurrentWeek, readArchivedWeeks } from './data'
 import { computeDailyScore } from './daily-score'
 import { sanitizeRecovery, hasAnyRecoveryMetric, type SanitizedRecovery } from './recovery-freshness'
@@ -12,7 +12,7 @@ export type { SanitizedRecovery } from './recovery-freshness'
  * callers decide whether a cached value is good enough.
  */
 export async function fetchAndStoreRecovery(date: string): Promise<SanitizedRecovery> {
-  const [sleep, hr, bodyBattery, stress, vo2max, fitnessAge, dailySummary, hrvBaseline, spo2] = await Promise.allSettled([
+  const [sleep, hr, bodyBattery, stress, vo2max, fitnessAge, dailySummary, spo2] = await Promise.allSettled([
     fetchSleepData(date),
     fetchHRData(date),
     fetchBodyBattery(date),
@@ -20,7 +20,6 @@ export async function fetchAndStoreRecovery(date: string): Promise<SanitizedReco
     fetchVO2Max(date),
     fetchFitnessAge(date),
     fetchDailySummary(date),
-    fetchHrvBaseline(date),
     fetchSpo2(date),
   ])
 
@@ -44,8 +43,6 @@ export async function fetchAndStoreRecovery(date: string): Promise<SanitizedReco
     fitness_age: fitnessAge.status === 'fulfilled' ? (fitnessAge.value?.fitness_age ?? null) : null,
     achievable_fitness_age: fitnessAge.status === 'fulfilled' ? (fitnessAge.value?.achievable_fitness_age ?? null) : null,
     total_kilocalories: dailySummary.status === 'fulfilled' ? (dailySummary.value?.total_kilocalories ?? null) : null,
-    hrv_baseline_low: hrvBaseline.status === 'fulfilled' ? (hrvBaseline.value?.hrv_baseline_low ?? null) : null,
-    hrv_baseline_high: hrvBaseline.status === 'fulfilled' ? (hrvBaseline.value?.hrv_baseline_high ?? null) : null,
     spo2_avg: spo2.status === 'fulfilled' ? (spo2.value?.spo2_avg ?? null) : null,
     fetched_at: new Date().toISOString(),
   })

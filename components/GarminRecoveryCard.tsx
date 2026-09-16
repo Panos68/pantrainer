@@ -35,6 +35,11 @@ export default function GarminRecoveryCard({
   const vo2max = typeof data?.vo2max === 'number' && data.vo2max > 0 ? data.vo2max : null
   const fitnessAge = typeof data?.fitness_age === 'number' && data.fitness_age > 0 ? data.fitness_age : null
   const totalKilocalories = typeof data?.total_kilocalories === 'number' && data.total_kilocalories > 0 ? data.total_kilocalories : null
+  const sleepScore = typeof data?.sleep_score === 'number' && data.sleep_score > 0 ? data.sleep_score : null
+  const respirationAvg = typeof data?.respiration_avg === 'number' && data.respiration_avg > 0 ? data.respiration_avg : null
+  const sleepStress = typeof data?.avg_sleep_stress === 'number' && data.avg_sleep_stress >= 0 ? data.avg_sleep_stress : null
+  const awakeCount = typeof data?.awake_count === 'number' && data.awake_count >= 0 ? data.awake_count : null
+  const spo2Avg = typeof data?.spo2_avg === 'number' && data.spo2_avg > 0 ? data.spo2_avg : null
   const isSameDay = date === todayIsoInAppTimeZone()
 
   async function fetchRecovery(force = false) {
@@ -126,6 +131,38 @@ export default function GarminRecoveryCard({
                   deep {deepSleepHours}h · REM {remSleepHours}h
                 </div>
               )}
+            </div>
+          )}
+          {sleepScore != null && (
+            <div>
+              <div className="text-zinc-500 text-[9px] font-mono tracking-widest uppercase mb-0.5">Sleep Score</div>
+              <div className="text-indigo-400 text-lg font-mono font-black leading-none">{sleepScore}</div>
+              <div className="text-zinc-600 text-[9px] font-mono mt-0.5">/ 100</div>
+            </div>
+          )}
+          {respirationAvg != null && (
+            <div>
+              <div className="text-zinc-500 text-[9px] font-mono tracking-widest uppercase mb-0.5">Respiration</div>
+              <div className="text-teal-400 text-lg font-mono font-black leading-none">{respirationAvg}</div>
+              <div className="text-zinc-600 text-[9px] font-mono mt-0.5">brpm</div>
+            </div>
+          )}
+          {sleepStress != null && (
+            <div>
+              <div className="text-zinc-500 text-[9px] font-mono tracking-widest uppercase mb-0.5">Sleep Stress</div>
+              <div className="text-fuchsia-400 text-lg font-mono font-black leading-none">{sleepStress}</div>
+            </div>
+          )}
+          {awakeCount != null && (
+            <div>
+              <div className="text-zinc-500 text-[9px] font-mono tracking-widest uppercase mb-0.5">Awakenings</div>
+              <div className="text-slate-300 text-lg font-mono font-black leading-none">{awakeCount}</div>
+            </div>
+          )}
+          {spo2Avg != null && (
+            <div>
+              <div className="text-zinc-500 text-[9px] font-mono tracking-widest uppercase mb-0.5">SpO2</div>
+              <div className="text-blue-400 text-lg font-mono font-black leading-none">{spo2Avg}%</div>
             </div>
           )}
           {restingHr != null && (
