@@ -279,6 +279,25 @@ export async function readAllArchivedWeeks(): Promise<WeekDoc[]> {
   return readWeeksByIds(ids)
 }
 
+export async function readAllArchivedWeeksWithIds(): Promise<{ id: string; week: WeekDoc }[]> {
+  const ids = await _listArchivedWeekIdsByDate()
+  const weeks = await readWeeksByIds(ids)
+  // readWeeksByIds already filters to ids that resolved to a doc, in the same
+  // order as `ids` — safe to zip by index only if lengths match; fall back to
+  // an explicit re-fetch by id otherwise to avoid silently mispairing ids.
+  if (weeks.length !== ids.length) {
+    const db = await getDb()
+    const docs = await db.collection('weeks').find({ _id: { $in: ids } as never }).toArray()
+    return docs.map((d) => ({ id: d._id as unknown as string, week: WeekDocSchema.parse(d.value) }))
+  }
+  return ids.map((id, i) => ({ id, week: weeks[i] }))
+}
+
+export async function writeArchivedWeek(id: string, week: WeekDoc): Promise<void> {
+  await weekSet(id, week)
+  revalidateTag('archived-weeks', { expire: 0 })
+}
+
 /**
  * Find whichever week (current or archived) contains a session for `date`.
  * Used by the read-only day-detail view so a past day is reachable after its

@@ -1,4 +1,4 @@
-import { fetchSleepData, fetchHRData, fetchBodyBattery, fetchStress, fetchVO2Max, fetchFitnessAge, fetchDailySummary } from './garmin'
+import { fetchSleepData, fetchHRData, fetchBodyBattery, fetchStress, fetchVO2Max, fetchFitnessAge, fetchDailySummary, fetchHrvBaseline, fetchSpo2 } from './garmin'
 import { readCurrentWeekDirect, writeCurrentWeek, readArchivedWeeks } from './data'
 import { computeDailyScore } from './daily-score'
 import { sanitizeRecovery, hasAnyRecoveryMetric, type SanitizedRecovery } from './recovery-freshness'
@@ -12,7 +12,7 @@ export type { SanitizedRecovery } from './recovery-freshness'
  * callers decide whether a cached value is good enough.
  */
 export async function fetchAndStoreRecovery(date: string): Promise<SanitizedRecovery> {
-  const [sleep, hr, bodyBattery, stress, vo2max, fitnessAge, dailySummary] = await Promise.allSettled([
+  const [sleep, hr, bodyBattery, stress, vo2max, fitnessAge, dailySummary, hrvBaseline, spo2] = await Promise.allSettled([
     fetchSleepData(date),
     fetchHRData(date),
     fetchBodyBattery(date),
@@ -20,12 +20,20 @@ export async function fetchAndStoreRecovery(date: string): Promise<SanitizedReco
     fetchVO2Max(date),
     fetchFitnessAge(date),
     fetchDailySummary(date),
+    fetchHrvBaseline(date),
+    fetchSpo2(date),
   ])
 
   const recovery = sanitizeRecovery({
     sleep_hours: sleep.status === 'fulfilled' ? (sleep.value?.sleep_hours ?? null) : null,
     deep_sleep_hours: sleep.status === 'fulfilled' ? (sleep.value?.deep_sleep_hours ?? null) : null,
     rem_sleep_hours: sleep.status === 'fulfilled' ? (sleep.value?.rem_sleep_hours ?? null) : null,
+    hrv_overnight_ms: sleep.status === 'fulfilled' ? (sleep.value?.hrv_overnight_ms ?? null) : null,
+    hrv_status: sleep.status === 'fulfilled' ? (sleep.value?.hrv_status ?? null) : null,
+    sleep_score: sleep.status === 'fulfilled' ? (sleep.value?.sleep_score ?? null) : null,
+    avg_sleep_stress: sleep.status === 'fulfilled' ? (sleep.value?.avg_sleep_stress ?? null) : null,
+    awake_count: sleep.status === 'fulfilled' ? (sleep.value?.awake_count ?? null) : null,
+    respiration_avg: sleep.status === 'fulfilled' ? (sleep.value?.respiration_avg ?? null) : null,
     resting_hr_bpm: hr.status === 'fulfilled' ? hr.value.resting_hr_bpm : null,
     max_hr_bpm: hr.status === 'fulfilled' ? hr.value.max_hr_bpm : null,
     body_battery_charged: bodyBattery.status === 'fulfilled' ? (bodyBattery.value?.body_battery_charged ?? null) : null,
@@ -36,6 +44,9 @@ export async function fetchAndStoreRecovery(date: string): Promise<SanitizedReco
     fitness_age: fitnessAge.status === 'fulfilled' ? (fitnessAge.value?.fitness_age ?? null) : null,
     achievable_fitness_age: fitnessAge.status === 'fulfilled' ? (fitnessAge.value?.achievable_fitness_age ?? null) : null,
     total_kilocalories: dailySummary.status === 'fulfilled' ? (dailySummary.value?.total_kilocalories ?? null) : null,
+    hrv_baseline_low: hrvBaseline.status === 'fulfilled' ? (hrvBaseline.value?.hrv_baseline_low ?? null) : null,
+    hrv_baseline_high: hrvBaseline.status === 'fulfilled' ? (hrvBaseline.value?.hrv_baseline_high ?? null) : null,
+    spo2_avg: spo2.status === 'fulfilled' ? (spo2.value?.spo2_avg ?? null) : null,
     fetched_at: new Date().toISOString(),
   })
 

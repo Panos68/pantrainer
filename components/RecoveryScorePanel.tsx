@@ -15,6 +15,7 @@ const COLOR = {
 
 const BAR_COLORS = {
   sleep:      'bg-sky-400',
+  hrv:        'bg-cyan-400',
   rhr:        'bg-violet-400',
   load:       'bg-amber-400',
   subjective: 'bg-emerald-400',
@@ -205,7 +206,7 @@ export default function RecoveryScorePanel({ today, initialData }: { today: stri
   const { score, garmin, baseline } = data
   const noSleep = !garmin || garmin.sleep_hours == null
   const noRhr = !garmin || garmin.resting_hr_bpm == null
-  const c = COLOR[score.color]
+  const c = COLOR[score.color ?? 'amber']
   const netDelta = baseline.total != null ? score.total - baseline.total : null
 
   return (
@@ -217,6 +218,9 @@ export default function RecoveryScorePanel({ today, initialData }: { today: stri
         {/* Breakdown bars — fill available space */}
         <div className="flex-1 min-w-0 space-y-2">
           <BreakdownBar label="Sleep" value={score.sleep} max={40} unavailable={noSleep} barColor={BAR_COLORS.sleep} baseline={baseline.sleep} />
+          {score.hrv != null && (
+            <BreakdownBar label="HRV" value={score.hrv} max={25} unavailable={false} barColor={BAR_COLORS.hrv} baseline={null} />
+          )}
           <BreakdownBar label="RHR" value={score.rhr} max={30} unavailable={noRhr} barColor={BAR_COLORS.rhr} baseline={baseline.rhr} />
           <BreakdownBar label="Load" value={score.load} max={20} barColor={BAR_COLORS.load} baseline={baseline.load} />
           <BreakdownBar label="Feeling" value={score.subjective} max={10} barColor={BAR_COLORS.subjective} baseline={baseline.subjective} />
@@ -226,7 +230,13 @@ export default function RecoveryScorePanel({ today, initialData }: { today: stri
         <div className="flex flex-col-reverse sm:flex-row items-center gap-1 sm:gap-3 shrink-0">
           <div className="text-center sm:text-right">
             <p className="text-zinc-500 text-[10px] font-mono uppercase tracking-widest mb-0.5 hidden sm:block">Recovery</p>
-            <p className={`text-xs sm:text-2xl font-black uppercase tracking-tight ${c.label}`}>{score.label}</p>
+            {score.label != null && score.color != null ? (
+              <p className={`text-xs sm:text-2xl font-black uppercase tracking-tight ${COLOR[score.color].label}`}>{score.label}</p>
+            ) : (
+              <p className="text-xs sm:text-2xl font-black uppercase tracking-tight text-zinc-600" title="Not enough recovery data today to label this score confidently">
+                Low confidence
+              </p>
+            )}
             {netDelta != null && (
               <p className="text-zinc-600 text-[9px] sm:text-[10px] mt-0.5 whitespace-nowrap">
                 Net {netDelta >= 0 ? '+' : ''}{netDelta} vs 7d
@@ -242,7 +252,7 @@ export default function RecoveryScorePanel({ today, initialData }: { today: stri
             )}
           </div>
           <div className="relative shrink-0 flex items-center justify-center w-20 h-20 sm:w-36 sm:h-36">
-            <ScoreRing total={score.total} color={score.color} />
+            <ScoreRing total={score.total} color={score.color ?? 'amber'} />
             <div className="flex flex-col items-center">
               <span className={`font-display font-bold text-2xl sm:text-7xl leading-none tabular-nums ${c.score}`}>{displayScore}</span>
               <span className="text-zinc-600 text-[8px] sm:text-[10px] font-mono">/100</span>

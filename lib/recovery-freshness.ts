@@ -6,6 +6,14 @@ function positiveOrNull(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
 }
 
+function nonNegativeOrNull(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+}
+
+function stringOrNull(value: string | null | undefined): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
 export type SanitizedRecovery = ReturnType<typeof sanitizeRecovery>
 
 export function sanitizeRecovery(recovery: {
@@ -22,6 +30,15 @@ export function sanitizeRecovery(recovery: {
   fitness_age?: number | null
   achievable_fitness_age?: number | null
   total_kilocalories?: number | null
+  hrv_overnight_ms?: number | null
+  hrv_status?: string | null
+  sleep_score?: number | null
+  avg_sleep_stress?: number | null
+  awake_count?: number | null
+  respiration_avg?: number | null
+  hrv_baseline_low?: number | null
+  hrv_baseline_high?: number | null
+  spo2_avg?: number | null
   fetched_at?: string
 }) {
   return {
@@ -38,6 +55,15 @@ export function sanitizeRecovery(recovery: {
     fitness_age: positiveOrNull(recovery.fitness_age),
     achievable_fitness_age: positiveOrNull(recovery.achievable_fitness_age),
     total_kilocalories: positiveOrNull(recovery.total_kilocalories),
+    hrv_overnight_ms: positiveOrNull(recovery.hrv_overnight_ms),
+    hrv_status: stringOrNull(recovery.hrv_status),
+    sleep_score: positiveOrNull(recovery.sleep_score),
+    avg_sleep_stress: recovery.avg_sleep_stress != null && recovery.avg_sleep_stress >= 0 ? recovery.avg_sleep_stress : null,
+    awake_count: nonNegativeOrNull(recovery.awake_count),
+    respiration_avg: positiveOrNull(recovery.respiration_avg),
+    hrv_baseline_low: positiveOrNull(recovery.hrv_baseline_low),
+    hrv_baseline_high: positiveOrNull(recovery.hrv_baseline_high),
+    spo2_avg: positiveOrNull(recovery.spo2_avg),
     fetched_at: recovery.fetched_at ?? new Date().toISOString(),
   }
 }
