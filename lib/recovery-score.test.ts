@@ -45,6 +45,19 @@ function testSleepScoreNotCappedWithoutDeepSleepData() {
   assert.ok(result.sleep > 30, `expected sleep score above the old 30-cap, got ${result.sleep}`)
 }
 
+function testConfidenceExcludesHrvWhenDeviceHasNoBaseline() {
+  // Device (e.g. non-HRV-capable watch) never produces HRV — baselines.hrv
+  // is structurally null (<14 samples ever), not just missing today. HRV
+  // must be excluded from confidence's denominator too, not just its
+  // numerator, so a day with every other signal present reads as full
+  // confidence instead of being permanently capped at 0.75.
+  const baselinesNoHrv: Baselines = { rhr: fullBaselines.rhr, hrv: null, sleep_hours: fullBaselines.sleep_hours }
+  const garmin: GarminRecoveryDay = { sleep_hours: 7.5, deep_sleep_hours: 1.5, resting_hr_bpm: 48 }
+  const result = calcRecoveryScore(garmin, 50, 0.9, { date: '2026-09-15', energy_level: 4, sleep_quality: 4, mood: 4, logged_at: '' }, baselinesNoHrv)
+  assert.equal(result.confidence, 1, `expected full confidence when HRV is structurally unavailable, got ${result.confidence}`)
+  assert.equal(result.hrv, null)
+}
+
 function testWeightRedistributionWhenLoadOptsOut() {
   // acwr null -> load opts out; confidence should reflect 80/100 available
   // (hrv+sleep+rhr+subjective = 25+25+20+10 = 80), not crash or zero the total.
@@ -58,5 +71,6 @@ testFullDataProducesHighConfidence()
 testMissingHrvDegradesConfidenceNotCrash()
 testLowConfidenceSuppressesLabel()
 testSleepScoreNotCappedWithoutDeepSleepData()
+testConfidenceExcludesHrvWhenDeviceHasNoBaseline()
 testWeightRedistributionWhenLoadOptsOut()
 console.log('lib/recovery-score.test.ts: all assertions passed')

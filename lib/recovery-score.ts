@@ -3,6 +3,8 @@ import type { Baselines } from './baselines'
 
 export const CONFIDENCE_FLOOR = 0.6
 
+const HRV_WEIGHT = 25
+
 type Component = { points: number; weight: number } | null
 
 // Sleep (weight 25, internally scored 0-40 then rescaled): hours 0-30 linear
@@ -90,7 +92,17 @@ export function calcRecoveryScore(
   const totalWeight = components.reduce((sum, c) => sum + (c?.weight ?? 0), 0)
   const totalPoints = components.reduce((sum, c) => sum + (c?.points ?? 0), 0)
   const total = totalWeight > 0 ? Math.round((totalPoints / totalWeight) * 100) : 0
-  const confidence = Math.round((totalWeight / 100) * 100) / 100
+
+  // Confidence means "fraction of achievable signal present" — achievable,
+  // not "all 5 components exist in principle". When this athlete's device
+  // structurally never produces HRV (baselines.hrv is null — <14 samples
+  // ever, not just missing today), the HRV component can never contribute,
+  // so it must not count against the denominator either. Otherwise every
+  // day is permanently capped at (100 - HRV_WEIGHT) / 100 confidence, and a
+  // single other missing signal (no check-in, no ACWR history, a sync gap)
+  // needlessly trips the confidence floor and suppresses the label/alert.
+  const maxAchievableWeight = 100 - (baselines.hrv == null ? HRV_WEIGHT : 0)
+  const confidence = maxAchievableWeight > 0 ? Math.round((totalWeight / maxAchievableWeight) * 100) / 100 : 0
 
   // Individual breakdown fields stay on their original display scales
   // (sleep 0-40, rhr 0-30, load 0-20, subjective 0-10) for UI/backward compat
