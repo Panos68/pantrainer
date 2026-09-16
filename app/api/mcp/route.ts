@@ -9,6 +9,7 @@ import {
   readArchivedWeeks,
   readAllArchivedWeeks,
   writeNutritionLogEntry,
+  readNutritionLogEntry,
   readNutritionLogForRange,
   readFoodNotesForRange,
   writeCoachNote,
@@ -147,7 +148,7 @@ const TOOLS = [
         exclude_analyzed: {
           type: 'boolean',
           description:
-            'When true, skip photos whose pathname is already recorded in a saved estimate\'s analyzedPhotoPathnames for that date (saves tokens on repeat calls over an overlapping range). Default false — leave false whenever a day needs a FULL re-analysis (e.g. a day flagged stale by get_nutrition_summary_for_range), since that always requires re-looking at every photo for the day, not just new ones.',
+            'When true, skip photos whose pathname is already recorded in a saved estimate\'s analyzedPhotoPathnames for that date (saves tokens on repeat calls over an overlapping range). Default false — leave false when a day needs a FULL re-analysis (e.g. a stale day where a note or an already-analyzed photo was edited/removed), since that requires re-looking at every photo for the day and saving with save_nutrition_estimate\'s mode: \'replace\'. Set to true when you only want to find photos not yet accounted for (e.g. a gap day, or a stale day whose only change is new photos) — analyze just those and save them with mode: \'append\' so the new photos\' contribution is added to any existing total instead of requiring a second full-range fetch.',
         },
       },
       required: ['start_date', 'end_date'],
@@ -156,21 +157,27 @@ const TOOLS = [
   {
     name: 'save_nutrition_estimate',
     description:
-      'Save a calorie/macro estimate for a specific day, whether derived from analyzing food photos (list_food_photos_for_range) or from a plain-text description the athlete gave in chat (e.g. "had kvarg and granola for breakfast"). Before estimating from text, check recent entries via get_nutrition_summary_for_range for a similar description and anchor to that prior estimate so repeat meals stay consistent rather than drifting each time. Re-saving a date overwrites the previous estimate for that date — when re-analyzing a day flagged stale by get_nutrition_summary_for_range, re-look at ALL of that day\'s photos/notes and save one fresh whole-day total (do not try to add just the new item to the old saved total).',
+      'Save a calorie/macro estimate for a specific day, whether derived from analyzing food photos (list_food_photos_for_range) or from a plain-text description the athlete gave in chat (e.g. "had kvarg and granola for breakfast"). Before estimating from text, check recent entries via get_nutrition_summary_for_range for a similar description and anchor to that prior estimate so repeat meals stay consistent rather than drifting each time. mode: \'replace\' (the default) overwrites the previous estimate for that date entirely — use this when re-analyzing a day flagged stale by get_nutrition_summary_for_range because a note or an already-analyzed photo was edited/removed: re-look at ALL of that day\'s photos/notes and save one fresh whole-day total. mode: \'append\' instead adds this call\'s calories/macros/meals/photo_pathnames on top of the existing saved entry for that date (summing totals, concatenating meals, unioning photo_pathnames) — use this for a gap day\'s first save, or when the only new content is photos found via list_food_photos_for_range(exclude_analyzed: true), so you can analyze and save just the new photo(s) without re-fetching and re-analyzing the whole day.',
     inputSchema: {
       type: 'object',
       properties: {
         date: { type: 'string', description: 'ISO date (YYYY-MM-DD) this estimate is for. Required.' },
-        calories: { type: 'number', description: 'Estimated total calories for the day. Required.' },
-        protein: { type: 'number', description: 'Estimated grams of protein for the day.' },
-        carbs: { type: 'number', description: 'Estimated grams of carbs for the day.' },
-        fat: { type: 'number', description: 'Estimated grams of fat for the day.' },
-        description: { type: 'string', description: 'Brief description of what was eaten. Required.' },
+        mode: {
+          type: 'string',
+          enum: ['replace', 'append'],
+          description:
+            '\'replace\' (default): overwrite the whole saved entry for this date with the values given here. \'append\': add this call\'s calories/macros/meals/photo_pathnames onto the existing saved entry for this date (summing calorie/macro totals, concatenating meals, unioning photo_pathnames, appending the description) instead of overwriting it. If no entry exists yet for the date, append behaves the same as replace.',
+        },
+        calories: { type: 'number', description: 'Estimated calories for the day (or, in append mode, for just the newly analyzed photos/notes being added). Required.' },
+        protein: { type: 'number', description: 'Estimated grams of protein (day total, or the append increment in append mode).' },
+        carbs: { type: 'number', description: 'Estimated grams of carbs (day total, or the append increment in append mode).' },
+        fat: { type: 'number', description: 'Estimated grams of fat (day total, or the append increment in append mode).' },
+        description: { type: 'string', description: 'Brief description of what was eaten (or, in append mode, of just the newly added item). Required.' },
         photo_pathnames: {
           type: 'array',
           items: { type: 'string' },
           description:
-            'Pathnames (from list_food_photos_for_range) of every photo this estimate accounts for. Optional, but recording it is what lets a later list_food_photos_for_range(exclude_analyzed: true) call skip these photos instead of re-sending them. Replaces the prior list wholesale on re-save — always pass the full current set, not just newly added photos.',
+            'Pathnames (from list_food_photos_for_range) of every photo this call\'s estimate accounts for. Optional, but recording it is what lets a later list_food_photos_for_range(exclude_analyzed: true) call skip these photos instead of re-sending them. In mode: \'replace\' this replaces the prior list wholesale — pass the full current set, not just newly added photos. In mode: \'append\' just pass the new photo(s)\' pathnames — they are unioned onto the existing list.',
         },
         meals: {
           type: 'array',
@@ -208,7 +215,7 @@ const TOOLS = [
   {
     name: 'get_nutrition_summary_for_range',
     description:
-      'Get a cheap summary of saved nutrition estimates for a date range (e.g. "this week", "last 10 days") without re-analyzing any photos. Returns each day\'s saved calories/macros/meals/description, a total and average, plus two lists of dates needing attention: gap_dates (photos/notes exist but no saved estimate at all yet) and stale_dates (a saved estimate exists, but a photo or note for that date was added/edited AFTER it was saved — e.g. a dinner photo added after breakfast/lunch were already analyzed). For any date in either list, call list_food_photos_for_range for just that date, re-look at ALL of that day\'s photos/notes together (not just the new item), and call save_nutrition_estimate to save one fresh whole-day total — never try to add just the new item on top of the old saved number, since that risks double-counting.',
+      'Get a cheap summary of saved nutrition estimates for a date range (e.g. "this week", "last 10 days") without re-analyzing any photos. Returns each day\'s saved calories/macros/meals/description, a total and average, plus two lists of dates needing attention: gap_dates (photos/notes exist but no saved estimate at all yet) and stale_dates (a saved estimate exists, but a photo or note for that date was added/edited AFTER it was saved — e.g. a dinner photo added after breakfast/lunch were already analyzed). For a gap_date, call list_food_photos_for_range for that date and save_nutrition_estimate with mode: \'replace\' (there is nothing to append to yet). For a stale_date, first call list_food_photos_for_range(exclude_analyzed: true) for that date: if it returns new photo(s), analyze just those and save them with save_nutrition_estimate\'s mode: \'append\' to add them onto the existing total without re-fetching the whole day; if it returns nothing new (the staleness must then be from an edited/removed note or photo instead), do a full re-analysis — call list_food_photos_for_range with exclude_analyzed: false, re-look at ALL of that day\'s photos/notes together, and save one fresh whole-day total with mode: \'replace\'. Never add just the new item on top of the old saved number outside of mode: \'append\', since that risks double-counting.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -387,24 +394,49 @@ async function handleSaveNutritionEstimate(args: Record<string, unknown>) {
     ? args.photo_pathnames.filter((p): p is string => typeof p === 'string')
     : []
 
+  const mode = args.mode === 'append' ? 'append' : 'replace'
+  const existing = mode === 'append' ? await readNutritionLogEntry(date) : null
+
+  // Merge onto the existing entry in append mode (sum totals, concatenate
+  // meals, union photo pathnames, join descriptions) — falls back to a plain
+  // replace when there's nothing yet to append onto.
+  const mergedMacros: NonNullable<NutritionLogEntry['macros']> = existing
+    ? {
+        ...(existing.macros?.protein != null || macros.protein != null
+          ? { protein: (existing.macros?.protein ?? 0) + (macros.protein ?? 0) }
+          : {}),
+        ...(existing.macros?.carbs != null || macros.carbs != null
+          ? { carbs: (existing.macros?.carbs ?? 0) + (macros.carbs ?? 0) }
+          : {}),
+        ...(existing.macros?.fat != null || macros.fat != null
+          ? { fat: (existing.macros?.fat ?? 0) + (macros.fat ?? 0) }
+          : {}),
+      }
+    : macros
+
+  const mergedMeals = existing ? [...(existing.meals ?? []), ...meals] : meals
+
+  const mergedPhotoPathnames = existing
+    ? Array.from(new Set([...(existing.analyzedPhotoPathnames ?? []), ...photoPathnames]))
+    : photoPathnames
+
   const entry: NutritionLogEntry = {
     _id: date,
-    estimatedCalories: calories,
+    estimatedCalories: existing ? existing.estimatedCalories + calories : calories,
     // Omit keys entirely rather than setting them to undefined — the MongoDB
     // driver serializes an undefined field value as BSON null, not as an
     // absent key, which the schema's .optional() (not .nullable()) rejects on read.
-    ...(Object.keys(macros).length > 0 ? { macros } : {}),
-    ...(meals.length > 0 ? { meals } : {}),
-    description,
+    ...(Object.keys(mergedMacros).length > 0 ? { macros: mergedMacros } : {}),
+    ...(mergedMeals.length > 0 ? { meals: mergedMeals } : {}),
+    description: existing ? `${existing.description}; ${description}` : description,
     analyzedAt: new Date().toISOString(),
-    // Re-saving a date overwrites the whole entry (see tool description), so
-    // this list is replaced wholesale each save too — it always reflects
-    // exactly the photos this saved total accounts for, never a stale union.
-    ...(photoPathnames.length > 0 ? { analyzedPhotoPathnames: photoPathnames } : {}),
+    // In replace mode this list is replaced wholesale (see tool description);
+    // in append mode the new pathnames are unioned onto the existing list.
+    ...(mergedPhotoPathnames.length > 0 ? { analyzedPhotoPathnames: mergedPhotoPathnames } : {}),
   }
 
   await writeNutritionLogEntry(entry)
-  return { saved: true, date }
+  return { saved: true, date, mode }
 }
 
 async function handleSaveCoachNote(args: Record<string, unknown>) {
