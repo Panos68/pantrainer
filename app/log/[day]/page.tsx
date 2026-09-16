@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import type { Session, GarminRecoveryDay, RenphoMeasurementDay, ExerciseGroup, SetEntry } from '@/lib/schema'
 import GarminRecoveryCard from '@/components/GarminRecoveryCard'
@@ -213,9 +213,17 @@ function ReadOnlyView({ session }: { session: Session }) {
 
 // ─── Main page ───────────────────────────────────────────────────────────
 
+const VALID_TABS = ['log', 'recovery', 'nutrition'] as const
+type LogDayTab = (typeof VALID_TABS)[number]
+
+function isLogDayTab(value: string | null): value is LogDayTab {
+  return VALID_TABS.includes(value as LogDayTab)
+}
+
 export default function LogDayPage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const day = (params.day as string) ?? ''
 
   const [session, setSession] = useState<Session | null>(null)
@@ -249,7 +257,12 @@ export default function LogDayPage() {
   const [foodNoteSaving, setFoodNoteSaving] = useState(false)
   const [foodNoteMsg, setFoodNoteMsg] = useState<string | null>(null)
   const [coachNote, setCoachNote] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'log' | 'recovery' | 'nutrition'>('log')
+  // ?tab=nutrition lets a link deep-link straight into a tab (e.g. the
+  // home page's "Add Food Notes" shortcut) instead of always landing on Log.
+  const [activeTab, setActiveTab] = useState<LogDayTab>(() => {
+    const tab = searchParams.get('tab')
+    return isLogDayTab(tab) ? tab : 'log'
+  })
 
   const [nutritionEntry, setNutritionEntry] = useState<{
     estimatedCalories: number

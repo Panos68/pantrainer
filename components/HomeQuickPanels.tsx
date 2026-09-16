@@ -22,6 +22,7 @@ export default function HomeQuickPanels({ week, todayISO }: HomeQuickPanelsProps
 
   const sessionType = todaySession?.type ?? null
   const sessionSubtype = todaySession?.subtype ?? null
+  const foodNotesHref = todaySession ? `/log/${todaySession.day.toLowerCase()}?tab=nutrition` : null
 
   return (
     <section>
@@ -46,13 +47,23 @@ export default function HomeQuickPanels({ week, todayISO }: HomeQuickPanelsProps
             )}
           </div>
 
-          <Link
-            href={actionHref}
-            className="group shrink-0 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-lime-400 hover:bg-lime-300 text-zinc-950 px-5 text-sm font-black tracking-[0.12em] uppercase transition-colors"
-          >
-            {actionLabel}
-            <span className="transition-transform duration-150 group-hover:translate-x-1">→</span>
-          </Link>
+          <div className="flex items-center gap-2 shrink-0">
+            {foodNotesHref && (
+              <Link
+                href={foodNotesHref}
+                className="inline-flex h-11 items-center justify-center gap-1.5 rounded-lg border border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:text-zinc-100 px-4 text-xs font-mono font-bold tracking-widest uppercase transition-colors"
+              >
+                🍽️ Food Notes
+              </Link>
+            )}
+            <Link
+              href={actionHref}
+              className="group inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-lime-400 hover:bg-lime-300 text-zinc-950 px-5 text-sm font-black tracking-[0.12em] uppercase transition-colors"
+            >
+              {actionLabel}
+              <span className="transition-transform duration-150 group-hover:translate-x-1">→</span>
+            </Link>
+          </div>
         </div>
       </div>
     </section>
