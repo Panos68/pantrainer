@@ -289,6 +289,9 @@ export default function LogDayPage() {
   const [openNotes, setOpenNotes] = useState<Record<number, boolean>>({})
   const [swappedExercises, setSwappedExercises] = useState<Record<number, number>>({}) // index → alt index
   const [openSwapMenu, setOpenSwapMenu] = useState<number | null>(null)
+  // Progression-chart exclusions: per exercise (index-keyed like the rest) and whole session.
+  const [excludedExercises, setExcludedExercises] = useState<Record<number, boolean>>({})
+  const [excludeSession, setExcludeSession] = useState(false)
 
   // Muscle map collapsed state
   const [muscleMapOpen, setMuscleMapOpen] = useState(false)
@@ -477,6 +480,10 @@ export default function LogDayPage() {
         setActualNotes(
           Object.fromEntries(flatExercises.map((ex, i) => [i, ex.actual_note ?? ''])),
         )
+        setExcludedExercises(
+          Object.fromEntries(flatExercises.map((ex, i) => [i, ex.exclude_from_progress === true])),
+        )
+        setExcludeSession(sessionData.exclude_from_progress === true)
 
         // Auto-fetch if no Garmin match yet — regardless of status
         if (!sessionData.garmin_activity_id) {
@@ -555,6 +562,7 @@ export default function LogDayPage() {
         effort: derived ? derived.effort : ex.effort ?? null,
         actual_note: actualNotes[i]?.trim() || null,
         set_log: log,
+        exclude_from_progress: excludedExercises[i] === true ? true : undefined,
       }
     }
 
@@ -590,8 +598,11 @@ export default function LogDayPage() {
       anaerobic_training_effect: garminTraining.anaerobic_training_effect ?? null,
       training_stress_score: garminTraining.training_stress_score ?? null,
       hr_zones: garminTraining.hr_zones ?? null,
+      // Always sent as a boolean: the PATCH merges over the stored session, so
+      // omitting it would leave a previously-set flag stuck on.
+      exclude_from_progress: excludeSession,
     }
-  }, [type, subtype, duration, avgHr, calories, rpe, notes, photos, setLogEdits, actualNotes, session, swappedExercises, garminSynced, garminTraining])
+  }, [type, subtype, duration, avgHr, calories, rpe, notes, photos, setLogEdits, actualNotes, excludedExercises, excludeSession, session, swappedExercises, garminSynced, garminTraining])
 
   const mergeGarminIntoPayload = useCallback((
     payload: ReturnType<typeof buildPayload>,
@@ -1271,9 +1282,21 @@ export default function LogDayPage() {
                 <div className="px-3 pb-2 bg-zinc-950 border-t border-zinc-800/40">
                   {openNotes[i] || actualNotes[i] ? (
                     <input type="text" value={actualNotes[i] ?? ''} onChange={(e) => setActualNotes((prev) => ({ ...prev, [i]: e.target.value }))} placeholder="Note…" className="w-full mt-1.5 bg-zinc-900 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-700" />
-                  ) : (
-                    <button type="button" onClick={() => setOpenNotes((prev) => ({ ...prev, [i]: true }))} className="mt-1.5 text-zinc-600 hover:text-zinc-400 text-[10px] font-mono transition-colors">+ note</button>
-                  )}
+                  ) : null}
+                  <div className="flex items-center gap-3">
+                    {!(openNotes[i] || actualNotes[i]) && (
+                      <button type="button" onClick={() => setOpenNotes((prev) => ({ ...prev, [i]: true }))} className="mt-1.5 text-zinc-600 hover:text-zinc-400 text-[10px] font-mono transition-colors">+ note</button>
+                    )}
+                    {type === 'Strength' && (
+                      <button
+                        type="button"
+                        onClick={() => setExcludedExercises((prev) => ({ ...prev, [i]: !prev[i] }))}
+                        aria-pressed={excludedExercises[i] === true}
+                        title="Keep this exercise off the progression charts (injury, regression, light day)"
+                        className={`mt-1.5 text-[10px] font-mono transition-colors ${excludedExercises[i] ? 'text-amber-400' : 'text-zinc-600 hover:text-zinc-400'}`}
+                      >{excludedExercises[i] ? '⊘ off progress charts' : '⊘ exclude from progress'}</button>
+                    )}
+                  </div>
                 </div>
               </div>
             )
@@ -1486,6 +1509,23 @@ export default function LogDayPage() {
               })}
             </div>
           </div>
+
+          {type === 'Strength' && (
+            <button
+              type="button"
+              onClick={() => setExcludeSession((v) => !v)}
+              aria-pressed={excludeSession}
+              className={`w-full flex items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${excludeSession ? 'border-amber-500/40 bg-amber-500/10' : 'border-zinc-800 hover:border-zinc-700'}`}
+            >
+              <span className={`mt-0.5 h-4 w-4 shrink-0 rounded border flex items-center justify-center text-[10px] ${excludeSession ? 'border-amber-400 bg-amber-400 text-zinc-950' : 'border-zinc-600'}`}>
+                {excludeSession ? '✓' : ''}
+              </span>
+              <span className="space-y-0.5">
+                <span className={`block text-xs font-mono font-bold tracking-wide ${excludeSession ? 'text-amber-400' : 'text-zinc-400'}`}>Modified session (injury / illness)</span>
+                <span className="block text-zinc-600 text-[11px]">Still logged, but nothing here moves your lift progression charts.</span>
+              </span>
+            </button>
+          )}
 
           {/* AI Planning Reasoning */}
           {session?.reasoning && (

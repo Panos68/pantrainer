@@ -27,6 +27,7 @@ import { SessionSchema, ProposedPlanRunTypeSchema, FoodInventoryItemSchema } fro
 import type { WeekDoc, NutritionLogEntry } from '@/lib/schema'
 import { getSession, isAutomationToken } from '@/lib/auth'
 import { buildCurrentContext } from '@/lib/mcp-current-context'
+import { isProgressExcluded } from '@/lib/progression'
 
 // ---------------------------------------------------------------------------
 // MCP tool definitions
@@ -160,7 +161,7 @@ const TOOLS = [
   {
     name: 'get_lift_history',
     description:
-      'Get the history of actual weight/reps/effort logged for a specific exercise name across completed strength sessions (current week + archived weeks). Matches the exercise name exactly (case-insensitive) to avoid confusing similarly-named lifts (e.g. Pendlay row vs tricep extension); also reports other exercise names it found that partially match, so you can catch a wrong name before drawing conclusions.',
+      'Get the history of actual weight/reps/effort logged for a specific exercise name across completed strength sessions (current week + archived weeks). Matches the exercise name exactly (case-insensitive) to avoid confusing similarly-named lifts (e.g. Pendlay row vs tricep extension); also reports other exercise names it found that partially match, so you can catch a wrong name before drawing conclusions. Entries with excluded_from_progress: true were flagged by the athlete (injury, illness, deliberately light day) — report them, but do not treat them as regressions or use them to set working weights or detect plateaus.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -878,6 +879,7 @@ async function handleGetLiftHistory(args: Record<string, unknown>) {
     reps: number | string | null
     effort: 'easy' | 'perfect' | 'hard' | null
     notes: string | null
+    excluded_from_progress: boolean
   }> = []
   const otherNamesSeen = new Set<string>()
 
@@ -894,6 +896,7 @@ async function handleGetLiftHistory(args: Record<string, unknown>) {
             reps: ex.actual_reps ?? ex.reps ?? null,
             effort: ex.effort ?? null,
             notes: ex.actual_note ?? null,
+            excluded_from_progress: isProgressExcluded(session) || isProgressExcluded(ex),
           })
         } else if (match === 'partial') {
           otherNamesSeen.add(ex.name)

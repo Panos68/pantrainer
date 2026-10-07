@@ -3,6 +3,7 @@ import { computeDailyScore } from './daily-score'
 import { readArchivedWeeks, readAppState, readNutritionLogForRange, readNutritionLogEntry } from './data'
 import { sessionToLoadPoint, type TrainingLoadPoint } from './training-load'
 import { calcOverloadInsights } from './overload'
+import { liftsForWeek } from './progression'
 import { isMidDaySnapshot } from './recovery-freshness'
 import { format, parseISO, subDays } from 'date-fns'
 import { todayIsoInAppTimeZone } from './app-timezone'
@@ -137,11 +138,7 @@ function round1(value: number): number {
 }
 
 function numericLifts(week: WeekDoc): Record<string, number> {
-  return Object.fromEntries(
-    Object.entries(week.lift_progression)
-      .filter(([, v]) => typeof v === 'number')
-      .map(([k, v]) => [k, v as number]),
-  )
+  return liftsForWeek(week)
 }
 
 function buildCoachContext(
@@ -263,7 +260,7 @@ function buildCoachContext(
   const plateau_lifts = Object.keys(currentLifts).filter((key) => {
     const series = allWeeks
       .map((w) => {
-        const val = w.lift_progression[key]
+        const val = numericLifts(w)[key]
         return typeof val === 'number' ? val : null
       })
       .filter((v): v is number => v != null)
@@ -473,11 +470,7 @@ export async function buildExport(currentWeek: WeekDoc, options?: { includeDeloa
     strength_days: w.week_summary.strength_days,
     conditioning_days: w.week_summary.high_output_days,
     total_calories: w.week_summary.total_calories,
-    peak_lifts: Object.fromEntries(
-      Object.entries(w.lift_progression)
-        .filter(([, v]) => typeof v === 'number')
-        .map(([k, v]) => [k, v as number])
-    ),
+    peak_lifts: numericLifts(w),
   }))
 
   const exportAthlete = { rhr: currentWeek.athlete.rhr_bpm, maxHr: 220 - currentWeek.athlete.age }
@@ -489,6 +482,7 @@ export async function buildExport(currentWeek: WeekDoc, options?: { includeDeloa
 
   return {
     ...currentWeek,
+    lift_progression: liftsForWeek(currentWeek),
     is_deload_week: options?.includeDeload ?? state.isDeloadWeek,
     photos_to_attach,
     history,

@@ -1,6 +1,6 @@
 import { readCurrentWeekDirect, writeCurrentWeek } from '@/lib/data'
 import { deriveExerciseAggregates } from '@/lib/liveSession'
-import { updateLiftProgression } from '@/lib/progression'
+import { isProgressExcluded, updateLiftProgression } from '@/lib/progression'
 import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
 import type { Session, WeekSummary } from '@/lib/schema'
 
@@ -22,6 +22,7 @@ function recalculateLiftProgression(sessions: Session[]): Record<string, string 
   let progression: Record<string, string | number | null> = {}
   for (const s of sessions) {
     if (s.status !== 'completed' || s.type !== 'Strength' || s.exercises.length === 0) continue
+    if (isProgressExcluded(s)) continue
     progression = updateLiftProgression(s.exercises, progression)
   }
   return progression

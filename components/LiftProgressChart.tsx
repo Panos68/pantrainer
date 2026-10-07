@@ -11,7 +11,12 @@ import {
   CartesianGrid,
 } from 'recharts'
 import type { WeekDoc } from '@/lib/schema'
-import { progressionFromCompletedStrengthSessions } from '@/lib/progression'
+import {
+  excludedLiftWeights,
+  isProgressExcluded,
+  nameToKey,
+  progressionFromCompletedStrengthSessions,
+} from '@/lib/progression'
 
 interface LiftProgressChartProps {
   weeks: WeekDoc[]
@@ -32,41 +37,15 @@ function parseWeight(val: string | number | null | undefined): number | null {
   return isNaN(n) ? null : n
 }
 
-function isBarbellBenchExercise(name: string): boolean {
-  const lower = name.toLowerCase()
-  const isDumbbellBench =
-    lower.includes('bench') &&
-    (lower.includes('dumbbell') || lower.includes('dumbell') || /\bdb\b/.test(lower))
-  if (isDumbbellBench) return false
-  return lower.includes('barbell bench') || lower.includes('bench press')
-}
-
-function weeklyBarbellBenchWeight(week: WeekDoc): number | null {
+// Heaviest counted weight this week for one lift key, ignoring excluded entries.
+function weeklyCountedWeight(week: WeekDoc, key: string): number | null {
   let best: number | null = null
   for (const session of week.sessions) {
     if (session.status !== 'completed' || session.type !== 'Strength') continue
+    if (isProgressExcluded(session)) continue
     for (const ex of session.exercises) {
-      if (ex.actual_weight_kg == null) continue
-      if (!isBarbellBenchExercise(ex.name)) continue
-      if (best == null || ex.actual_weight_kg > best) {
-        best = ex.actual_weight_kg
-      }
-    }
-  }
-  return best
-}
-
-function weeklyDumbbellBenchWeight(week: WeekDoc): number | null {
-  let best: number | null = null
-  for (const session of week.sessions) {
-    if (session.status !== 'completed' || session.type !== 'Strength') continue
-    for (const ex of session.exercises) {
-      if (ex.actual_weight_kg == null) continue
-      const lower = ex.name.toLowerCase()
-      const isDumbbellBench =
-        lower.includes('bench') &&
-        (lower.includes('dumbbell') || lower.includes('dumbell') || /\bdb\b/.test(lower))
-      if (!isDumbbellBench) continue
+      if (ex.actual_weight_kg == null || isProgressExcluded(ex)) continue
+      if (nameToKey(ex.name) !== key) continue
       if (best == null || ex.actual_weight_kg > best) {
         best = ex.actual_weight_kg
       }
@@ -81,21 +60,12 @@ function shortWeekLabel(weekStr: string): string {
   return match ? match[1] : weekStr
 }
 
-interface ChartPoint {
-  label: string
-  bench_press_kg?: number | null
-  deadlift_kg?: number | null
-  push_press_kg?: number | null
-  weighted_pullups_added_kg?: number | null
-}
+// `<key>__excluded` holds the heaviest entry the athlete kept off the charts that
+// week; it renders as an unconnected hollow dot.
+type ChartPoint = { label: string } & Partial<Record<LiftKey | `${LiftKey}__excluded`, number | null>>
 
 function hasLiftValue(point: ChartPoint): boolean {
-  return (
-    point.bench_press_kg != null ||
-    point.deadlift_kg != null ||
-    point.push_press_kg != null ||
-    point.weighted_pullups_added_kg != null
-  )
+  return LIFTS.some((l) => point[l.key] != null || point[`${l.key}__excluded`] != null)
 }
 
 function weekStartDate(week: WeekDoc): string {
@@ -124,8 +94,9 @@ export default function LiftProgressChart({ weeks }: LiftProgressChartProps) {
 
   const data = sortedWeeks.reduce<{ points: ChartPoint[]; lastKnownBarbellBench: number | null }>(
     (acc, w) => {
-      const benchFromSessions = weeklyBarbellBenchWeight(w)
-      const dumbbellFromSessions = weeklyDumbbellBenchWeight(w)
+      const benchFromSessions = weeklyCountedWeight(w, 'bench_press_kg')
+      const dumbbellFromSessions = weeklyCountedWeight(w, 'sunday_db_bench_kg')
+      const excluded = excludedLiftWeights(w.sessions)
       const derivedProgression = progressionFromCompletedStrengthSessions(w.sessions)
       const benchFromProgression = parseWeight(derivedProgression['bench_press_kg'])
       const dumbbellFromProgression = parseWeight(derivedProgression['sunday_db_bench_kg'])
@@ -162,6 +133,7 @@ export default function LiftProgressChart({ weeks }: LiftProgressChartProps) {
             deadlift_kg: parseWeight(derivedProgression['deadlift_kg']),
             push_press_kg: parseWeight(derivedProgression['push_press_kg']),
             weighted_pullups_added_kg: parseWeight(derivedProgression['weighted_pullups_added_kg']),
+            ...Object.fromEntries(LIFTS.map((l) => [`${l.key}__excluded`, excluded[l.key] ?? null])),
           },
         ],
         lastKnownBarbellBench: nextLastKnown,
@@ -238,6 +210,21 @@ export default function LiftProgressChart({ weeks }: LiftProgressChartProps) {
                   return [`${value} kg`, lift?.label ?? String(name)]
                 }}
               />
+              {LIFTS.map((lift) =>
+                visibleLifts.has(lift.key) ? (
+                  <Line
+                    key={`${lift.key}__excluded`}
+                    name={`${lift.label} (excluded)`}
+                    dataKey={`${lift.key}__excluded`}
+                    stroke="none"
+                    legendType="none"
+                    dot={{ r: 3, stroke: lift.color, strokeOpacity: 0.5, strokeWidth: 1.5, fill: '#18181b' }}
+                    activeDot={{ r: 4, stroke: lift.color, strokeWidth: 1.5, fill: '#18181b' }}
+                    connectNulls={false}
+                    isAnimationActive={false}
+                  />
+                ) : null
+              )}
               {LIFTS.map((lift) =>
                 visibleLifts.has(lift.key) ? (
                   <Line

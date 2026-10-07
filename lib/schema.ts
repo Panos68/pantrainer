@@ -25,6 +25,8 @@ export const ExerciseSchema = z.object({
   actual_note: z.string().nullable().optional(),
   set_log: z.array(SetEntrySchema).optional(),
   per_side: z.boolean().optional(),
+  // Logged, but kept off the progression charts (injury, regression, light day).
+  exclude_from_progress: z.boolean().optional(),
   alternatives: z.array(z.object({
     name: z.string(),
     sets: z.number().nullable().optional(),
@@ -81,6 +83,8 @@ export const SessionSchema = z.object({
   })).nullable().optional(),
   garmin_push_skipped: z.array(z.string()).optional(),
   garmin_pull_status: z.enum(['not_pushed', 'pushed', 'pulled']).optional(),
+  // Modified session (injury/illness): nothing in it moves the progression charts.
+  exclude_from_progress: z.boolean().optional(),
 })
 
 // Mapping from an app exercise name to Garmin's structured-workout catalog entry
