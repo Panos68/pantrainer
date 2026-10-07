@@ -22,7 +22,6 @@ import { useStrengthData } from '@/lib/useStrengthData'
 import { useWakeLock } from '@/lib/useWakeLock'
 import { applySetToRecords, detectPrs, PR_LABEL, type LiftRecords, type PrKind } from '@/lib/strength'
 import { nameToKey } from '@/lib/progression'
-import type { PlateInventory } from '@/lib/plates'
 import type { ProgressionSuggestion } from '@/lib/progression-engine'
 import { flushPending, patchSession, readPending, type SessionPatch } from '@/lib/offlineSessionSync'
 
@@ -81,7 +80,6 @@ function SetEntryForm({
   onLog,
   records,
   suggestionFor,
-  plates,
   flash,
 }: {
   day: string
@@ -95,7 +93,6 @@ function SetEntryForm({
   onLog: (reps: string, weight: string, effort: SetEntry['effort'], note: string | undefined, exerciseName: string) => void
   records: (exerciseName: string) => LiftRecords | undefined
   suggestionFor: (exerciseName: string) => ProgressionSuggestion | undefined
-  plates: PlateInventory
   flash: boolean
 }) {
   const [altIndex, setAltIndex] = useState<number | null>(null)
@@ -197,7 +194,6 @@ function SetEntryForm({
           weight={weight}
           records={records(activeExercise.name)}
           suggestion={setNumberIsFirst(step) ? suggestionFor(activeExercise.name) : undefined}
-          plates={plates}
         />
       )}
       <div className="flex gap-3">
@@ -276,7 +272,7 @@ export default function LiveSessionPage() {
   const [rpe, setRpe] = useState('')
   const [completing, setCompleting] = useState(false)
   const { syncing: garminSyncing, lastSync: garminSync, syncGarmin } = useGarminSync()
-  const { summary: strength, plates } = useStrengthData()
+  const { summary: strength } = useStrengthData()
   // Sets logged this session fold into the records, so PR detection stays
   // accurate across consecutive sets.
   const [sessionRecords, setSessionRecords] = useState<Record<string, LiftRecords>>({})
@@ -643,7 +639,6 @@ export default function LiveSessionPage() {
       onLog={logCurrentSet}
       records={recordsFor}
       suggestionFor={(name) => strength?.suggestions[nameToKey(name)]}
-      plates={plates}
       flash={flashForStep === stepIndex}
     />
     </>

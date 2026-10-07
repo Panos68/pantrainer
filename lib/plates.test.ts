@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { plateBreakdown, usesBarbell } from './plates'
+import { inventoryWithBar, nextBarWeight, plateBreakdown, usesBarbell } from './plates'
 
 function testStandardLoads() {
   assert.deepEqual(plateBreakdown(100), { perSide: [25, 15], loadedKg: 100, exact: true })
@@ -33,7 +33,16 @@ function testUsesBarbell() {
   assert.equal(usesBarbell('Lat Pulldown'), false)
 }
 
+function testBarToggle() {
+  assert.equal(nextBarWeight(20), 15)
+  assert.equal(nextBarWeight(15), 10)
+  assert.equal(nextBarWeight(10), 20)
+  assert.equal(nextBarWeight(17), 20) // unknown value restarts the cycle
+  assert.deepEqual(plateBreakdown(60, inventoryWithBar(15))?.perSide, [20, 2.5])
+}
+
 testStandardLoads()
+testBarToggle()
 testInexactRoundsDown()
 testLimitedInventory()
 testInvalid()

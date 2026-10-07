@@ -37,7 +37,7 @@ a built-in [MCP](https://modelcontextprotocol.io) server. Your data stays in you
 - **Progression targets with reasons** — "Every set hit 5 at 60 kg — add 2.5 kg", "Missed reps — repeat 60 kg",
   automatic deload after 3 stalled sessions
 - **PR detection** while you log (heaviest, best e1RM, most reps at a weight)
-- **Plate math** for barbell lifts, based on the plates you own
+- **Plate math** for barbell lifts, with a one-tap bar switch (20/15/10 kg) remembered per exercise
 
 **Progress**
 - Estimated 1RM curves per lift, personal records table
