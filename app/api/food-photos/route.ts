@@ -42,10 +42,11 @@ export async function POST(request: Request) {
 
   const formData = await request.formData()
   const file = formData.get('file')
-  const date = (formData.get('date') as string | null) || todayIsoInAppTimeZone()
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return Response.json({ error: 'Invalid date' }, { status: 400 })
-  }
+  // Uploads come from the app and from an iOS Shortcut. Anything that isn't a
+  // YYYY-MM-DD date files under today rather than being rejected, so an older
+  // Shortcut sending another format keeps working (and paths stay safe).
+  const rawDate = formData.get('date') as string | null
+  const date = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : todayIsoInAppTimeZone()
 
   if (!(file instanceof File)) {
     return Response.json({ error: 'Missing file' }, { status: 400 })
