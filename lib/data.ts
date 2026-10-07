@@ -489,11 +489,14 @@ export async function deletePantryItem(id: string): Promise<void> {
 }
 
 /**
- * Populate the pantry from the seed list on first use. Only inserts when the
- * collection is completely empty, so it can never overwrite an edit the
- * athlete has made.
+ * Populate the pantry from the example staples on first use, only when the
+ * instance opts in with SEED_EXAMPLE_PANTRY=true (the examples are one
+ * athlete's Swedish staples — useful as a template, wrong as a default). Only
+ * inserts when the collection is completely empty, so it can never overwrite
+ * an edit the athlete has made.
  */
 export async function seedPantryIfEmpty(): Promise<number> {
+  if (process.env.SEED_EXAMPLE_PANTRY !== 'true') return 0
   const db = await getDb()
   const count = await db.collection('pantry').countDocuments()
   if (count > 0) return 0

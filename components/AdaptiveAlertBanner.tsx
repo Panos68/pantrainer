@@ -1,24 +1,24 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import type { AdaptiveAlert } from '@/lib/adaptive-alert'
 
 export default function AdaptiveAlertBanner({ alert, today }: { alert: AdaptiveAlert | null; today: string }) {
-  const [dismissed, setDismissed] = useState(false)
-
-  useEffect(() => {
-    const storageKey = `alert-dismissed-${today}`
-    if (sessionStorage.getItem(storageKey)) {
-      setDismissed(true)
-    }
-  }, [today])
+  const storageKey = `alert-dismissed-${today}`
+  // Dismissal persists for the browser session; read it without a mount effect.
+  const dismissedEarlier = useSyncExternalStore(
+    () => () => {},
+    () => sessionStorage.getItem(storageKey) != null,
+    () => false,
+  )
+  const [dismissedNow, setDismissedNow] = useState(false)
 
   function dismiss() {
-    sessionStorage.setItem(`alert-dismissed-${today}`, '1')
-    setDismissed(true)
+    sessionStorage.setItem(storageKey, '1')
+    setDismissedNow(true)
   }
 
-  if (!alert || dismissed) return null
+  if (!alert || dismissedEarlier || dismissedNow) return null
 
   const isWarn = alert.level === 'warn'
   const colors = isWarn

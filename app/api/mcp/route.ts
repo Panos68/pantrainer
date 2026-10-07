@@ -178,7 +178,7 @@ const TOOLS = [
   {
     name: 'list_food_photos_for_range',
     description:
-      'Fetch food photos and any written food notes for an inclusive date range so they can be analyzed for approximate calorie/macro content. Returns each photo as an inline image labeled with the date, local time it was uploaded, AND its blob pathname (e.g. "Date: 2026-08-28, uploaded 08:15, pathname: data/food-photos/2026-08-28/xyz.jpg") — use that real time to label meals in save_nutrition_estimate\'s optional per-meal breakdown (e.g. a photo uploaded 07:xx-09:xx is very likely breakfast, 12:xx-14:xx likely lunch, 18:xx-20:xx likely dinner, anything clearly outside those windows is more likely a snack) rather than guessing the meal type purely from what the food looks like, and pass the pathnames back via photo_pathnames when saving so a later exclude_analyzed call can skip them. If the upload time doesn\'t clearly indicate a specific meal, use a neutral label like "Snack" or "Meal (unclear time)" instead of forcing it into breakfast/lunch/dinner. Also returns any freeform notes the athlete typed directly in the app describing what they ate (an alternative to photographing everything) — these have no per-item time, so anchor their content to the day generally. Also returns pantry_brief: the athlete\'s staple foods with their exact per-100g macros, usual portion sizes, and visual descriptions — ALWAYS apply this before estimating, since several staples (kvarg in particular) are visually ambiguous and have previously been misidentified as milk or yogurt, which is wrong on both calories and protein. Use this when the athlete asks about their eating/calories for a period — there is no separate calorie database yet, so photos and notes are the only sources; if neither is found for the range, say so rather than guessing.',
+      'Fetch food photos and any written food notes for an inclusive date range so they can be analyzed for approximate calorie/macro content. Returns each photo as an inline image labeled with the date, local time it was uploaded, AND its blob pathname (e.g. "Date: 2026-08-28, uploaded 08:15, pathname: data/food-photos/2026-08-28/xyz.jpg") — use that real time to label meals in save_nutrition_estimate\'s optional per-meal breakdown (e.g. a photo uploaded 07:xx-09:xx is very likely breakfast, 12:xx-14:xx likely lunch, 18:xx-20:xx likely dinner, anything clearly outside those windows is more likely a snack) rather than guessing the meal type purely from what the food looks like, and pass the pathnames back via photo_pathnames when saving so a later exclude_analyzed call can skip them. If the upload time doesn\'t clearly indicate a specific meal, use a neutral label like "Snack" or "Meal (unclear time)" instead of forcing it into breakfast/lunch/dinner. Also returns any freeform notes the athlete typed directly in the app describing what they ate (an alternative to photographing everything) — these have no per-item time, so anchor their content to the day generally. Also returns pantry_brief: the athlete\'s staple foods with their exact per-100g macros, usual portion sizes, and visual descriptions — ALWAYS apply this before estimating, since staples are often visually ambiguous (e.g. quark vs. milk vs. yogurt) and a wrong guess is wrong on both calories and protein. Use this when the athlete asks about their eating/calories for a period — there is no separate calorie database yet, so photos and notes are the only sources; if neither is found for the range, say so rather than guessing.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -196,7 +196,7 @@ const TOOLS = [
   {
     name: 'save_nutrition_estimate',
     description:
-      'Save a calorie/macro estimate for a specific day, whether derived from analyzing food photos (list_food_photos_for_range) or from a plain-text description the athlete gave in chat (e.g. "had kvarg and granola for breakfast"). Before estimating from text, check recent entries via get_nutrition_summary_for_range for a similar description and anchor to that prior estimate so repeat meals stay consistent rather than drifting each time. mode: \'replace\' (the default) overwrites the previous estimate for that date entirely — use this when re-analyzing a day flagged stale by get_nutrition_summary_for_range because a note or an already-analyzed photo was edited/removed: re-look at ALL of that day\'s photos/notes and save one fresh whole-day total. mode: \'append\' instead adds this call\'s calories/macros/meals/photo_pathnames on top of the existing saved entry for that date (summing totals, concatenating meals, unioning photo_pathnames) — use this for a gap day\'s first save, or when the only new content is photos found via list_food_photos_for_range(exclude_analyzed: true), so you can analyze and save just the new photo(s) without re-fetching and re-analyzing the whole day.',
+      'Save a calorie/macro estimate for a specific day, whether derived from analyzing food photos (list_food_photos_for_range) or from a plain-text description the athlete gave in chat (e.g. "had quark and granola for breakfast"). Before estimating from text, check recent entries via get_nutrition_summary_for_range for a similar description and anchor to that prior estimate so repeat meals stay consistent rather than drifting each time. mode: \'replace\' (the default) overwrites the previous estimate for that date entirely — use this when re-analyzing a day flagged stale by get_nutrition_summary_for_range because a note or an already-analyzed photo was edited/removed: re-look at ALL of that day\'s photos/notes and save one fresh whole-day total. mode: \'append\' instead adds this call\'s calories/macros/meals/photo_pathnames on top of the existing saved entry for that date (summing totals, concatenating meals, unioning photo_pathnames) — use this for a gap day\'s first save, or when the only new content is photos found via list_food_photos_for_range(exclude_analyzed: true), so you can analyze and save just the new photo(s) without re-fetching and re-analyzing the whole day.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -238,7 +238,7 @@ const TOOLS = [
                     name: { type: 'string', description: 'Food name, e.g. "Kvarg". Required.' },
                     grams: { type: 'number', description: 'Estimated weight in grams. Required.' },
                     calories: { type: 'number', description: 'Calories for this item. Required.' },
-                    pantry_id: { type: 'string', description: 'The staple\'s id from pantry_brief (e.g. "kvarg"). Omit for a one-off food such as a restaurant meal.' },
+                    pantry_id: { type: 'string', description: 'The staple\'s id from pantry_brief (e.g. "quark"). Omit for a one-off food such as a restaurant meal.' },
                   },
                   required: ['name', 'grams', 'calories'],
                 },
@@ -597,7 +597,11 @@ async function handleGetNutritionSummaryForRange(args: Record<string, unknown>) 
   }
 }
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://pantrainer.vercel.app'
+// Base URL for signed photo links handed to Claude. On Vercel the production
+// domain is provided automatically; set NEXT_PUBLIC_APP_URL elsewhere.
+const APP_URL =
+  process.env.NEXT_PUBLIC_APP_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : 'http://localhost:3000')
 
 async function handleGetCurrentWeek() {
   const currentWeek = await readCurrentWeekDirect()

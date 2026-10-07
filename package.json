@@ -1,5 +1,5 @@
 {
-  "name": "build",
+  "name": "pantrainer",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "dotenvx run -f .env.local -- sh -c 'for f in lib/*.test.ts; do npx tsx \"$f\" || exit 1; done'"
+    "test": "node scripts/run-tests.mjs",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",
@@ -47,5 +48,6 @@
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5"
-  }
+  },
+  "license": "AGPL-3.0-only"
 }

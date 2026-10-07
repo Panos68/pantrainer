@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import type { Session, GarminRecoveryDay, RenphoMeasurementDay, ExerciseGroup, SetEntry } from '@/lib/schema'
 import GarminRecoveryCard from '@/components/GarminRecoveryCard'
+import { useIntegrations } from '@/lib/useIntegrations'
 import WeightCard from '@/components/WeightCard'
 import MuscleMap from '@/components/MuscleMap'
 import ExerciseDemo from '@/components/ExerciseDemo'
@@ -320,6 +321,7 @@ export default function LogDayPage() {
     hr_zones?: Array<{ zone_name: string; secs_in_zone: number; zone_high_boundary: number }> | null
   }>({})
   const [refreshingGarmin, setRefreshingGarmin] = useState(false)
+  const integrations = useIntegrations()
   const [garminPushing, setGarminPushing] = useState(false)
   const [garminPushMessage, setGarminPushMessage] = useState<string | null>(null)
   const isFutureSession = session != null && session.date > todayIsoLocal()
@@ -986,7 +988,7 @@ export default function LogDayPage() {
             </h1>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            {session.type === 'Strength' && session.garmin_pull_status !== 'pulled' && (
+            {integrations.garmin && session.type === 'Strength' && session.garmin_pull_status !== 'pulled' && (
               <button
                 onClick={pushToGarmin}
                 disabled={garminPushing}
@@ -1003,6 +1005,7 @@ export default function LogDayPage() {
                 Start Live Session
               </Link>
             )}
+            {integrations.garmin && (
             <button
               onClick={handleRefreshGarmin}
               disabled={refreshingGarmin || saving}
@@ -1012,6 +1015,7 @@ export default function LogDayPage() {
               <span aria-hidden>↻</span>
               {refreshingGarmin ? 'Refreshing...' : 'Refresh Garmin'}
             </button>
+            )}
             <button
               onClick={() => router.push('/')}
               className="text-zinc-500 hover:text-zinc-300 text-xs font-mono tracking-widest uppercase transition-colors"
@@ -1375,11 +1379,13 @@ export default function LogDayPage() {
         {activeTab === 'recovery' && (
         <>
         {/* Recovery card */}
-        <GarminRecoveryCard
-          date={session.date}
-          recovery={garminRecovery}
-          onFetched={(data) => setGarminRecovery(data)}
-        />
+        {(integrations.garmin || garminRecovery) && (
+          <GarminRecoveryCard
+            date={session.date}
+            recovery={garminRecovery}
+            onFetched={(data) => setGarminRecovery(data)}
+          />
+        )}
         {weight?.weight_kg != null && <WeightCard measurement={weight} />}
         </>
         )}

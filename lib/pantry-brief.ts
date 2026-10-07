@@ -30,7 +30,7 @@ export function formatPantryBrief(pantry: PantryItem[]): string {
     '2. If the amount looks like the usual portion, use the usual portion figures',
     '   as-is. This is what keeps repeat meals from drifting between days.',
     '3. If the amount clearly differs, scale from the per-100g values and say so',
-    '   in the description (e.g. "kvarg, roughly double the usual bowl, ~360 g").',
+    '   in the description (e.g. "quark, roughly double the usual bowl, ~360 g").',
     '4. A food that is not in this list is estimated exactly as you would',
     '   otherwise — eating out and one-off meals are still your own judgement.',
     '   Never drop an item from the day total just because it is not a staple.',

@@ -190,8 +190,8 @@ export default function PantryPage() {
             Staples the estimator matches against
           </p>
           <p className="text-zinc-600 text-xs font-mono pt-2 leading-relaxed">
-            These foods are given to Claude with every food photo, so a tub of kvarg is
-            identified as kvarg rather than guessed as milk. The usual portion is the
+            These foods are given to Claude with every food photo, so a tub of quark is
+            identified as quark rather than guessed as milk. The usual portion is the
             anchor when a photo is ambiguous; a clearly different amount is scaled from
             the per-100g values.
           </p>

@@ -7,6 +7,18 @@ import BarcodeScanner, { isBarcodeDetectorAvailable } from '@/components/Barcode
 import ExpiryScanner from '@/components/ExpiryScanner'
 import type { FoodInventoryItem, FoodLocation } from '@/lib/schema'
 
+type InventoryResponse = {
+  items: FoodInventoryItem[]
+  restockSuggestions: FoodInventoryItem[]
+  stapleSuggestions: Array<{ name: string; barcode?: string }>
+  canManageStaples: boolean
+}
+
+async function fetchInventory(): Promise<InventoryResponse> {
+  const response = await fetch('/api/food/inventory', { cache: 'no-store' })
+  return response.json() as Promise<InventoryResponse>
+}
+
 const LOCATIONS: Array<{ value: FoodLocation; label: string }> = [
   { value: 'fridge', label: '🧊 Fridge' },
   { value: 'freezer', label: '❄️ Freezer' },
@@ -95,16 +107,22 @@ export default function FoodPage() {
   const router = useRouter()
   const canScan = useSyncExternalStore(() => () => {}, isBarcodeDetectorAvailable, () => false)
 
-  const load = useCallback(async () => {
-    const response = await fetch('/api/food/inventory', { cache: 'no-store' })
-    const data = await response.json() as { items: FoodInventoryItem[]; restockSuggestions: FoodInventoryItem[]; stapleSuggestions: Array<{ name: string; barcode?: string }>; canManageStaples: boolean }
+  const applyInventory = useCallback((data: InventoryResponse) => {
     setItems(data.items)
     setRestockSuggestions(data.restockSuggestions)
     setStapleSuggestions(data.stapleSuggestions)
     setCanManageStaples(data.canManageStaples)
   }, [])
 
-  useEffect(() => { void load() }, [load])
+  const load = useCallback(async () => {
+    applyInventory(await fetchInventory())
+  }, [applyInventory])
+
+  useEffect(() => {
+    let cancelled = false
+    fetchInventory().then((data) => { if (!cancelled) applyInventory(data) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [applyInventory])
 
   // On the All tab there's no implicit location — a target must be chosen
   // before anything can be added.

@@ -8,10 +8,7 @@ export function useCountUp(target: number, duration = 1): number {
   const prefersReducedMotion = useReducedMotion()
 
   useEffect(() => {
-    if (prefersReducedMotion) {
-      setValue(target)
-      return
-    }
+    if (prefersReducedMotion) return
     const controls = animate(0, target, {
       duration,
       ease: 'easeOut',
@@ -20,5 +17,6 @@ export function useCountUp(target: number, duration = 1): number {
     return () => controls.stop()
   }, [target, duration, prefersReducedMotion])
 
-  return value
+  // Reduced motion: show the final number straight away, no animation state.
+  return prefersReducedMotion ? target : value
 }

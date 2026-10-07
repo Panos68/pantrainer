@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
 import type { GarminRecoveryDay } from '@/lib/schema'
+import { useIntegrations } from '@/lib/useIntegrations'
 
 interface GarminRecoveryCardProps {
   date: string
@@ -17,9 +18,12 @@ export default function GarminRecoveryCard({
   date,
   recovery,
   compact = false,
-  interactive = true,
+  interactive: interactiveProp = true,
   onFetched,
 }: GarminRecoveryCardProps) {
+  // Without Garmin configured there's nothing to fetch — show stored data only.
+  const { garmin } = useIntegrations()
+  const interactive = interactiveProp && garmin
   const [loading, setLoading] = useState(false)
   const [fetchedData, setFetchedData] = useState<GarminRecoveryDay | null>(null)
   const data = recovery ?? fetchedData
