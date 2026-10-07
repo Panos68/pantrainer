@@ -1,7 +1,7 @@
 import { requireOwnerSession } from '@/lib/automation-auth'
 import { demoForbidden } from '@/lib/demo-mode'
-import { readAllSessions, readAthleteProfile, readCurrentWeekDirect, writeArchivedWeek } from '@/lib/data'
-import { parseHistoryCsv, planImport, setsToSessions } from '@/lib/history-import'
+import { readAllSessions, readArchivedWeekById, readAthleteProfile, readCurrentWeekDirect, writeArchivedWeek } from '@/lib/data'
+import { mergeImportedWeek, parseHistoryCsv, planImport, setsToSessions } from '@/lib/history-import'
 import { WeekDocSchema, type WeekDoc } from '@/lib/schema'
 
 export const dynamic = 'force-dynamic'
@@ -45,7 +45,8 @@ export async function POST(request: Request) {
   if (body.apply !== true) return Response.json({ ...summary, applied: false })
 
   for (const { id, week } of plan.weeks) {
-    await writeArchivedWeek(id, WeekDocSchema.parse(week))
+    const merged = mergeImportedWeek(await readArchivedWeekById(id), WeekDocSchema.parse(week))
+    await writeArchivedWeek(id, merged)
   }
   return Response.json({ ...summary, applied: true })
 }

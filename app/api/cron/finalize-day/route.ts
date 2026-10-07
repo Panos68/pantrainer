@@ -55,27 +55,20 @@ export async function GET(req: Request) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  if (!process.env.GARMIN_EMAIL || !process.env.GARMIN_PASSWORD) {
-    return Response.json({ error: 'Garmin credentials not configured' }, { status: 503 })
-  }
+  // Yesterday just closed out — any mid-day coach note for it was written
+  // against a partial, no-balance-yet day, so it's stale the moment the real
+  // deficit/surplus is available. Clear it whether or not Garmin is set up;
+  // it's a no-op if none was ever saved.
+  await deleteCoachNote(isoDaysAgoInAppTimeZone(1)).catch(() => {})
 
-  const week = await readCurrentWeekDirect()
-  if (!week) {
-    return Response.json({ error: 'No active week' }, { status: 404 })
-  }
+  // Garmin finalisation is optional; the photo cleanup below runs regardless.
+  const garminConfigured = Boolean(process.env.GARMIN_EMAIL && process.env.GARMIN_PASSWORD)
+  const week = garminConfigured ? await readCurrentWeekDirect() : null
 
   const results: Array<{ date: string; status: string; total_kilocalories?: number | null }> = []
 
-  for (let daysAgo = 1; daysAgo <= LOOKBACK_DAYS; daysAgo++) {
+  for (let daysAgo = 1; week && daysAgo <= LOOKBACK_DAYS; daysAgo++) {
     const date = isoDaysAgoInAppTimeZone(daysAgo)
-
-    // Yesterday just closed out — any mid-day coach note for it was written
-    // against a partial, no-balance-yet day, so it's stale the moment the
-    // real deficit/surplus is available. Clear it regardless of whether the
-    // recovery refetch below succeeds; it's a no-op if none was ever saved.
-    if (daysAgo === 1) {
-      await deleteCoachNote(date).catch(() => {})
-    }
 
     // Only days the week doc actually tracks — don't backfill across a week rollover.
     if (!week.sessions?.some((s) => s.date === date)) {
@@ -108,5 +101,10 @@ export async function GET(req: Request) {
     foodPhotoCleanup = { error: err instanceof Error ? err.message : 'unknown error' }
   }
 
-  return Response.json({ ok: true, results, foodPhotoCleanup })
+  return Response.json({
+    ok: true,
+    garmin: garminConfigured ? (week ? 'finalized' : 'no-active-week') : 'not-configured',
+    results,
+    foodPhotoCleanup,
+  })
 }

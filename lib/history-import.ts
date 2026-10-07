@@ -308,3 +308,22 @@ export function planImport(sessions: Session[], existingDates: Set<string>, athl
     exerciseCount: new Set(kept.flatMap((s) => s.exercises.map((e) => e.name))).size,
   }
 }
+
+// A week id may already hold sessions from an earlier import. Merge instead of
+// replacing so a second import can only ever add sessions, never drop them.
+export function mergeImportedWeek(existing: WeekDoc | null, incoming: WeekDoc): WeekDoc {
+  if (!existing) return incoming
+  const seen = new Set(existing.sessions.map((s) => `${s.date}|${s.subtype ?? ''}`))
+  const added = incoming.sessions.filter((s) => !seen.has(`${s.date}|${s.subtype ?? ''}`))
+  const sessions = [...existing.sessions, ...added].sort((a, b) => a.date.localeCompare(b.date))
+  const completed = sessions.filter((s) => s.status === 'completed')
+  return {
+    ...existing,
+    sessions,
+    week_summary: {
+      ...existing.week_summary,
+      total_sessions: completed.length,
+      strength_days: completed.filter((s) => s.type === 'Strength').length,
+    },
+  }
+}

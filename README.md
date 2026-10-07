@@ -10,6 +10,14 @@ a built-in [MCP](https://modelcontextprotocol.io) server. Your data stays in you
 > Built with [Claude Code](https://claude.com/claude-code). PanTrainer started as one athlete's daily training app and
 > is now open for anyone to self-host.
 
+<p align="center">
+  <img src="docs/screenshots/home.png" alt="Home: recovery score, weekly load and today's session" width="62%">
+  <img src="docs/screenshots/live-workout.png" alt="Live workout with PR detection, plate math and the next target" width="26%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/strength.png" alt="Progress: activity trend and estimated 1RM curve" width="90%">
+</p>
+
 ## Why PanTrainer
 
 - **Claude as the coach, not a chatbot bolted on.** Claude connects to your instance over MCP, reads your week, lift
@@ -133,6 +141,7 @@ See [`.env.example`](.env.example) for every variable. The essentials:
 | `BLOB_READ_WRITE_TOKEN` / `STORAGE_DIR` | for photos | Vercel Blob, or a local folder (Docker sets this) |
 | `APP_TIMEZONE` | recommended | IANA timezone that defines "today" (default `UTC`) |
 | `FOOD_ACCESS_PASSWORD` | no | A second password that can only open the food pages |
+| `TRUST_PROXY` | self-hosting | `true` behind a reverse proxy that sets `X-Forwarded-For` (per-IP login limits) |
 | `DEMO_MODE` | no | `true` for a public demo instance |
 
 ## Development

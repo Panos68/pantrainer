@@ -36,7 +36,7 @@ export default function E1rmChart({ lifts, history }: { lifts: TrackedLift[]; hi
               <LineChart data={points} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
                 <XAxis dataKey="label" tick={{ fill: '#71717a', fontSize: 11 }} axisLine={{ stroke: '#3f3f46' }} tickLine={false} minTickGap={16} />
-                <YAxis tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} width={40} domain={['dataMin - 5', 'dataMax + 5']} />
+                <YAxis tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} width={40} allowDecimals={false} domain={[(min: number) => Math.floor((min - 5) / 5) * 5, (max: number) => Math.ceil((max + 5) / 5) * 5]} />
                 <Tooltip
                   contentStyle={{ backgroundColor: '#18181b', border: '1px solid #3f3f46', borderRadius: 8, fontSize: 12, color: '#e4e4e7' }}
                   formatter={(value, _name, item) => {

@@ -19,3 +19,8 @@ You'll get an acknowledgement within a few days.
   API tokens) over sharing the password or the legacy `AUTOMATION_API_TOKEN`.
 - Revoke any token you suspect has leaked from Settings; it stops working
   immediately.
+- Self-hosting behind a reverse proxy? Set `TRUST_PROXY=true` only if the proxy
+  overwrites `X-Forwarded-For`; login rate limiting then applies per client IP.
+- The "Connect to PanTrainer" consent page names the site that will receive
+  access. Only approve hosts you expect (e.g. `claude.ai`) — approving a link
+  from anyone else gives that site an access token.

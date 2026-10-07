@@ -8,6 +8,7 @@ import {
   planImport,
   setsToSessions,
   weekLabel,
+  mergeImportedWeek,
 } from './history-import'
 
 const STRONG = [
@@ -91,7 +92,22 @@ function testWeeksAndPlan() {
   assert.deepEqual(plan.dateRange, ['2024-03-12', '2024-03-12'])
 }
 
+function testReimportMergesInsteadOfReplacing() {
+  const athlete = { name: 'A', age: 30, weight_kg: 80, smm_kg: 0, bf_pct: 0, bmr_kcal: 0, rhr_bpm: 0, smm_target_kg: 0 }
+  const all = setsToSessions(parseHistoryCsv(STRONG).sets, 'strong') // Tue 12th + Thu 14th, same week
+  const first = planImport([all[0]], new Set(), athlete).weeks[0].week
+  // Second run: Tuesday already exists in the app, only Thursday is new.
+  const second = planImport(all, new Set([all[0].date]), athlete).weeks[0].week
+  const merged = mergeImportedWeek(first, second)
+  assert.deepEqual(merged.sessions.map((s) => s.date), ['2024-03-12', '2024-03-14'])
+  assert.equal(merged.week_summary.total_sessions, 2)
+  // Merging the same week again adds nothing.
+  assert.equal(mergeImportedWeek(merged, second).sessions.length, 2)
+  assert.equal(mergeImportedWeek(null, second), second)
+}
+
 testCsvParsing()
+testReimportMergesInsteadOfReplacing()
 testDetectAndDates()
 testStrong()
 testHevyAndPounds()

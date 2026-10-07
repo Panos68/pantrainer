@@ -10,8 +10,10 @@ export async function POST(req: Request) {
     return Response.json({ error: 'Invalid or missing date' }, { status: 400 })
   }
 
+  // Garmin is optional: answer normally with no data instead of an error, so
+  // background refreshes on instances without it stay quiet.
   if (!process.env.GARMIN_EMAIL || !process.env.GARMIN_PASSWORD) {
-    return Response.json({ error: 'Garmin credentials not configured' }, { status: 503 })
+    return Response.json({ recovery: null, configured: false })
   }
 
   const week = await readCurrentWeekDirect()

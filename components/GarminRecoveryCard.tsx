@@ -55,9 +55,11 @@ export default function GarminRecoveryCard({
         body: JSON.stringify({ date, force }),
       })
       if (res.ok) {
-        const json = await res.json() as { recovery: GarminRecoveryDay }
-        setFetchedData(json.recovery)
-        onFetched?.(json.recovery)
+        const json = await res.json() as { recovery: GarminRecoveryDay | null }
+        if (json.recovery) {
+          setFetchedData(json.recovery)
+          onFetched?.(json.recovery)
+        }
       }
     } finally {
       setLoading(false)

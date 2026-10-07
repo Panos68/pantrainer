@@ -26,8 +26,13 @@ export function nextFailure(state: AttemptState | null, now: Date): AttemptState
   return { failures: state.failures + 1, windowStart: state.windowStart }
 }
 
-// Vercel sets x-forwarded-for with the client first.
-export function clientIp(request: Request): string {
+// Forwarding headers are only trustworthy when a proxy we control sets them:
+// on Vercel, or when TRUST_PROXY=true behind a reverse proxy that overwrites
+// X-Forwarded-For. Otherwise anyone could rotate the header to dodge the limit,
+// so every attempt shares one bucket (safe, if stricter).
+export function clientIp(request: Request, env: Record<string, string | undefined> = process.env): string {
+  const trusted = Boolean(env.VERCEL) || env.TRUST_PROXY === 'true'
+  if (!trusted) return 'untrusted-client'
   const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
   return forwarded || request.headers.get('x-real-ip')?.trim() || 'unknown'
 }

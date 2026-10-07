@@ -29,7 +29,7 @@ export default function LiveStrengthHints({
     <div className="w-full max-w-xs space-y-2 text-center">
       {prs.length > 0 && (
         <div className="px-3 py-1.5 rounded-lg bg-amber-400/15 border border-amber-400/40 text-amber-300 text-xs font-mono">
-          🏆 PR — {prs.map((k) => PR_LABEL[k]).join(' · ')}
+          🏆 This set would be a PR — {prs.map((k) => PR_LABEL[k]).join(' · ')}
         </div>
       )}
       {load && (

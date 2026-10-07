@@ -296,6 +296,11 @@ export async function readAllArchivedWeeksWithIds(): Promise<{ id: string; week:
   return ids.map((id, i) => ({ id, week: weeks[i] }))
 }
 
+export async function readArchivedWeekById(id: string): Promise<WeekDoc | null> {
+  const raw = await weekGet<unknown>(id)
+  return raw ? WeekDocSchema.parse(raw) : null
+}
+
 export async function writeArchivedWeek(id: string, week: WeekDoc): Promise<void> {
   await weekSet(id, week)
   revalidateTag('archived-weeks', { expire: 0 })

@@ -1,4 +1,4 @@
-import { getStorage, STORAGE_NOT_CONFIGURED } from '@/lib/storage'
+import { getStorage, isSafeKey, STORAGE_NOT_CONFIGURED } from '@/lib/storage'
 import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
 import { signPath, signingSecret, verifyPathSignature } from '@/lib/signed-url'
 import { authorizeBearer } from '@/lib/automation-auth'
@@ -43,6 +43,9 @@ export async function POST(request: Request) {
   const formData = await request.formData()
   const file = formData.get('file')
   const date = (formData.get('date') as string | null) || todayIsoInAppTimeZone()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return Response.json({ error: 'Invalid date' }, { status: 400 })
+  }
 
   if (!(file instanceof File)) {
     return Response.json({ error: 'Missing file' }, { status: 400 })
@@ -116,7 +119,7 @@ export async function GET(request: Request) {
   if (!pathname) {
     return Response.json({ error: 'Missing pathname or date' }, { status: 400 })
   }
-  if (!pathname.startsWith('data/food-photos/')) {
+  if (!pathname.startsWith('data/food-photos/') || !isSafeKey(pathname)) {
     return Response.json({ error: 'Invalid pathname' }, { status: 403 })
   }
 
@@ -161,7 +164,7 @@ export async function DELETE(request: Request) {
   if (!pathname) {
     return Response.json({ error: 'Missing pathname' }, { status: 400 })
   }
-  if (!pathname.startsWith('data/food-photos/')) {
+  if (!pathname.startsWith('data/food-photos/') || !isSafeKey(pathname)) {
     return Response.json({ error: 'Invalid pathname' }, { status: 403 })
   }
 

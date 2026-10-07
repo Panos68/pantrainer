@@ -27,9 +27,12 @@ function testNoStateAllowed() {
 }
 
 function testClientIp() {
-  assert.equal(clientIp(new Request('http://x', { headers: { 'x-forwarded-for': '1.2.3.4, 10.0.0.1' } })), '1.2.3.4')
-  assert.equal(clientIp(new Request('http://x', { headers: { 'x-real-ip': '5.6.7.8' } })), '5.6.7.8')
-  assert.equal(clientIp(new Request('http://x')), 'unknown')
+  const trusted = { TRUST_PROXY: 'true' }
+  assert.equal(clientIp(new Request('http://x', { headers: { 'x-forwarded-for': '1.2.3.4, 10.0.0.1' } }), trusted), '1.2.3.4')
+  assert.equal(clientIp(new Request('http://x', { headers: { 'x-real-ip': '5.6.7.8' } }), { VERCEL: '1' }), '5.6.7.8')
+  assert.equal(clientIp(new Request('http://x'), trusted), 'unknown')
+  // Untrusted: a spoofed header must not create a fresh bucket per request.
+  assert.equal(clientIp(new Request('http://x', { headers: { 'x-forwarded-for': '9.9.9.9' } }), {}), 'untrusted-client')
 }
 
 testAllowsUntilLimit()

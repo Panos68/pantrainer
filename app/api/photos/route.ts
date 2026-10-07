@@ -1,4 +1,4 @@
-import { getStorage, STORAGE_NOT_CONFIGURED } from '@/lib/storage'
+import { getStorage, isSafeKey, STORAGE_NOT_CONFIGURED } from '@/lib/storage'
 import { signPath, signingSecret, verifyPathSignature } from '@/lib/signed-url'
 import { getSession } from '@/lib/auth'
 
@@ -25,6 +25,9 @@ export async function POST(request: Request) {
   const formData = await request.formData()
   const file = formData.get('file')
   const date = (formData.get('date') as string | null) ?? 'unknown-date'
+  if (date !== 'unknown-date' && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return Response.json({ error: 'Invalid date' }, { status: 400 })
+  }
 
   if (!(file instanceof File)) {
     return Response.json({ error: 'Missing file' }, { status: 400 })
@@ -62,7 +65,7 @@ export async function GET(request: Request) {
   if (!pathname) {
     return Response.json({ error: 'Missing pathname' }, { status: 400 })
   }
-  if (!pathname.startsWith('data/session-photos/')) {
+  if (!pathname.startsWith('data/session-photos/') || !isSafeKey(pathname)) {
     return Response.json({ error: 'Invalid pathname' }, { status: 403 })
   }
 
