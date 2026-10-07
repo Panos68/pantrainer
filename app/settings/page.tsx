@@ -2,6 +2,7 @@ import Link from 'next/link'
 import PasskeysSection from '@/components/settings/PasskeysSection'
 import ApiTokensSection from '@/components/settings/ApiTokensSection'
 import EquipmentSection from '@/components/settings/EquipmentSection'
+import ImportHistorySection from '@/components/settings/ImportHistorySection'
 
 export default function SettingsPage() {
   return (
@@ -13,6 +14,7 @@ export default function SettingsPage() {
         </div>
         <PasskeysSection />
         <EquipmentSection />
+        <ImportHistorySection />
         <ApiTokensSection />
       </div>
     </main>

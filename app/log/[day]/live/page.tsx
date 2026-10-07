@@ -24,6 +24,7 @@ import { applySetToRecords, detectPrs, PR_LABEL, type LiftRecords, type PrKind }
 import { nameToKey } from '@/lib/progression'
 import type { PlateInventory } from '@/lib/plates'
 import type { ProgressionSuggestion } from '@/lib/progression-engine'
+import { flushPending, patchSession, readPending, type SessionPatch } from '@/lib/offlineSessionSync'
 
 function sideLabel(side?: 'left' | 'right'): string {
   if (side === 'left') return 'Left'
@@ -34,6 +35,23 @@ function sideLabel(side?: 'left' | 'right'): string {
 // Persistent header shown across every render state of the live page — lets the
 // athlete peek at the full day plan without losing progress. Safe to navigate
 // away and back because every set is persisted immediately via persist().
+function sendSessionPatch(day: string) {
+  return (body: SessionPatch) =>
+    fetch(`/api/session/${day}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+}
+
+function OfflineBanner() {
+  return (
+    <div className="fixed top-0 inset-x-0 z-40 bg-amber-500/90 text-zinc-950 text-[11px] font-mono font-bold text-center py-1.5">
+      Offline — sets are saved on this device and will sync automatically
+    </div>
+  )
+}
+
 function LiveHeader({ day }: { day: string }) {
   return (
     <div className="w-full max-w-sm flex items-center justify-between px-1 pb-4">
@@ -265,6 +283,18 @@ export default function LiveSessionPage() {
   const [lastPr, setLastPr] = useState<{ name: string; weight: number; reps: number; kinds: PrKind[] } | null>(null)
   // Set when a rest period runs out (not when skipped) so the next set screen flashes.
   const [flashForStep, setFlashForStep] = useState<number | null>(null)
+  const [offline, setOffline] = useState(false)
+  const [completeMessage, setCompleteMessage] = useState<string | null>(null)
+
+  // Replay anything logged while offline as soon as the connection is back.
+  useEffect(() => {
+    if (!day) return
+    function onOnline() {
+      void flushPending(localStorage, day, sendSessionPatch(day)).then((ok) => { if (ok) setOffline(false) })
+    }
+    window.addEventListener('online', onOnline)
+    return () => window.removeEventListener('online', onOnline)
+  }, [day])
   useWakeLock(session != null && stepIndex != null)
 
   function recordsFor(exerciseName: string): LiftRecords | undefined {
@@ -294,7 +324,16 @@ export default function LiveSessionPage() {
         if (!r.ok) throw new Error(`Failed to load session (${r.status})`)
         return r.json()
       })
-      .then((data: Session) => {
+      .then((loaded: Session) => {
+        // Sets logged offline before a reload aren't on the server yet — show
+        // them, then try to sync.
+        const pending = readPending(localStorage, day)
+        const data: Session = pending && Array.isArray(pending.exercises)
+          ? { ...loaded, exercises: pending.exercises as Session['exercises'] }
+          : loaded
+        if (pending) {
+          void flushPending(localStorage, day, sendSessionPatch(day)).then((ok) => setOffline(!ok))
+        }
         const initial: Record<number, SetEntry[]> = {}
         data.exercises.forEach((ex, i) => {
           if (ex.set_log && ex.set_log.length > 0) initial[i] = ex.set_log
@@ -329,13 +368,10 @@ export default function LiveSessionPage() {
       i === exerciseIndex ? { ...ex, ...updates } : ex,
     )
     setSession({ ...session, exercises: nextExercises })
-    await enqueueWrite(() =>
-      fetch(`/api/session/${day}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ exercises: nextExercises }),
-      }),
+    const result = await enqueueWrite(() =>
+      patchSession(localStorage, day, { exercises: nextExercises }, sendSessionPatch(day)),
     )
+    setOffline(result.offline)
     setSaving(false)
   }
 
@@ -394,10 +430,7 @@ export default function LiveSessionPage() {
         ...group,
         exercises: group.exercises.map(() => exercises[globalIndex++]),
       }))
-      const res = await enqueueWrite(() => fetch(`/api/session/${day}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const result = await enqueueWrite(() => patchSession(localStorage, day, {
           exercises,
           ...(exercise_groups ? { exercise_groups } : {}),
           status: 'completed',
@@ -407,10 +440,12 @@ export default function LiveSessionPage() {
           anaerobic_training_effect: sync?.anaerobic_training_effect ?? session.anaerobic_training_effect ?? null,
           training_stress_score: sync?.training_stress_score ?? session.training_stress_score ?? null,
           hr_zones: sync?.hr_zones ?? session.hr_zones ?? null,
-        }),
-      }))
-      if (res.ok) {
+      }, sendSessionPatch(day)))
+      setOffline(result.offline)
+      if (result.ok) {
         router.push(`/log/${day}`)
+      } else if (result.offline) {
+        setCompleteMessage('Saved on this device — it will finish syncing when you are back online.')
       }
     } finally {
       setCompleting(false)
@@ -445,8 +480,10 @@ export default function LiveSessionPage() {
   if (!step) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-zinc-950 text-zinc-100 p-6">
+        {offline && <OfflineBanner />}
         <LiveHeader day={day} />
         <div className="text-lime-400 font-mono">Session complete.</div>
+        {completeMessage && <div className="max-w-sm text-center text-amber-300 text-xs font-mono">{completeMessage}</div>}
 
         <div className="w-full max-w-sm space-y-2">
           <label className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
@@ -519,6 +556,7 @@ export default function LiveSessionPage() {
     }
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-zinc-950 p-6">
+        {offline && <OfflineBanner />}
         <LiveHeader day={day} />
         {lastPr && (
           <div className="max-w-sm text-center px-4 py-3 rounded-xl bg-amber-400/15 border border-amber-400/40">
@@ -590,6 +628,8 @@ export default function LiveSessionPage() {
       : []
 
   return (
+    <>
+    {offline && <OfflineBanner />}
     <SetEntryForm
       key={stepIndex}
       day={day}
@@ -606,5 +646,6 @@ export default function LiveSessionPage() {
       plates={plates}
       flash={flashForStep === stepIndex}
     />
+    </>
   )
 }

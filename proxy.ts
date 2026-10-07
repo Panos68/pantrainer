@@ -4,6 +4,12 @@ import { isApiPath, isFoodPath, parseSession } from '@/lib/auth'
 
 const PUBLIC_PATHS = [
   '/login',
+  // Installable-app assets: fetched by the browser without the auth cookie.
+  '/manifest.webmanifest',
+  '/sw.js',
+  '/offline',
+  '/pwa-icon/',
+  '/apple-icon',
   '/api/auth/login',
   // Passkey sign-in (options + verify) happens before there is a session.
   '/api/auth/passkey/login-',
