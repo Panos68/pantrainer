@@ -13,6 +13,13 @@ import { calcPmc } from '@/lib/pmc'
 import { calcOverloadInsights } from '@/lib/overload'
 import { sessionToLoadPoint } from '@/lib/training-load'
 import type { WeekDoc } from '@/lib/schema'
+import E1rmChart from '@/components/E1rmChart'
+import PersonalRecords from '@/components/PersonalRecords'
+import StructuralBalanceCard from '@/components/StructuralBalanceCard'
+import ActivityHeatmap from '@/components/ActivityHeatmap'
+import { buildStrengthSummary } from '@/lib/strength-summary'
+import { buildHeatmap, streakStats } from '@/lib/activity-heatmap'
+import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
 
 export default async function ProgressPage() {
   const [archived, current, profile] = await Promise.all([readAllArchivedWeeks(), readCurrentWeek(), readAthleteProfile()])
@@ -38,6 +45,11 @@ export default async function ProgressPage() {
   const overloadInsights = currentForOverload
     ? calcOverloadInsights(currentForOverload, archivedForOverload)
     : []
+
+  const allSessions = weeks.flatMap((w) => w.sessions)
+  const strength = buildStrengthSummary(allSessions, { includeHistory: true })
+  const heatmap = buildHeatmap(allSessions, todayIsoInAppTimeZone())
+  const heatmapStats = streakStats(heatmap)
 
   const totalSessions = weeks.reduce((sum, w) => sum + w.sessions.filter((s) => s.status === 'completed').length, 0)
   const totalCalories = weeks.reduce((sum, w) => sum + w.week_summary.total_calories, 0)
@@ -89,6 +101,18 @@ export default async function ProgressPage() {
           <OverloadInsights insights={overloadInsights} />
           <LiftProgressChart weeks={weeks} />
           <ActivityTrendChart weeks={weeks} athlete={athlete} />
+        </CollapsibleSection>
+
+        <CollapsibleSection title="Strength" defaultOpen>
+          <E1rmChart lifts={strength.lifts} history={strength.e1rmHistory} />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <PersonalRecords lifts={strength.lifts} records={strength.records} />
+            <StructuralBalanceCard balance={strength.balance} />
+          </div>
+        </CollapsibleSection>
+
+        <CollapsibleSection title="Consistency" defaultOpen>
+          <ActivityHeatmap columns={heatmap} stats={heatmapStats} />
         </CollapsibleSection>
 
         <CollapsibleSection title="Body Composition">

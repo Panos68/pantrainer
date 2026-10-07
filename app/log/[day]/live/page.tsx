@@ -17,6 +17,13 @@ import {
 import { useGarminSync } from '@/lib/useGarminSync'
 import { requestNotificationPermission } from '@/lib/notify'
 import type { Session, SetEntry } from '@/lib/schema'
+import LiveStrengthHints from '@/components/LiveStrengthHints'
+import { useStrengthData } from '@/lib/useStrengthData'
+import { useWakeLock } from '@/lib/useWakeLock'
+import { applySetToRecords, detectPrs, PR_LABEL, type LiftRecords, type PrKind } from '@/lib/strength'
+import { nameToKey } from '@/lib/progression'
+import type { PlateInventory } from '@/lib/plates'
+import type { ProgressionSuggestion } from '@/lib/progression-engine'
 
 function sideLabel(side?: 'left' | 'right'): string {
   if (side === 'left') return 'Left'
@@ -38,6 +45,12 @@ function LiveHeader({ day }: { day: string }) {
   )
 }
 
+// The progression target is most useful before the first set; afterwards the
+// carried-forward numbers already reflect it.
+function setNumberIsFirst(step: Extract<LiveStep, { kind: 'set' }>): boolean {
+  return step.setNumber === 1 && step.side !== 'right'
+}
+
 function SetEntryForm({
   day,
   step,
@@ -48,6 +61,10 @@ function SetEntryForm({
   initialNote,
   supersetPeers,
   onLog,
+  records,
+  suggestionFor,
+  plates,
+  flash,
 }: {
   day: string
   step: Extract<LiveStep, { kind: 'set' }>
@@ -57,7 +74,11 @@ function SetEntryForm({
   isLastSet: boolean
   initialNote: string
   supersetPeers: string[]
-  onLog: (reps: string, weight: string, effort: SetEntry['effort'], note: string | undefined) => void
+  onLog: (reps: string, weight: string, effort: SetEntry['effort'], note: string | undefined, exerciseName: string) => void
+  records: (exerciseName: string) => LiftRecords | undefined
+  suggestionFor: (exerciseName: string) => ProgressionSuggestion | undefined
+  plates: PlateInventory
+  flash: boolean
 }) {
   const [altIndex, setAltIndex] = useState<number | null>(null)
   const activeExercise =
@@ -91,11 +112,12 @@ function SetEntryForm({
   }
 
   function handleLog(effort: SetEntry['effort']) {
-    onLog(reps, weight, effort, isLastSet ? note : undefined)
+    onLog(reps, weight, effort, isLastSet ? note : undefined, activeExercise.name)
   }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-zinc-950 text-zinc-100 p-6">
+      {flash && <div aria-hidden className="fixed inset-0 z-50 bg-lime-300 pointer-events-none animate-rest-flash" />}
       <LiveHeader day={day} />
       {supersetPeers.length > 0 && (
         <div className="px-2 py-1 rounded bg-amber-400/10 border border-amber-400/30 text-amber-400 text-[10px] font-mono tracking-widest uppercase">
@@ -149,6 +171,16 @@ function SetEntryForm({
             className="w-20 px-3 py-2 rounded bg-zinc-900 text-center font-mono"
           />
         </div>
+      )}
+      {timedSeconds == null && (
+        <LiveStrengthHints
+          exerciseName={activeExercise.name}
+          reps={reps}
+          weight={weight}
+          records={records(activeExercise.name)}
+          suggestion={setNumberIsFirst(step) ? suggestionFor(activeExercise.name) : undefined}
+          plates={plates}
+        />
       )}
       <div className="flex gap-3">
         <button
@@ -226,6 +258,19 @@ export default function LiveSessionPage() {
   const [rpe, setRpe] = useState('')
   const [completing, setCompleting] = useState(false)
   const { syncing: garminSyncing, lastSync: garminSync, syncGarmin } = useGarminSync()
+  const { summary: strength, plates } = useStrengthData()
+  // Sets logged this session fold into the records, so PR detection stays
+  // accurate across consecutive sets.
+  const [sessionRecords, setSessionRecords] = useState<Record<string, LiftRecords>>({})
+  const [lastPr, setLastPr] = useState<{ name: string; weight: number; reps: number; kinds: PrKind[] } | null>(null)
+  // Set when a rest period runs out (not when skipped) so the next set screen flashes.
+  const [flashForStep, setFlashForStep] = useState<number | null>(null)
+  useWakeLock(session != null && stepIndex != null)
+
+  function recordsFor(exerciseName: string): LiftRecords | undefined {
+    const key = nameToKey(exerciseName)
+    return sessionRecords[key] ?? strength?.records[key]
+  }
 
   // Every PATCH to /api/session/[day] is chained through this ref so writes always reach
   // the server in the order they were issued. The PATCH handler does a naive read-merge-
@@ -294,8 +339,19 @@ export default function LiveSessionPage() {
     setSaving(false)
   }
 
-  function logCurrentSet(reps: string, weight: string, effort: SetEntry['effort'], note: string | undefined) {
+  function logCurrentSet(reps: string, weight: string, effort: SetEntry['effort'], note: string | undefined, exerciseName: string) {
     if (stepIndex == null || !step || step.kind !== 'set') return
+    const loggedWeight = Number(weight)
+    const loggedReps = Number(reps)
+    if (loggedWeight > 0 && loggedReps > 0 && session?.exclude_from_progress !== true) {
+      const key = nameToKey(exerciseName)
+      const before = recordsFor(exerciseName)
+      const kinds = detectPrs({ weight: loggedWeight, reps: loggedReps }, before)
+      setLastPr(kinds.length > 0 ? { name: exerciseName, weight: loggedWeight, reps: loggedReps, kinds } : null)
+      setSessionRecords((prev) => ({ ...prev, [key]: applySetToRecords(before, { weight: loggedWeight, reps: loggedReps }) }))
+    } else {
+      setLastPr(null)
+    }
     const entry: SetEntry = {
       reps: Number(reps) || 0,
       weight_kg: weight ? Number(weight) : null,
@@ -464,11 +520,19 @@ export default function LiveSessionPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-zinc-950 p-6">
         <LiveHeader day={day} />
+        {lastPr && (
+          <div className="max-w-sm text-center px-4 py-3 rounded-xl bg-amber-400/15 border border-amber-400/40">
+            <p className="text-amber-300 font-black tracking-wide">🏆 New PR</p>
+            <p className="text-amber-200/80 text-xs font-mono">
+              {lastPr.name} {lastPr.weight} kg × {lastPr.reps} — {lastPr.kinds.map((k) => PR_LABEL[k]).join(' · ')}
+            </p>
+          </div>
+        )}
         <RestTimer
           key={stepIndex}
           seconds={step.seconds}
           storageKey={`rest-timer:${day}:${stepIndex}`}
-          onDone={() => setStepIndex(stepIndex + 1)}
+          onDone={() => { setFlashForStep(stepIndex + 1); setStepIndex(stepIndex + 1) }}
           onSkip={() => setStepIndex(stepIndex + 1)}
           onAddSeconds={() => {}}
         />
@@ -537,6 +601,10 @@ export default function LiveSessionPage() {
       initialNote={initialNote}
       supersetPeers={supersetPeers}
       onLog={logCurrentSet}
+      records={recordsFor}
+      suggestionFor={(name) => strength?.suggestions[nameToKey(name)]}
+      plates={plates}
+      flash={flashForStep === stepIndex}
     />
   )
 }

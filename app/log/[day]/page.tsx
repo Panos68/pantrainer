@@ -6,6 +6,8 @@ import Link from 'next/link'
 import type { Session, GarminRecoveryDay, RenphoMeasurementDay, ExerciseGroup, SetEntry } from '@/lib/schema'
 import GarminRecoveryCard from '@/components/GarminRecoveryCard'
 import { useIntegrations } from '@/lib/useIntegrations'
+import { useStrengthData } from '@/lib/useStrengthData'
+import { nameToKey } from '@/lib/progression'
 import WeightCard from '@/components/WeightCard'
 import MuscleMap from '@/components/MuscleMap'
 import ExerciseDemo from '@/components/ExerciseDemo'
@@ -322,6 +324,7 @@ export default function LogDayPage() {
   }>({})
   const [refreshingGarmin, setRefreshingGarmin] = useState(false)
   const integrations = useIntegrations()
+  const { summary: strength } = useStrengthData()
   const [garminPushing, setGarminPushing] = useState(false)
   const [garminPushMessage, setGarminPushMessage] = useState<string | null>(null)
   const isFutureSession = session != null && session.date > todayIsoLocal()
@@ -1224,6 +1227,16 @@ export default function LogDayPage() {
                     {ex.notes && (
                       <span className="block text-zinc-600 text-[10px] font-normal mt-0.5 line-clamp-2">{ex.notes}</span>
                     )}
+                    {(() => {
+                      if (session.status === 'completed' || session.type !== 'Strength') return null
+                      const suggestion = strength?.suggestions[nameToKey(displayName)]
+                      if (!suggestion) return null
+                      return (
+                        <span className="block text-[10px] font-normal mt-0.5 text-sky-400/80 line-clamp-2" title={suggestion.reason}>
+                          Target {suggestion.targetWeight} kg × {suggestion.targetReps} — {suggestion.reason}
+                        </span>
+                      )
+                    })()}
                     {openSwapMenu === i && (
                       <div className={`absolute left-0 z-20 w-56 max-h-56 overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 shadow-xl ${openUp ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
                         <div className="px-3 py-2 text-zinc-500 text-[9px] font-mono tracking-widest uppercase border-b border-zinc-800">Swap with</div>

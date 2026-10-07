@@ -3,6 +3,7 @@ import { list } from '@vercel/blob'
 import { signPhotoUrl } from '@/app/api/photos/route'
 import {
   readCurrentWeekDirect,
+  readAllSessions,
   readAutomationNotes,
   readProposedPlan,
   writeProposedPlan,
@@ -29,6 +30,7 @@ import { getSession } from '@/lib/auth'
 import { authorizeBearer } from '@/lib/automation-auth'
 import { buildCurrentContext } from '@/lib/mcp-current-context'
 import { isProgressExcluded } from '@/lib/progression'
+import { buildStrengthSummary } from '@/lib/strength-summary'
 
 // ---------------------------------------------------------------------------
 // MCP tool definitions
@@ -158,6 +160,12 @@ const TOOLS = [
       },
       required: ['date'],
     },
+  },
+  {
+    name: 'get_strength_summary',
+    description:
+      'Strength analytics computed exactly as the app shows them: every tracked lift with its personal records (heaviest weight, best estimated 1RM via Epley, most reps at each weight), the progression engine\'s next-session target per lift with a plain-language reason (double progression: add load only when every set hit the top of the rep range and it wasn\'t marked hard; repeat after missed reps; deload ~10% after 3 stalled sessions at the same load), and structural-balance ratios (bench:deadlift, squat:deadlift, overhead:bench, row:bench) against reference ranges. Lifts are keyed by equipment-aware keys, so dumbbell/machine variants are separate from barbell lifts. Sessions or exercises the athlete flagged as excluded (injury, illness, light day) are not counted. Use this before proposing working weights so plans agree with what the athlete sees in the app.',
+    inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'get_lift_history',
@@ -1031,6 +1039,7 @@ async function dispatch(req: McpRequest): Promise<Response> {
       else if (name === 'submit_proposal_by_date') data = await handleSubmitProposalByDate(args)
       else if (name === 'get_garmin_recovery_freshness') data = await handleGetGarminRecoveryFreshness(args)
       else if (name === 'get_lift_history') data = await handleGetLiftHistory(args)
+      else if (name === 'get_strength_summary') data = buildStrengthSummary(await readAllSessions())
       else if (name === 'save_nutrition_estimate') data = await handleSaveNutritionEstimate(args)
       else if (name === 'get_nutrition_summary_for_range') data = await handleGetNutritionSummaryForRange(args)
       else if (name === 'save_coach_note') data = await handleSaveCoachNote(args)
