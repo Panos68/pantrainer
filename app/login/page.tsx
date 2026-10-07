@@ -11,6 +11,8 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
     const minutes = Math.max(1, Math.ceil((body.retryAfterSec ?? 900) / 60))
     return `Too many attempts — try again in ${minutes} min`
   }
+  // Don't blame the password for a server-side failure (e.g. a missing secret).
+  if (res.status >= 500) return 'Sign-in failed on the server — check the deployment logs'
   return fallback
 }
 
