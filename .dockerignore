@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.claude
+.worktrees
+.vercel
+.env*
+!.env.example
+data
+docs/superpowers
+recovery-codes*
+*.log

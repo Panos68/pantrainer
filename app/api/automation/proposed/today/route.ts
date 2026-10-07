@@ -1,6 +1,6 @@
 import { format } from 'date-fns'
 import { z } from 'zod'
-import { isAutomationAuthorized, requireAutomationToken } from '@/lib/automation-auth'
+import { authorizeBearer } from '@/lib/automation-auth'
 import { readAutomationNotes, readCurrentWeek, writeProposedPlan } from '@/lib/data'
 import { ProposedPlanRunTypeSchema, SessionSchema } from '@/lib/schema'
 
@@ -42,10 +42,7 @@ function parseSessionUpdate(body: z.infer<typeof AutomationProposedTodayRequestS
 }
 
 export async function POST(request: Request) {
-  const tokenCheck = requireAutomationToken()
-  if (!tokenCheck.ok) return tokenCheck.response
-
-  if (!isAutomationAuthorized(request)) {
+  if (!(await authorizeBearer(request))) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

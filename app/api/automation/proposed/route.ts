@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { readAutomationNotes, writeProposedPlan } from '@/lib/data'
 import { normalizeWeekDocSessionTypes, validateImport } from '@/lib/import'
 import { ProposedPlanRunTypeSchema, WeekDocSchema } from '@/lib/schema'
-import { isAutomationAuthorized, requireAutomationToken } from '@/lib/automation-auth'
+import { authorizeBearer } from '@/lib/automation-auth'
 import type { WeekDoc } from '@/lib/schema'
 
 const AutomationProposedRequestSchema = z.object({
@@ -47,10 +47,7 @@ function parseWeekDoc(body: z.infer<typeof AutomationProposedRequestSchema>): {
 }
 
 export async function POST(request: Request) {
-  const tokenCheck = requireAutomationToken()
-  if (!tokenCheck.ok) return tokenCheck.response
-
-  if (!isAutomationAuthorized(request)) {
+  if (!(await authorizeBearer(request))) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

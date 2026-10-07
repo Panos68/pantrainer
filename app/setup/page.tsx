@@ -8,36 +8,23 @@ import { Input } from '@/components/ui/input'
 type LiftRow = { key: string; value: string }
 
 const DEFAULT_PROFILE = {
-  name: 'Panos',
-  age: '33',
-  weight_kg: '73.7',
-  smm_kg: '35.2',
-  bf_pct: '15.6',
-  bmr_kcal: '1713',
-  rhr_bpm: '43',
-  smm_target_kg: '37',
+  name: '',
+  age: '',
+  weight_kg: '',
+  smm_kg: '',
+  bf_pct: '',
+  bmr_kcal: '',
+  rhr_bpm: '',
+  smm_target_kg: '',
 }
 
+// Starting lifts to fill in (current working weights). Leave any blank you
+// don't train; you can add more rows below.
 const DEFAULT_LIFTS: LiftRow[] = [
-  { key: 'bench_press_kg', value: '70' },
-  { key: 'bench_status', value: 'current ceiling with pause' },
-  { key: 'deadlift_kg', value: '95' },
-  { key: 'deadlift_next', value: '100' },
-  { key: 'weighted_pullups_added_kg', value: '5' },
-  { key: 'pullup_status', value: 'full ROM priority' },
-  { key: 'pendlay_row_kg', value: '50' },
-  { key: 'pendlay_status', value: 'technique focus' },
-  { key: 'chest_supported_row_kg', value: '15' },
-  { key: 'incline_db_kg', value: '22.5' },
-  { key: 'incline_db_next', value: '24' },
-  { key: 'lateral_raise_kg', value: '8' },
-  { key: 'push_press_kg', value: '40' },
-  { key: 'weighted_dips_kg', value: '12.5' },
-  { key: 'sunday_db_bench_kg', value: '20' },
-  { key: 'sunday_cable_row_kg', value: '65' },
-  { key: 'sunday_hammer_curl_kg', value: '15' },
-  { key: 'sunday_pushdown_kg', value: '20' },
-  { key: 'sunday_face_pull_kg', value: '12.5' },
+  { key: 'bench_press_kg', value: '' },
+  { key: 'deadlift_kg', value: '' },
+  { key: 'push_press_kg', value: '' },
+  { key: 'weighted_pullups_added_kg', value: '' },
 ]
 
 export default function SetupPage() {

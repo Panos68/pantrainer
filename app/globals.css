@@ -7,7 +7,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-display: var(--font-chakra);
   --font-heading: var(--font-sans);
@@ -159,4 +159,18 @@
   .animate-fade-in-up {
     animation: none;
   }
+}
+
+/* Rest-over cue for loud gyms: a few bright pulses over the whole screen,
+   then it fades out and stops intercepting taps. */
+@keyframes rest-flash {
+  0%, 30%, 60% { opacity: 0.85; }
+  15%, 45%, 75% { opacity: 0.1; }
+  100% { opacity: 0; visibility: hidden; }
+}
+.animate-rest-flash {
+  animation: rest-flash 1.4s ease-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-rest-flash { animation-duration: 0.01ms; }
 }

@@ -1,5 +1,12 @@
 import type { ExerciseInsight } from '@/lib/overload'
 
+// Insights are keyed by lift key ("pendlay_row_kg"); show it as a name.
+function liftLabel(key: string): string {
+  const words = key.replace(/_kg$/, '').split('_').filter(Boolean)
+  const text = words.join(' ')
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
 const SIGNAL_STYLES = {
   pr:       { badge: 'bg-lime-400/20 text-lime-300 border-lime-400/30',    label: 'PR' },
   plateau:  { badge: 'bg-red-400/20 text-red-300 border-red-400/30',       label: 'Plateau' },
@@ -34,7 +41,7 @@ export default function OverloadInsights({ insights }: { insights: ExerciseInsig
                 </span>
                 <div className="min-w-0">
                   <p className="text-zinc-200 text-sm font-semibold">
-                    {insight.exercise}{' '}
+                    {liftLabel(insight.exercise)}{' '}
                     <span className="text-zinc-500 font-normal text-xs">{insight.currentWeight}kg</span>
                   </p>
                   <p className="text-zinc-400 text-xs mt-0.5">{insight.suggestion}</p>
@@ -58,7 +65,7 @@ export default function OverloadInsights({ insights }: { insights: ExerciseInsig
           <div className="mt-2 space-y-1">
             {ok.map((insight) => (
               <p key={insight.exercise} className="text-zinc-600 text-xs font-mono">
-                {insight.exercise} — {insight.currentWeight}kg
+                {liftLabel(insight.exercise)} — {insight.currentWeight}kg
               </p>
             ))}
           </div>

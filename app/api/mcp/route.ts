@@ -1,8 +1,8 @@
-import { blobUrl } from '@/lib/blob-url'
-import { list } from '@vercel/blob'
+import { getStorage, STORAGE_NOT_CONFIGURED, type ObjectStorage } from '@/lib/storage'
 import { signPhotoUrl } from '@/app/api/photos/route'
 import {
   readCurrentWeekDirect,
+  readAllSessions,
   readAutomationNotes,
   readProposedPlan,
   writeProposedPlan,
@@ -25,9 +25,11 @@ import { validateImport } from '@/lib/import'
 import { todayIsoInAppTimeZone, formatTimeInAppTimeZone } from '@/lib/app-timezone'
 import { SessionSchema, ProposedPlanRunTypeSchema, FoodInventoryItemSchema } from '@/lib/schema'
 import type { WeekDoc, NutritionLogEntry } from '@/lib/schema'
-import { getSession, isAutomationToken } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
+import { authorizeBearer } from '@/lib/automation-auth'
 import { buildCurrentContext } from '@/lib/mcp-current-context'
 import { isProgressExcluded } from '@/lib/progression'
+import { buildStrengthSummary } from '@/lib/strength-summary'
 
 // ---------------------------------------------------------------------------
 // MCP tool definitions
@@ -159,6 +161,12 @@ const TOOLS = [
     },
   },
   {
+    name: 'get_strength_summary',
+    description:
+      'Strength analytics computed exactly as the app shows them: every tracked lift with its personal records (heaviest weight, best estimated 1RM via Epley, most reps at each weight), the progression engine\'s next-session target per lift with a plain-language reason (double progression: add load only when every set hit the top of the rep range and it wasn\'t marked hard; repeat after missed reps; deload ~10% after 3 stalled sessions at the same load), and structural-balance ratios (bench:deadlift, squat:deadlift, overhead:bench, row:bench) against reference ranges. Lifts are keyed by equipment-aware keys, so dumbbell/machine variants are separate from barbell lifts. Sessions or exercises the athlete flagged as excluded (injury, illness, light day) are not counted. Use this before proposing working weights so plans agree with what the athlete sees in the app.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
     name: 'get_lift_history',
     description:
       'Get the history of actual weight/reps/effort logged for a specific exercise name across completed strength sessions (current week + archived weeks). Matches the exercise name exactly (case-insensitive) to avoid confusing similarly-named lifts (e.g. Pendlay row vs tricep extension); also reports other exercise names it found that partially match, so you can catch a wrong name before drawing conclusions. Entries with excluded_from_progress: true were flagged by the athlete (injury, illness, deliberately light day) — report them, but do not treat them as regressions or use them to set working weights or detect plateaus.',
@@ -177,7 +185,7 @@ const TOOLS = [
   {
     name: 'list_food_photos_for_range',
     description:
-      'Fetch food photos and any written food notes for an inclusive date range so they can be analyzed for approximate calorie/macro content. Returns each photo as an inline image labeled with the date, local time it was uploaded, AND its blob pathname (e.g. "Date: 2026-08-28, uploaded 08:15, pathname: data/food-photos/2026-08-28/xyz.jpg") — use that real time to label meals in save_nutrition_estimate\'s optional per-meal breakdown (e.g. a photo uploaded 07:xx-09:xx is very likely breakfast, 12:xx-14:xx likely lunch, 18:xx-20:xx likely dinner, anything clearly outside those windows is more likely a snack) rather than guessing the meal type purely from what the food looks like, and pass the pathnames back via photo_pathnames when saving so a later exclude_analyzed call can skip them. If the upload time doesn\'t clearly indicate a specific meal, use a neutral label like "Snack" or "Meal (unclear time)" instead of forcing it into breakfast/lunch/dinner. Also returns any freeform notes the athlete typed directly in the app describing what they ate (an alternative to photographing everything) — these have no per-item time, so anchor their content to the day generally. Also returns pantry_brief: the athlete\'s staple foods with their exact per-100g macros, usual portion sizes, and visual descriptions — ALWAYS apply this before estimating, since several staples (kvarg in particular) are visually ambiguous and have previously been misidentified as milk or yogurt, which is wrong on both calories and protein. Use this when the athlete asks about their eating/calories for a period — there is no separate calorie database yet, so photos and notes are the only sources; if neither is found for the range, say so rather than guessing.',
+      'Fetch food photos and any written food notes for an inclusive date range so they can be analyzed for approximate calorie/macro content. Returns each photo as an inline image labeled with the date, local time it was uploaded, AND its blob pathname (e.g. "Date: 2026-08-28, uploaded 08:15, pathname: data/food-photos/2026-08-28/xyz.jpg") — use that real time to label meals in save_nutrition_estimate\'s optional per-meal breakdown (e.g. a photo uploaded 07:xx-09:xx is very likely breakfast, 12:xx-14:xx likely lunch, 18:xx-20:xx likely dinner, anything clearly outside those windows is more likely a snack) rather than guessing the meal type purely from what the food looks like, and pass the pathnames back via photo_pathnames when saving so a later exclude_analyzed call can skip them. If the upload time doesn\'t clearly indicate a specific meal, use a neutral label like "Snack" or "Meal (unclear time)" instead of forcing it into breakfast/lunch/dinner. Also returns any freeform notes the athlete typed directly in the app describing what they ate (an alternative to photographing everything) — these have no per-item time, so anchor their content to the day generally. Also returns pantry_brief: the athlete\'s staple foods with their exact per-100g macros, usual portion sizes, and visual descriptions — ALWAYS apply this before estimating, since staples are often visually ambiguous (e.g. quark vs. milk vs. yogurt) and a wrong guess is wrong on both calories and protein. Use this when the athlete asks about their eating/calories for a period — there is no separate calorie database yet, so photos and notes are the only sources; if neither is found for the range, say so rather than guessing.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -195,7 +203,7 @@ const TOOLS = [
   {
     name: 'save_nutrition_estimate',
     description:
-      'Save a calorie/macro estimate for a specific day, whether derived from analyzing food photos (list_food_photos_for_range) or from a plain-text description the athlete gave in chat (e.g. "had kvarg and granola for breakfast"). Before estimating from text, check recent entries via get_nutrition_summary_for_range for a similar description and anchor to that prior estimate so repeat meals stay consistent rather than drifting each time. mode: \'replace\' (the default) overwrites the previous estimate for that date entirely — use this when re-analyzing a day flagged stale by get_nutrition_summary_for_range because a note or an already-analyzed photo was edited/removed: re-look at ALL of that day\'s photos/notes and save one fresh whole-day total. mode: \'append\' instead adds this call\'s calories/macros/meals/photo_pathnames on top of the existing saved entry for that date (summing totals, concatenating meals, unioning photo_pathnames) — use this for a gap day\'s first save, or when the only new content is photos found via list_food_photos_for_range(exclude_analyzed: true), so you can analyze and save just the new photo(s) without re-fetching and re-analyzing the whole day.',
+      'Save a calorie/macro estimate for a specific day, whether derived from analyzing food photos (list_food_photos_for_range) or from a plain-text description the athlete gave in chat (e.g. "had quark and granola for breakfast"). Before estimating from text, check recent entries via get_nutrition_summary_for_range for a similar description and anchor to that prior estimate so repeat meals stay consistent rather than drifting each time. mode: \'replace\' (the default) overwrites the previous estimate for that date entirely — use this when re-analyzing a day flagged stale by get_nutrition_summary_for_range because a note or an already-analyzed photo was edited/removed: re-look at ALL of that day\'s photos/notes and save one fresh whole-day total. mode: \'append\' instead adds this call\'s calories/macros/meals/photo_pathnames on top of the existing saved entry for that date (summing totals, concatenating meals, unioning photo_pathnames) — use this for a gap day\'s first save, or when the only new content is photos found via list_food_photos_for_range(exclude_analyzed: true), so you can analyze and save just the new photo(s) without re-fetching and re-analyzing the whole day.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -237,7 +245,7 @@ const TOOLS = [
                     name: { type: 'string', description: 'Food name, e.g. "Kvarg". Required.' },
                     grams: { type: 'number', description: 'Estimated weight in grams. Required.' },
                     calories: { type: 'number', description: 'Calories for this item. Required.' },
-                    pantry_id: { type: 'string', description: 'The staple\'s id from pantry_brief (e.g. "kvarg"). Omit for a one-off food such as a restaurant meal.' },
+                    pantry_id: { type: 'string', description: 'The staple\'s id from pantry_brief (e.g. "quark"). Omit for a one-off food such as a restaurant meal.' },
                   },
                   required: ['name', 'grams', 'calories'],
                 },
@@ -286,29 +294,40 @@ const TOOLS = [
 // The SSE polling is now fixed (GET returns 405), so base64 is safe to use again.
 async function fetchPhotoAsBase64(pathname: string): Promise<{ data: string; mimeType: string } | null> {
   try {
-    const token = process.env.BLOB_READ_WRITE_TOKEN
-    if (!token) return null
-    const res = await fetch(blobUrl(pathname), {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (!res.ok) return null
-    const contentType = res.headers.get('content-type') ?? 'image/jpeg'
-    const mimeType = contentType.split(';')[0].trim()
-    const buffer = await res.arrayBuffer()
-    const data = Buffer.from(buffer).toString('base64')
+    const object = await getStorage()?.get(pathname)
+    if (!object) return null
+    const mimeType = object.contentType.split(';')[0].trim()
+    const data = Buffer.from(object.body).toString('base64')
     return { data, mimeType }
   } catch {
     return null
   }
 }
 
-async function matchFoodPhotoBlobsForRange(startDate: string, endDate: string, token: string) {
-  const { blobs } = await list({ prefix: 'data/food-photos/', token })
-  return blobs
+function datesInRange(startDate: string, endDate: string, maxDays: number): string[] | null {
+  const dates: string[] = []
+  const d = new Date(`${startDate}T12:00:00Z`)
+  const end = new Date(`${endDate}T12:00:00Z`)
+  if (Number.isNaN(d.getTime()) || Number.isNaN(end.getTime())) return null
+  while (d <= end) {
+    if (dates.length >= maxDays) return null
+    dates.push(d.toISOString().slice(0, 10))
+    d.setUTCDate(d.getUTCDate() + 1)
+  }
+  return dates
+}
+
+async function matchFoodPhotoBlobsForRange(startDate: string, endDate: string, storage: ObjectStorage) {
+  // Short ranges list each day's folder; longer ones list everything (paged).
+  const days = datesInRange(startDate, endDate, 31)
+  const objects = days
+    ? (await Promise.all(days.map((d) => storage.list(`data/food-photos/${d}/`)))).flat()
+    : await storage.list('data/food-photos/')
+  return objects
     .map((b) => {
       const parts = b.pathname.split('/')
       const date = parts[2] ?? ''
-      return { pathname: b.pathname, date, uploadedAt: b.uploadedAt as Date }
+      return { pathname: b.pathname, date, uploadedAt: b.uploadedAt }
     })
     .filter((b) => b.date >= startDate && b.date <= endDate)
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -322,15 +341,15 @@ async function handleListFoodPhotosForRange(args: Record<string, unknown>) {
   }
   const excludeAnalyzed = args.exclude_analyzed === true
 
-  const token = process.env.BLOB_READ_WRITE_TOKEN
-  if (!token) {
-    return { error: 'BLOB_READ_WRITE_TOKEN is not configured' }
+  const storage = getStorage()
+  if (!storage) {
+    return { error: STORAGE_NOT_CONFIGURED }
   }
 
   await seedPantryIfEmpty()
 
   const [allMatches, notes, pantry, nutritionEntries] = await Promise.all([
-    matchFoodPhotoBlobsForRange(startDate, endDate, token),
+    matchFoodPhotoBlobsForRange(startDate, endDate, storage),
     readFoodNotesForRange(startDate, endDate),
     readPantry(),
     excludeAnalyzed ? readNutritionLogForRange(startDate, endDate) : Promise.resolve([]),
@@ -544,10 +563,10 @@ async function handleGetNutritionSummaryForRange(args: Record<string, unknown>) 
 
   const gapDates: string[] = []
   const staleDates: string[] = []
-  const token = process.env.BLOB_READ_WRITE_TOKEN
-  if (token) {
+  const storage = getStorage()
+  if (storage) {
     const [photoMatches, notes] = await Promise.all([
-      matchFoodPhotoBlobsForRange(startDate, endDate, token),
+      matchFoodPhotoBlobsForRange(startDate, endDate, storage),
       readFoodNotesForRange(startDate, endDate),
     ])
 
@@ -596,7 +615,11 @@ async function handleGetNutritionSummaryForRange(args: Record<string, unknown>) 
   }
 }
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://pantrainer.vercel.app'
+// Base URL for signed photo links handed to Claude. On Vercel the production
+// domain is provided automatically; set NEXT_PUBLIC_APP_URL elsewhere.
+const APP_URL =
+  process.env.NEXT_PUBLIC_APP_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : 'http://localhost:3000')
 
 async function handleGetCurrentWeek() {
   const currentWeek = await readCurrentWeekDirect()
@@ -1026,6 +1049,7 @@ async function dispatch(req: McpRequest): Promise<Response> {
       else if (name === 'submit_proposal_by_date') data = await handleSubmitProposalByDate(args)
       else if (name === 'get_garmin_recovery_freshness') data = await handleGetGarminRecoveryFreshness(args)
       else if (name === 'get_lift_history') data = await handleGetLiftHistory(args)
+      else if (name === 'get_strength_summary') data = buildStrengthSummary(await readAllSessions())
       else if (name === 'save_nutrition_estimate') data = await handleSaveNutritionEstimate(args)
       else if (name === 'get_nutrition_summary_for_range') data = await handleGetNutritionSummaryForRange(args)
       else if (name === 'save_coach_note') data = await handleSaveCoachNote(args)
@@ -1049,7 +1073,7 @@ export async function POST(request: Request) {
     return new Response('Forbidden', { status: 403, headers: CORS_HEADERS })
   }
 
-  if (!await isAutomationToken(request)) {
+  if (!(await authorizeBearer(request))) {
     return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS })
   }
 

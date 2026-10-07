@@ -427,3 +427,9 @@ export type AppState = z.infer<typeof AppStateSchema>
 export type AutomationNotes = z.infer<typeof AutomationNotesSchema>
 export type ProposedPlanRunType = z.infer<typeof ProposedPlanRunTypeSchema>
 export type ProposedPlan = z.infer<typeof ProposedPlanSchema>
+
+// Plates the athlete owns, for plate math. `pairs` = how many of each size.
+export const PlateInventorySchema = z.object({
+  barKg: z.number().positive().max(100),
+  plates: z.array(z.object({ kg: z.number().positive().max(100), pairs: z.number().int().min(0).max(20) })).max(20),
+})

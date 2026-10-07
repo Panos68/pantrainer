@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import './test-timezone-stockholm'
 import { isMidDaySnapshot, sanitizeRecovery, hasAnyRecoveryMetric } from './recovery-freshness'
 
 // Regression case: 2026-08-28 was cached at 05:52 that same morning with

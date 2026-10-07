@@ -6,6 +6,24 @@ const require = createRequire(import.meta.url)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { GarminConnect } = require('garmin-connect') as any
 
+// garmin-connect ships without usable types. This is the surface we rely on;
+// its JSON payloads are untyped upstream, so they stay loosely typed here and
+// get narrowed where they're read.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type GarminJson = any
+interface GarminClient {
+  url: { GC_API: string }
+  client: { get(url: string): Promise<GarminJson> }
+  login(): Promise<unknown>
+  loadToken(oauth1: unknown, oauth2: unknown): Promise<unknown> | void
+  exportToken(): unknown
+  getActivities(start: number, limit: number): Promise<GarminJson>
+  getActivity(args: { activityId: number }): Promise<GarminJson>
+  getHeartRate(date: Date): Promise<GarminJson>
+  getSleepData(date: Date): Promise<GarminJson>
+  getUserProfile(): Promise<GarminJson>
+}
+
 const TOKEN_KEY = 'garmin-tokens'
 
 async function loadCachedToken(): Promise<{ oauth1: unknown; oauth2: unknown } | null> {
@@ -28,12 +46,12 @@ async function saveCachedToken(token: unknown): Promise<void> {
   )
 }
 
-export async function createClient() {
+export async function createClient(): Promise<GarminClient> {
   const email = process.env.GARMIN_EMAIL
   const password = process.env.GARMIN_PASSWORD
   if (!email || !password) throw new Error('GARMIN_EMAIL and GARMIN_PASSWORD must be set')
 
-  const client = new GarminConnect({ username: email, password })
+  const client: GarminClient = new GarminConnect({ username: email, password })
 
   const cached = await loadCachedToken()
   if (cached) {
@@ -92,7 +110,7 @@ export type GarminHRResult = {
 }
 
 export async function fetchActivitiesForDate(date: string): Promise<{ activities: GarminActivityRaw[]; client: unknown }> {
-  const client: any = await createClient()
+  const client = await createClient()
   const all: GarminActivityRaw[] = await client.getActivities(0, 20)
   return { activities: all.filter((a) => a.startTimeLocal?.startsWith(date)), client }
 }
@@ -213,7 +231,7 @@ export type GarminBodyBatteryResult = {
 
 export async function fetchBodyBattery(date: string): Promise<GarminBodyBatteryResult | null> {
   try {
-    const client: any = await createClient()
+    const client = await createClient()
     const base = client.url.GC_API
     const raw = await client.client.get(
       `${base}/wellness-service/wellness/bodyBattery/reports/daily?startDate=${date}&endDate=${date}`
@@ -236,7 +254,7 @@ export type GarminStressResult = {
 
 export async function fetchStress(date: string): Promise<GarminStressResult | null> {
   try {
-    const client: any = await createClient()
+    const client = await createClient()
     const base = client.url.GC_API
     const raw = await client.client.get(
       `${base}/wellness-service/wellness/dailyStress/${date}`
@@ -257,7 +275,7 @@ export type GarminDailySummaryResult = {
 
 export async function fetchDailySummary(date: string): Promise<GarminDailySummaryResult | null> {
   try {
-    const client: any = await createClient()
+    const client = await createClient()
     const base = client.url.GC_API
     const profile = await client.getUserProfile()
     const displayName = profile?.displayName
@@ -286,7 +304,7 @@ function subtractDays(date: string, days: number): string {
 
 export async function fetchVO2Max(date: string): Promise<GarminVo2MaxResult | null> {
   try {
-    const client: any = await createClient()
+    const client = await createClient()
     const base = client.url.GC_API
     const startDate = subtractDays(date, 90)
     const raw = await client.client.get(
@@ -309,7 +327,7 @@ export type GarminFitnessAgeResult = {
 
 export async function fetchFitnessAge(date: string): Promise<GarminFitnessAgeResult | null> {
   try {
-    const client: any = await createClient()
+    const client = await createClient()
     const base = client.url.GC_API
     const raw = await client.client.get(
       `${base}/fitnessage-service/fitnessage/${date}`
@@ -330,7 +348,7 @@ export type GarminSpo2Result = {
 
 export async function fetchSpo2(date: string): Promise<GarminSpo2Result | null> {
   try {
-    const client: any = await createClient()
+    const client = await createClient()
     const base = client.url.GC_API
     const raw = await client.client.get(
       `${base}/wellness-service/wellness/daily/spo2/${date}`

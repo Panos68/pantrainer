@@ -53,6 +53,17 @@ function testEquipmentVariantsGetOwnSeries() {
   assert.equal(nameToKey('Dumbbell Romanian Deadlift'), 'db_romanian_deadlift_kg')
   assert.equal(nameToKey('DB Deadlift'), 'db_deadlift_kg')
   assert.equal(nameToKey('Single-arm Landmine Press'), 'single_arm_landmine_press_kg')
+  assert.equal(nameToKey('Incline Barbell Bench Press'), 'incline_bench_press_kg')
+  assert.equal(nameToKey('Barbell Incline Bench Press'), 'incline_bench_press_kg')
+  assert.equal(nameToKey('Decline Bench Press'), 'decline_bench_press_kg')
+}
+
+function testFallbackKeysNormaliseSpelling() {
+  assert.equal(nameToKey('Pendlay Rows'), nameToKey('Pendlay Row'))
+  assert.equal(nameToKey('Pendlay Row'), 'pendlay_row_kg')
+  assert.equal(nameToKey('Seated DB Shoulder Press'), nameToKey('Seated Dumbbell Shoulder Press'))
+  assert.equal(nameToKey('Dumbbell Bent-Over Row (Ramp-Up)'), nameToKey('Dumbbell Bent-Over Row'))
+  assert.equal(nameToKey('Cable Face Pull'), 'cable_face_pull_kg')
 }
 
 function testExcludedExerciseDoesNotUpdate() {
@@ -107,6 +118,7 @@ function testExcludedLiftWeightsCollectsOnlyExcluded() {
 testBarbellKeysUnchanged()
 testExcludedLiftWeightsCollectsOnlyExcluded()
 testEquipmentVariantsGetOwnSeries()
+testFallbackKeysNormaliseSpelling()
 testExcludedExerciseDoesNotUpdate()
 testExcludedSessionDoesNotUpdate()
 testDumbbellDoesNotOverwriteBarbell()

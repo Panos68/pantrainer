@@ -1,12 +1,17 @@
 import { readAutomationNotes, writeAutomationNotes } from '@/lib/data'
 import { AutomationNotesSchema } from '@/lib/schema'
+import { requireOwnerOrBearer } from '@/lib/automation-auth'
 
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = await requireOwnerOrBearer(request)
+  if (denied) return denied
   const notes = await readAutomationNotes()
   return Response.json(notes)
 }
 
 export async function PATCH(request: Request) {
+  const denied = await requireOwnerOrBearer(request)
+  if (denied) return denied
   let body: unknown
   try {
     body = await request.json()

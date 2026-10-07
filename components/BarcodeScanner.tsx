@@ -22,7 +22,7 @@ export function isBarcodeDetectorAvailable(): boolean {
   return getDetectorCtor() !== null
 }
 
-// EAN-13 covers Swedish supermarket products; EAN-8 covers small packages.
+// EAN-13 covers most supermarket products; EAN-8 covers small packages.
 const FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e']
 
 export default function BarcodeScanner({

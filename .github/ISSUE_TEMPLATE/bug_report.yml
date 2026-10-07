@@ -1,0 +1,44 @@
+name: Bug report
+description: Something isn't working as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open /log/monday
+        2. …
+    validations:
+      required: true
+  - type: dropdown
+    id: hosting
+    attributes:
+      label: How do you run PanTrainer?
+      options:
+        - Vercel
+        - Docker
+        - Local dev (npm run dev)
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: integrations
+    attributes:
+      label: Integrations enabled
+      options:
+        - label: Garmin
+        - label: Renpho
+        - label: Claude (MCP connector or API token)
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Please remove passwords, tokens and personal health data before pasting.

@@ -1,12 +1,9 @@
 import { readCurrentWeek, readAutomationNotes } from '@/lib/data'
 import { buildExportV2 } from '@/lib/export'
-import { isAutomationAuthorized, requireAutomationToken } from '@/lib/automation-auth'
+import { authorizeBearer } from '@/lib/automation-auth'
 
 export async function GET(request: Request) {
-  const tokenCheck = requireAutomationToken()
-  if (!tokenCheck.ok) return tokenCheck.response
-
-  if (!isAutomationAuthorized(request)) {
+  if (!(await authorizeBearer(request))) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

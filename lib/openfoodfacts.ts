@@ -20,9 +20,17 @@ export interface BarcodeLookup {
 }
 
 // OFF asks API clients to identify themselves; anonymous traffic gets throttled.
-const USER_AGENT = 'pantrainer/1.0 (personal training log; github.com/Panos68/pantrainer)'
+// OpenFoodFacts asks API clients to identify themselves.
+const USER_AGENT = 'pantrainer/1.0 (self-hosted training log)'
 
-const FIELDS = 'product_name,product_name_sv,brands,nutriments,image_small_url,quantity'
+// Preferred product-name language (ISO 639-1), e.g. "sv" so the name matches
+// what's printed on the pack in Sweden. Falls back to the generic name.
+const PRODUCT_LANGUAGE = /^[a-z]{2}$/.test(process.env.FOOD_PRODUCT_LANGUAGE ?? '')
+  ? process.env.FOOD_PRODUCT_LANGUAGE as string
+  : null
+const LOCALIZED_NAME_FIELD = PRODUCT_LANGUAGE ? `product_name_${PRODUCT_LANGUAGE}` : null
+
+const FIELDS = ['product_name', LOCALIZED_NAME_FIELD, 'brands', 'nutriments', 'image_small_url', 'quantity'].filter(Boolean).join(',')
 
 function num(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
@@ -82,7 +90,7 @@ export async function lookupBarcode(barcode: string): Promise<BarcodeLookup> {
 
   const json = await res.json() as {
     status?: number
-    product?: { product_name?: string; product_name_sv?: string; brands?: string; image_small_url?: string; nutriments?: Record<string, unknown>; quantity?: string }
+    product?: { product_name?: string; brands?: string; image_small_url?: string; nutriments?: Record<string, unknown>; quantity?: string }
   }
 
   if (json.status !== 1 || !json.product) {
@@ -97,9 +105,8 @@ export async function lookupBarcode(barcode: string): Promise<BarcodeLookup> {
   const carbs = num(n.carbohydrates_100g)
   const fat = num(n.fat_100g)
 
-  // Swedish name first — this athlete shops in Sweden and the localized name is
-  // what appears on the tub.
-  const name = p.product_name_sv || p.product_name
+  const localized = LOCALIZED_NAME_FIELD ? (p as Record<string, unknown>)[LOCALIZED_NAME_FIELD] : undefined
+  const name = (typeof localized === 'string' && localized) || p.product_name
   const netQuantityText = p.quantity || undefined
   const packCount = netQuantityText ? parsePackCount(netQuantityText) : null
 

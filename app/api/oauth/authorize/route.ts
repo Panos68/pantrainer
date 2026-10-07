@@ -1,33 +1,10 @@
-import crypto from 'crypto'
 import { getSession } from '@/lib/auth'
+import { signAuthCode } from '@/lib/oauth'
+import { demoForbidden } from '@/lib/demo-mode'
 
-// Stateless signed auth codes — no in-memory store, works across serverless instances.
-// Code: <timestamp_hex>.<hmac_hex>  HMAC key: AUTOMATION_API_TOKEN
-function signCode(timestamp: number, redirectUri: string): string {
-  const token = process.env.AUTOMATION_API_TOKEN ?? ''
-  const payload = `${timestamp}:${redirectUri}`
-  const hmac = crypto.createHmac('sha256', token).update(payload).digest('hex')
-  return `${timestamp.toString(16)}.${hmac}`
-}
-
-export function verifyCode(code: string, redirectUri: string): boolean {
-  const dot = code.indexOf('.')
-  if (dot === -1) return false
-  const tsHex = code.slice(0, dot)
-  const hmac = code.slice(dot + 1)
-  const timestamp = parseInt(tsHex, 16)
-  if (isNaN(timestamp)) return false
-  if (Date.now() - timestamp > 5 * 60 * 1000) return false
-
-  const token = process.env.AUTOMATION_API_TOKEN ?? ''
-  const payload = `${timestamp}:${redirectUri}`
-  const expected = crypto.createHmac('sha256', token).update(payload).digest('hex')
-  try {
-    return crypto.timingSafeEqual(Buffer.from(hmac, 'hex'), Buffer.from(expected, 'hex'))
-  } catch {
-    return false
-  }
-}
+// OAuth authorization endpoint for MCP clients (claude.ai connectors). The owner
+// must be logged in; the consent page names the site asking. Codes are bound to
+// the redirect_uri, client and PKCE challenge (see lib/oauth.ts).
 
 async function requireOwner(request: Request): Promise<Response | null> {
   const session = await getSession(request)
@@ -39,17 +16,42 @@ async function requireOwner(request: Request): Promise<Response | null> {
   return Response.redirect(loginUrl, 302)
 }
 
+function readParams(get: (k: string) => string | null) {
+  return {
+    redirectUri: get('redirect_uri') ?? '',
+    state: get('state') ?? '',
+    clientId: get('client_id') ?? '',
+    codeChallenge: get('code_challenge') ?? '',
+    codeChallengeMethod: get('code_challenge_method') ?? '',
+  }
+}
+
+function redirectHost(redirectUri: string): string | null {
+  try {
+    const url = new URL(redirectUri)
+    return url.protocol === 'https:' || url.hostname === 'localhost' ? url.host : null
+  } catch {
+    return null
+  }
+}
+
 export async function GET(request: Request) {
   const denied = await requireOwner(request)
   if (denied) return denied
   const { searchParams } = new URL(request.url)
-  const redirectUri = searchParams.get('redirect_uri') ?? ''
-  const state = searchParams.get('state') ?? ''
-  const clientId = searchParams.get('client_id') ?? ''
+  const p = readParams((k) => searchParams.get(k))
 
-  if (!redirectUri || !state) {
+  if (!p.redirectUri || !p.state) {
     return new Response('Missing redirect_uri or state', { status: 400 })
   }
+  if (!p.codeChallenge || p.codeChallengeMethod !== 'S256') {
+    return new Response('PKCE (code_challenge with S256) is required', { status: 400 })
+  }
+  const host = redirectHost(p.redirectUri)
+  if (!host) return new Response('Invalid redirect_uri', { status: 400 })
+
+  const hidden = (name: string, value: string) =>
+    `<input type="hidden" name="${name}" value="${escapeHtml(value)}" />`
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -70,11 +72,13 @@ export async function GET(request: Request) {
 <body>
   <div class="card">
     <h1>Connect to <span class="app">PanTrainer</span></h1>
-    <p>Allow Claude to read your training data and submit proposed plans on your behalf.</p>
+    <p><strong class="app">${escapeHtml(host)}</strong> wants to read your training data and submit proposed plans on your behalf.</p>
     <form method="POST">
-      <input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}" />
-      <input type="hidden" name="state" value="${escapeHtml(state)}" />
-      <input type="hidden" name="client_id" value="${escapeHtml(clientId)}" />
+      ${hidden('redirect_uri', p.redirectUri)}
+      ${hidden('state', p.state)}
+      ${hidden('client_id', p.clientId)}
+      ${hidden('code_challenge', p.codeChallenge)}
+      ${hidden('code_challenge_method', p.codeChallengeMethod)}
       <button type="submit">Allow Access</button>
     </form>
   </div>
@@ -85,22 +89,21 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const denied = await requireOwner(request)
+  const denied = (await requireOwner(request)) ?? demoForbidden()
   if (denied) return denied
   const form = await request.formData()
-  const redirectUri = (form.get('redirect_uri') as string) ?? ''
-  const state = (form.get('state') as string) ?? ''
-
-  if (!redirectUri || !state) {
-    return new Response('Missing redirect_uri or state', { status: 400 })
+  const p = readParams((k) => form.get(k) as string | null)
+  if (!p.redirectUri || !p.state || !p.codeChallenge || p.codeChallengeMethod !== 'S256' || !redirectHost(p.redirectUri)) {
+    return new Response('Invalid authorization request', { status: 400 })
   }
 
-  const code = signCode(Date.now(), redirectUri)
-
-  const redirect = new URL(redirectUri)
+  const code = signAuthCode(
+    { redirect_uri: p.redirectUri, client_id: p.clientId, code_challenge: p.codeChallenge },
+    process.env.AUTH_SESSION_SECRET ?? '',
+  )
+  const redirect = new URL(p.redirectUri)
   redirect.searchParams.set('code', code)
-  redirect.searchParams.set('state', state)
-
+  redirect.searchParams.set('state', p.state)
   return Response.redirect(redirect.toString(), 302)
 }
 

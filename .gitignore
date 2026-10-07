@@ -32,7 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
-!.env.local.example
+!.env.example
 
 # personal training data — never commit
 /data/*.json
@@ -49,3 +49,6 @@ next-env.d.ts
 
 # local specs/plans — not pushed with feature branches
 docs/superpowers/
+
+# credentials that must never be committed
+recovery-codes*

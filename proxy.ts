@@ -1,19 +1,29 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { isAutomationAuthorized } from '@/lib/automation-auth'
 import { isApiPath, isFoodPath, parseSession } from '@/lib/auth'
 
 const PUBLIC_PATHS = [
   '/login',
+  // Installable-app assets: fetched by the browser without the auth cookie.
+  '/manifest.webmanifest',
+  '/sw.js',
+  '/offline',
+  '/pwa-icon/',
+  '/apple-icon',
   '/api/auth/login',
+  // Passkey sign-in (options + verify) happens before there is a session.
+  '/api/auth/passkey/login-',
+  // One-click demo sign-in; the route 404s unless DEMO_MODE=true.
+  '/api/auth/demo',
   '/.well-known/',
   '/api/oauth/authorize',
   '/api/oauth/token',
   '/api/oauth/register',
+  // These routes authorise themselves (session or Bearer) — an unauthenticated
+  // MCP call must get the route's 401, not a login redirect, or OAuth discovery breaks.
   '/api/mcp',
   '/api/automation',
   '/api/revalidate',
-  '/api/week/activate',
   // Vercel Cron invokes this with its own Bearer CRON_SECRET header, not the
   // login cookie — without this it would be redirected to /login and the job
   // would silently never run. The route authorizes the secret itself.
@@ -49,10 +59,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Allow food photo uploads authenticated with the automation token (not the login
-  // password) so an iOS Shortcut / share-sheet action can upload without holding the
-  // real login credential — same token already used for the MCP OAuth flow.
-  if (pathname.startsWith('/api/food-photos') && request.method === 'POST' && isAutomationAuthorized(request)) {
+  // The iOS Shortcut uploads food photos with a Bearer token instead of the
+  // login cookie. Pass those through; the route verifies the token itself.
+  if (pathname.startsWith('/api/food-photos') && request.method === 'POST' && request.headers.get('authorization')?.startsWith('Bearer ')) {
     return NextResponse.next()
   }
 

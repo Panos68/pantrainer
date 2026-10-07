@@ -1,29 +1,14 @@
-import { put } from '@vercel/blob'
-import { blobUrl } from '@/lib/blob-url'
-import { createHmac, timingSafeEqual } from 'crypto'
+import { getStorage, isSafeKey, STORAGE_NOT_CONFIGURED } from '@/lib/storage'
+import { signPath, signingSecret, verifyPathSignature } from '@/lib/signed-url'
 import { getSession } from '@/lib/auth'
 
 export function signPhotoUrl(baseUrl: string, pathname: string, ttlSeconds = 3600): string {
   const exp = Math.floor(Date.now() / 1000) + ttlSeconds
-  const secret = process.env.AUTH_PASSWORD ?? ''
-  const sig = createHmac('sha256', secret).update(`${pathname}:${exp}`).digest('hex')
   const url = new URL(`${baseUrl}/api/photos`)
   url.searchParams.set('pathname', pathname)
   url.searchParams.set('exp', String(exp))
-  url.searchParams.set('sig', sig)
+  url.searchParams.set('sig', signPath(pathname, exp, signingSecret()))
   return url.toString()
-}
-
-function verifyPhotoSig(pathname: string, exp: string, sig: string): boolean {
-  const expTs = Number(exp)
-  if (!expTs || Date.now() / 1000 > expTs) return false
-  const secret = process.env.AUTH_PASSWORD ?? ''
-  const expected = createHmac('sha256', secret).update(`${pathname}:${expTs}`).digest('hex')
-  try {
-    return timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expected, 'hex'))
-  } catch {
-    return false
-  }
 }
 
 function sanitizeFilename(name: string): string {
@@ -32,16 +17,17 @@ function sanitizeFilename(name: string): string {
 }
 
 export async function POST(request: Request) {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return Response.json(
-      { error: 'BLOB_READ_WRITE_TOKEN is not configured' },
-      { status: 500 },
-    )
+  const storage = getStorage()
+  if (!storage) {
+    return Response.json({ error: STORAGE_NOT_CONFIGURED }, { status: 500 })
   }
 
   const formData = await request.formData()
   const file = formData.get('file')
   const date = (formData.get('date') as string | null) ?? 'unknown-date'
+  if (date !== 'unknown-date' && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return Response.json({ error: 'Invalid date' }, { status: 400 })
+  }
 
   if (!(file instanceof File)) {
     return Response.json({ error: 'Missing file' }, { status: 400 })
@@ -55,11 +41,7 @@ export async function POST(request: Request) {
   const pathname = `data/session-photos/${date}/${Date.now()}-${filename}`
 
   try {
-    await put(pathname, file, {
-      access: 'private',
-      addRandomSuffix: false,
-      contentType: file.type,
-    })
+    await storage.put(pathname, file, file.type)
 
     return Response.json({
       pathname,
@@ -73,11 +55,9 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return Response.json(
-      { error: 'BLOB_READ_WRITE_TOKEN is not configured' },
-      { status: 500 },
-    )
+  const storage = getStorage()
+  if (!storage) {
+    return Response.json({ error: STORAGE_NOT_CONFIGURED }, { status: 500 })
   }
 
   const { searchParams: sp } = new URL(request.url)
@@ -85,7 +65,7 @@ export async function GET(request: Request) {
   if (!pathname) {
     return Response.json({ error: 'Missing pathname' }, { status: 400 })
   }
-  if (!pathname.startsWith('data/session-photos/')) {
+  if (!pathname.startsWith('data/session-photos/') || !isSafeKey(pathname)) {
     return Response.json({ error: 'Invalid pathname' }, { status: 403 })
   }
 
@@ -96,26 +76,20 @@ export async function GET(request: Request) {
   const isSessionAuthed = session?.role === 'owner' || session?.role === 'food'
 
   if (!isSessionAuthed) {
-    const exp = sp.get('exp')
-    const sig = sp.get('sig')
-    if (!exp || !sig || !verifyPhotoSig(pathname, exp, sig)) {
+    if (!verifyPathSignature(pathname, sp.get('exp'), sp.get('sig'), signingSecret())) {
       return Response.json({ error: 'Invalid or expired signature' }, { status: 403 })
     }
   }
 
   try {
-    const res = await fetch(blobUrl(pathname), {
-      cache: 'no-store',
-      headers: { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` },
-    })
-    if (!res.ok) {
-      return Response.json({ error: 'Failed to read photo blob' }, { status: 502 })
+    const object = await storage.get(pathname)
+    if (!object) {
+      return Response.json({ error: 'Photo not found' }, { status: 404 })
     }
 
-    const bytes = await res.arrayBuffer()
-    return new Response(bytes, {
+    return new Response(object.body, {
       headers: {
-        'Content-Type': res.headers.get('Content-Type') ?? 'application/octet-stream',
+        'Content-Type': object.contentType,
         'Cache-Control': 'private, max-age=60',
       },
     })

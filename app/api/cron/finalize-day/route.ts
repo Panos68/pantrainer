@@ -1,7 +1,8 @@
-import { list, del } from '@vercel/blob'
+import { getStorage, STORAGE_NOT_CONFIGURED } from '@/lib/storage'
 import { fetchAndStoreRecovery, isMidDaySnapshot, isoDaysAgoInAppTimeZone } from '@/lib/garmin-recovery'
 import { readCurrentWeekDirect, deleteCoachNote, readNutritionLogForRange } from '@/lib/data'
 import { selectFoodPhotosToDelete } from '@/lib/food-photo-cleanup'
+import { isCronAuthorized } from '@/lib/automation-auth'
 
 // Scheduled at 01:01 UTC (see vercel.json) = 03:01 Europe/Stockholm in summer,
 // 02:01 in winter. Vercel crons are UTC-only, so this is deliberately not
@@ -25,23 +26,14 @@ const FOOD_PHOTO_RETENTION_DAYS = 14
 // Vercel Hobby plans cap the number of cron jobs, so this piggybacks on the
 // existing daily finalize-day run instead of registering a separate cron.
 async function cleanupOldFoodPhotos(): Promise<{ deleted: number; scanned: number } | { error: string }> {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return { error: 'BLOB_READ_WRITE_TOKEN is not configured' }
+  const storage = getStorage()
+  if (!storage) {
+    return { error: STORAGE_NOT_CONFIGURED }
   }
 
   const cutoffDate = isoDaysAgoInAppTimeZone(FOOD_PHOTO_RETENTION_DAYS)
 
-  const pathnames: string[] = []
-  let cursor: string | undefined
-  do {
-    const page = await list({
-      prefix: 'data/food-photos/',
-      cursor,
-      token: process.env.BLOB_READ_WRITE_TOKEN,
-    })
-    pathnames.push(...page.blobs.map((b) => b.pathname))
-    cursor = page.hasMore ? page.cursor : undefined
-  } while (cursor)
+  const pathnames = (await storage.list('data/food-photos/')).map((o) => o.pathname)
 
   // Nutrition-log entries are keyed by date string, so any date far enough
   // back covers the full history of entries that could still be pending
@@ -51,44 +43,32 @@ async function cleanupOldFoodPhotos(): Promise<{ deleted: number; scanned: numbe
 
   const toDelete = selectFoodPhotosToDelete(pathnames, analyzedPathnames, cutoffDate)
   if (toDelete.length > 0) {
-    await del(toDelete, { token: process.env.BLOB_READ_WRITE_TOKEN })
+    await storage.del(toDelete)
   }
 
   return { deleted: toDelete.length, scanned: pathnames.length }
 }
 
-function isAuthorized(req: Request): boolean {
-  const secret = process.env.CRON_SECRET
-  if (!secret) return false
-  return req.headers.get('authorization') === `Bearer ${secret}`
-}
 
 export async function GET(req: Request) {
-  if (!isAuthorized(req)) {
+  if (!isCronAuthorized(req)) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  if (!process.env.GARMIN_EMAIL || !process.env.GARMIN_PASSWORD) {
-    return Response.json({ error: 'Garmin credentials not configured' }, { status: 503 })
-  }
+  // Yesterday just closed out — any mid-day coach note for it was written
+  // against a partial, no-balance-yet day, so it's stale the moment the real
+  // deficit/surplus is available. Clear it whether or not Garmin is set up;
+  // it's a no-op if none was ever saved.
+  await deleteCoachNote(isoDaysAgoInAppTimeZone(1)).catch(() => {})
 
-  const week = await readCurrentWeekDirect()
-  if (!week) {
-    return Response.json({ error: 'No active week' }, { status: 404 })
-  }
+  // Garmin finalisation is optional; the photo cleanup below runs regardless.
+  const garminConfigured = Boolean(process.env.GARMIN_EMAIL && process.env.GARMIN_PASSWORD)
+  const week = garminConfigured ? await readCurrentWeekDirect() : null
 
   const results: Array<{ date: string; status: string; total_kilocalories?: number | null }> = []
 
-  for (let daysAgo = 1; daysAgo <= LOOKBACK_DAYS; daysAgo++) {
+  for (let daysAgo = 1; week && daysAgo <= LOOKBACK_DAYS; daysAgo++) {
     const date = isoDaysAgoInAppTimeZone(daysAgo)
-
-    // Yesterday just closed out — any mid-day coach note for it was written
-    // against a partial, no-balance-yet day, so it's stale the moment the
-    // real deficit/surplus is available. Clear it regardless of whether the
-    // recovery refetch below succeeds; it's a no-op if none was ever saved.
-    if (daysAgo === 1) {
-      await deleteCoachNote(date).catch(() => {})
-    }
 
     // Only days the week doc actually tracks — don't backfill across a week rollover.
     if (!week.sessions?.some((s) => s.date === date)) {
@@ -121,5 +101,10 @@ export async function GET(req: Request) {
     foodPhotoCleanup = { error: err instanceof Error ? err.message : 'unknown error' }
   }
 
-  return Response.json({ ok: true, results, foodPhotoCleanup })
+  return Response.json({
+    ok: true,
+    garmin: garminConfigured ? (week ? 'finalized' : 'no-active-week') : 'not-configured',
+    results,
+    foodPhotoCleanup,
+  })
 }

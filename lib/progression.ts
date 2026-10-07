@@ -1,5 +1,6 @@
 import type { Exercise, LiftProgression, Session, WeekDoc } from './schema'
 import { todayIsoInAppTimeZone } from './app-timezone'
+import { tokenize } from './exerciseNameMatch'
 
 // Maps exercise names (lowercase, partial) to the canonical lift_progression keys
 // used by the charts. More-specific patterns must come before generic ones.
@@ -34,12 +35,11 @@ const IMPLEMENT_PREFIXES: Array<[pattern: RegExp, prefix: string]> = [
   [/\bcable\b/, 'cable_'],
 ]
 
+// Fallback key for lifts without a canonical entry. Normalised so spelling
+// variants of one movement share a history: abbreviations expanded (DB →
+// dumbbell), plurals singularised, and bracketed notes ("(Ramp-Up)") dropped.
 function slugKey(lower: string): string {
-  return (
-    lower
-      .replace(/[\s\-\/]+/g, '_')
-      .replace(/[^a-z0-9_]/g, '') + '_kg'
-  )
+  return tokenize(lower.replace(/\([^)]*\)/g, ' ')).join('_') + '_kg'
 }
 
 export function nameToKey(name: string): string {
@@ -53,7 +53,13 @@ export function nameToKey(name: string): string {
   }
 
   for (const [pattern, key] of EXERCISE_NAME_TO_KEY) {
-    if (lower.includes(pattern)) return implementPrefix + key
+    if (!lower.includes(pattern)) continue
+    // Incline/decline barbell bench is a different lift from flat bench.
+    if (key === 'bench_press_kg' && implementPrefix === '') {
+      if (/\bincline\b/.test(lower)) return 'incline_bench_press_kg'
+      if (/\bdecline\b/.test(lower)) return 'decline_bench_press_kg'
+    }
+    return implementPrefix + key
   }
   return slugKey(lower)
 }

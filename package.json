@@ -1,5 +1,5 @@
 {
-  "name": "build",
+  "name": "pantrainer",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -7,11 +7,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "dotenvx run -f .env.local -- sh -c 'for f in lib/*.test.ts; do npx tsx \"$f\" || exit 1; done'"
+    "test": "node scripts/run-tests.mjs",
+    "typecheck": "tsc --noEmit",
+    "demo:seed": "tsx scripts/seed-demo.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@simplewebauthn/browser": "^14.0.0",
+    "@simplewebauthn/server": "^14.0.3",
     "@vercel/blob": "^2.3.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -45,5 +49,6 @@
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5"
-  }
+  },
+  "license": "AGPL-3.0-only"
 }

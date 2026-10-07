@@ -17,6 +17,14 @@ import {
 import { useGarminSync } from '@/lib/useGarminSync'
 import { requestNotificationPermission } from '@/lib/notify'
 import type { Session, SetEntry } from '@/lib/schema'
+import LiveStrengthHints from '@/components/LiveStrengthHints'
+import { useStrengthData } from '@/lib/useStrengthData'
+import { useWakeLock } from '@/lib/useWakeLock'
+import { applySetToRecords, detectPrs, PR_LABEL, type LiftRecords, type PrKind } from '@/lib/strength'
+import { nameToKey } from '@/lib/progression'
+import type { PlateInventory } from '@/lib/plates'
+import type { ProgressionSuggestion } from '@/lib/progression-engine'
+import { flushPending, patchSession, readPending, type SessionPatch } from '@/lib/offlineSessionSync'
 
 function sideLabel(side?: 'left' | 'right'): string {
   if (side === 'left') return 'Left'
@@ -27,6 +35,23 @@ function sideLabel(side?: 'left' | 'right'): string {
 // Persistent header shown across every render state of the live page — lets the
 // athlete peek at the full day plan without losing progress. Safe to navigate
 // away and back because every set is persisted immediately via persist().
+function sendSessionPatch(day: string) {
+  return (body: SessionPatch) =>
+    fetch(`/api/session/${day}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+}
+
+function OfflineBanner() {
+  return (
+    <div className="fixed top-0 inset-x-0 z-40 bg-amber-500/90 text-zinc-950 text-[11px] font-mono font-bold text-center py-1.5">
+      Offline — sets are saved on this device and will sync automatically
+    </div>
+  )
+}
+
 function LiveHeader({ day }: { day: string }) {
   return (
     <div className="w-full max-w-sm flex items-center justify-between px-1 pb-4">
@@ -36,6 +61,12 @@ function LiveHeader({ day }: { day: string }) {
       <span className="text-zinc-700 text-xs font-mono">{day}</span>
     </div>
   )
+}
+
+// The progression target is most useful before the first set; afterwards the
+// carried-forward numbers already reflect it.
+function setNumberIsFirst(step: Extract<LiveStep, { kind: 'set' }>): boolean {
+  return step.setNumber === 1 && step.side !== 'right'
 }
 
 function SetEntryForm({
@@ -48,6 +79,10 @@ function SetEntryForm({
   initialNote,
   supersetPeers,
   onLog,
+  records,
+  suggestionFor,
+  plates,
+  flash,
 }: {
   day: string
   step: Extract<LiveStep, { kind: 'set' }>
@@ -57,7 +92,11 @@ function SetEntryForm({
   isLastSet: boolean
   initialNote: string
   supersetPeers: string[]
-  onLog: (reps: string, weight: string, effort: SetEntry['effort'], note: string | undefined) => void
+  onLog: (reps: string, weight: string, effort: SetEntry['effort'], note: string | undefined, exerciseName: string) => void
+  records: (exerciseName: string) => LiftRecords | undefined
+  suggestionFor: (exerciseName: string) => ProgressionSuggestion | undefined
+  plates: PlateInventory
+  flash: boolean
 }) {
   const [altIndex, setAltIndex] = useState<number | null>(null)
   const activeExercise =
@@ -91,11 +130,12 @@ function SetEntryForm({
   }
 
   function handleLog(effort: SetEntry['effort']) {
-    onLog(reps, weight, effort, isLastSet ? note : undefined)
+    onLog(reps, weight, effort, isLastSet ? note : undefined, activeExercise.name)
   }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-zinc-950 text-zinc-100 p-6">
+      {flash && <div aria-hidden className="fixed inset-0 z-50 bg-lime-300 pointer-events-none animate-rest-flash" />}
       <LiveHeader day={day} />
       {supersetPeers.length > 0 && (
         <div className="px-2 py-1 rounded bg-amber-400/10 border border-amber-400/30 text-amber-400 text-[10px] font-mono tracking-widest uppercase">
@@ -149,6 +189,16 @@ function SetEntryForm({
             className="w-20 px-3 py-2 rounded bg-zinc-900 text-center font-mono"
           />
         </div>
+      )}
+      {timedSeconds == null && (
+        <LiveStrengthHints
+          exerciseName={activeExercise.name}
+          reps={reps}
+          weight={weight}
+          records={records(activeExercise.name)}
+          suggestion={setNumberIsFirst(step) ? suggestionFor(activeExercise.name) : undefined}
+          plates={plates}
+        />
       )}
       <div className="flex gap-3">
         <button
@@ -226,6 +276,31 @@ export default function LiveSessionPage() {
   const [rpe, setRpe] = useState('')
   const [completing, setCompleting] = useState(false)
   const { syncing: garminSyncing, lastSync: garminSync, syncGarmin } = useGarminSync()
+  const { summary: strength, plates } = useStrengthData()
+  // Sets logged this session fold into the records, so PR detection stays
+  // accurate across consecutive sets.
+  const [sessionRecords, setSessionRecords] = useState<Record<string, LiftRecords>>({})
+  const [lastPr, setLastPr] = useState<{ name: string; weight: number; reps: number; kinds: PrKind[] } | null>(null)
+  // Set when a rest period runs out (not when skipped) so the next set screen flashes.
+  const [flashForStep, setFlashForStep] = useState<number | null>(null)
+  const [offline, setOffline] = useState(false)
+  const [completeMessage, setCompleteMessage] = useState<string | null>(null)
+
+  // Replay anything logged while offline as soon as the connection is back.
+  useEffect(() => {
+    if (!day) return
+    function onOnline() {
+      void flushPending(localStorage, day, sendSessionPatch(day)).then((ok) => { if (ok) setOffline(false) })
+    }
+    window.addEventListener('online', onOnline)
+    return () => window.removeEventListener('online', onOnline)
+  }, [day])
+  useWakeLock(session != null && stepIndex != null)
+
+  function recordsFor(exerciseName: string): LiftRecords | undefined {
+    const key = nameToKey(exerciseName)
+    return sessionRecords[key] ?? strength?.records[key]
+  }
 
   // Every PATCH to /api/session/[day] is chained through this ref so writes always reach
   // the server in the order they were issued. The PATCH handler does a naive read-merge-
@@ -249,7 +324,16 @@ export default function LiveSessionPage() {
         if (!r.ok) throw new Error(`Failed to load session (${r.status})`)
         return r.json()
       })
-      .then((data: Session) => {
+      .then((loaded: Session) => {
+        // Sets logged offline before a reload aren't on the server yet — show
+        // them, then try to sync.
+        const pending = readPending(localStorage, day)
+        const data: Session = pending && Array.isArray(pending.exercises)
+          ? { ...loaded, exercises: pending.exercises as Session['exercises'] }
+          : loaded
+        if (pending) {
+          void flushPending(localStorage, day, sendSessionPatch(day)).then((ok) => setOffline(!ok))
+        }
         const initial: Record<number, SetEntry[]> = {}
         data.exercises.forEach((ex, i) => {
           if (ex.set_log && ex.set_log.length > 0) initial[i] = ex.set_log
@@ -284,18 +368,26 @@ export default function LiveSessionPage() {
       i === exerciseIndex ? { ...ex, ...updates } : ex,
     )
     setSession({ ...session, exercises: nextExercises })
-    await enqueueWrite(() =>
-      fetch(`/api/session/${day}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ exercises: nextExercises }),
-      }),
+    const result = await enqueueWrite(() =>
+      patchSession(localStorage, day, { exercises: nextExercises }, sendSessionPatch(day)),
     )
+    setOffline(result.offline)
     setSaving(false)
   }
 
-  function logCurrentSet(reps: string, weight: string, effort: SetEntry['effort'], note: string | undefined) {
+  function logCurrentSet(reps: string, weight: string, effort: SetEntry['effort'], note: string | undefined, exerciseName: string) {
     if (stepIndex == null || !step || step.kind !== 'set') return
+    const loggedWeight = Number(weight)
+    const loggedReps = Number(reps)
+    if (loggedWeight > 0 && loggedReps > 0 && session?.exclude_from_progress !== true) {
+      const key = nameToKey(exerciseName)
+      const before = recordsFor(exerciseName)
+      const kinds = detectPrs({ weight: loggedWeight, reps: loggedReps }, before)
+      setLastPr(kinds.length > 0 ? { name: exerciseName, weight: loggedWeight, reps: loggedReps, kinds } : null)
+      setSessionRecords((prev) => ({ ...prev, [key]: applySetToRecords(before, { weight: loggedWeight, reps: loggedReps }) }))
+    } else {
+      setLastPr(null)
+    }
     const entry: SetEntry = {
       reps: Number(reps) || 0,
       weight_kg: weight ? Number(weight) : null,
@@ -338,10 +430,7 @@ export default function LiveSessionPage() {
         ...group,
         exercises: group.exercises.map(() => exercises[globalIndex++]),
       }))
-      const res = await enqueueWrite(() => fetch(`/api/session/${day}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const result = await enqueueWrite(() => patchSession(localStorage, day, {
           exercises,
           ...(exercise_groups ? { exercise_groups } : {}),
           status: 'completed',
@@ -351,10 +440,12 @@ export default function LiveSessionPage() {
           anaerobic_training_effect: sync?.anaerobic_training_effect ?? session.anaerobic_training_effect ?? null,
           training_stress_score: sync?.training_stress_score ?? session.training_stress_score ?? null,
           hr_zones: sync?.hr_zones ?? session.hr_zones ?? null,
-        }),
-      }))
-      if (res.ok) {
+      }, sendSessionPatch(day)))
+      setOffline(result.offline)
+      if (result.ok) {
         router.push(`/log/${day}`)
+      } else if (result.offline) {
+        setCompleteMessage('Saved on this device — it will finish syncing when you are back online.')
       }
     } finally {
       setCompleting(false)
@@ -389,8 +480,10 @@ export default function LiveSessionPage() {
   if (!step) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-zinc-950 text-zinc-100 p-6">
+        {offline && <OfflineBanner />}
         <LiveHeader day={day} />
         <div className="text-lime-400 font-mono">Session complete.</div>
+        {completeMessage && <div className="max-w-sm text-center text-amber-300 text-xs font-mono">{completeMessage}</div>}
 
         <div className="w-full max-w-sm space-y-2">
           <label className="text-zinc-500 text-[10px] font-mono tracking-[0.2em] uppercase">
@@ -463,12 +556,21 @@ export default function LiveSessionPage() {
     }
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-zinc-950 p-6">
+        {offline && <OfflineBanner />}
         <LiveHeader day={day} />
+        {lastPr && (
+          <div className="max-w-sm text-center px-4 py-3 rounded-xl bg-amber-400/15 border border-amber-400/40">
+            <p className="text-amber-300 font-black tracking-wide">🏆 New PR</p>
+            <p className="text-amber-200/80 text-xs font-mono">
+              {lastPr.name} {lastPr.weight} kg × {lastPr.reps} — {lastPr.kinds.map((k) => PR_LABEL[k]).join(' · ')}
+            </p>
+          </div>
+        )}
         <RestTimer
           key={stepIndex}
           seconds={step.seconds}
           storageKey={`rest-timer:${day}:${stepIndex}`}
-          onDone={() => setStepIndex(stepIndex + 1)}
+          onDone={() => { setFlashForStep(stepIndex + 1); setStepIndex(stepIndex + 1) }}
           onSkip={() => setStepIndex(stepIndex + 1)}
           onAddSeconds={() => {}}
         />
@@ -526,6 +628,8 @@ export default function LiveSessionPage() {
       : []
 
   return (
+    <>
+    {offline && <OfflineBanner />}
     <SetEntryForm
       key={stepIndex}
       day={day}
@@ -537,6 +641,11 @@ export default function LiveSessionPage() {
       initialNote={initialNote}
       supersetPeers={supersetPeers}
       onLog={logCurrentSet}
+      records={recordsFor}
+      suggestionFor={(name) => strength?.suggestions[nameToKey(name)]}
+      plates={plates}
+      flash={flashForStep === stepIndex}
     />
+    </>
   )
 }

@@ -11,6 +11,7 @@ import {
   CoachNoteSchema,
   PantryItemSchema,
   FoodInventoryItemSchema,
+  PlateInventorySchema,
 } from './schema'
 import type {
   WeekDoc,
@@ -25,10 +26,12 @@ import type {
   CoachNote,
   PantryItem,
   FoodInventoryItem,
+  Session,
 } from './schema'
 import { format, parseISO } from 'date-fns'
 import { getDb } from './mongodb'
 import { PANTRY_SEED } from './pantry-seed'
+import { DEFAULT_PLATE_INVENTORY, type PlateInventory } from './plates'
 
 // Collections:
 //   config    — singleton docs: athlete, state, automation-notes, garmin-tokens
@@ -293,6 +296,11 @@ export async function readAllArchivedWeeksWithIds(): Promise<{ id: string; week:
   return ids.map((id, i) => ({ id, week: weeks[i] }))
 }
 
+export async function readArchivedWeekById(id: string): Promise<WeekDoc | null> {
+  const raw = await weekGet<unknown>(id)
+  return raw ? WeekDocSchema.parse(raw) : null
+}
+
 export async function writeArchivedWeek(id: string, week: WeekDoc): Promise<void> {
   await weekSet(id, week)
   revalidateTag('archived-weeks', { expire: 0 })
@@ -489,11 +497,14 @@ export async function deletePantryItem(id: string): Promise<void> {
 }
 
 /**
- * Populate the pantry from the seed list on first use. Only inserts when the
- * collection is completely empty, so it can never overwrite an edit the
- * athlete has made.
+ * Populate the pantry from the example staples on first use, only when the
+ * instance opts in with SEED_EXAMPLE_PANTRY=true (the examples are one
+ * athlete's Swedish staples — useful as a template, wrong as a default). Only
+ * inserts when the collection is completely empty, so it can never overwrite
+ * an edit the athlete has made.
  */
 export async function seedPantryIfEmpty(): Promise<number> {
+  if (process.env.SEED_EXAMPLE_PANTRY !== 'true') return 0
   const db = await getDb()
   const count = await db.collection('pantry').countDocuments()
   if (count > 0) return 0
@@ -547,4 +558,21 @@ export async function updateFoodInventoryStatus(id: string, status: 'used' | 'di
     { $set: { status, updatedAt: new Date().toISOString() } },
   )
   return result.matchedCount === 1
+}
+
+// ─── Equipment (plate math) ─────────────────────────────────────────────────
+
+export async function readPlateInventory(): Promise<PlateInventory> {
+  const parsed = PlateInventorySchema.safeParse(await configGet<unknown>('plate-inventory'))
+  return parsed.success ? parsed.data : DEFAULT_PLATE_INVENTORY
+}
+
+export async function writePlateInventory(inventory: PlateInventory): Promise<void> {
+  await configSet('plate-inventory', PlateInventorySchema.parse(inventory))
+}
+
+// Every session across archived weeks and the current week, oldest week first.
+export async function readAllSessions(): Promise<Session[]> {
+  const [archived, current] = await Promise.all([readAllArchivedWeeks(), readCurrentWeekDirect()])
+  return [...archived, ...(current ? [current] : [])].flatMap((w) => w.sessions)
 }
