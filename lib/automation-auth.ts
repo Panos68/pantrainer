@@ -41,3 +41,11 @@ export function isCronAuthorized(request: Request): boolean {
   const token = parseBearer(request)
   return token != null && constantTimeEqual(token, secret)
 }
+
+// Cookie-only owner check for account management (tokens, passkeys): a leaked
+// Bearer token must not be able to mint more credentials.
+export async function requireOwnerSession(request: Request): Promise<Response | null> {
+  return (await getSession(request))?.role === 'owner'
+    ? null
+    : Response.json({ error: 'Forbidden' }, { status: 403 })
+}

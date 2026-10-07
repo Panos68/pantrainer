@@ -5,6 +5,8 @@ import { isApiPath, isFoodPath, parseSession } from '@/lib/auth'
 const PUBLIC_PATHS = [
   '/login',
   '/api/auth/login',
+  // Passkey sign-in (options + verify) happens before there is a session.
+  '/api/auth/passkey/login-',
   '/.well-known/',
   '/api/oauth/authorize',
   '/api/oauth/token',

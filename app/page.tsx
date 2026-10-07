@@ -233,7 +233,18 @@ export default async function Home() {
           >
             Food
           </Link>
+          <Link
+            href="/settings"
+            className="text-xs font-mono font-bold tracking-widest uppercase text-zinc-500 hover:text-zinc-300 transition-colors"
+          >
+            Settings
+          </Link>
         </footer>
+        <div className="md:hidden pt-2 text-center">
+          <Link href="/settings" className="text-[11px] font-mono tracking-widest uppercase text-zinc-600 hover:text-zinc-400">
+            Settings
+          </Link>
+        </div>
 
       </div>
     </main>

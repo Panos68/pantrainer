@@ -49,3 +49,6 @@ next-env.d.ts
 
 # local specs/plans — not pushed with feature branches
 docs/superpowers/
+
+# credentials that must never be committed
+recovery-codes*
