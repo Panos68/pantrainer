@@ -1,4 +1,4 @@
-import { list, del } from '@vercel/blob'
+import { getStorage, STORAGE_NOT_CONFIGURED } from '@/lib/storage'
 import { fetchAndStoreRecovery, isMidDaySnapshot, isoDaysAgoInAppTimeZone } from '@/lib/garmin-recovery'
 import { readCurrentWeekDirect, deleteCoachNote, readNutritionLogForRange } from '@/lib/data'
 import { selectFoodPhotosToDelete } from '@/lib/food-photo-cleanup'
@@ -26,23 +26,14 @@ const FOOD_PHOTO_RETENTION_DAYS = 14
 // Vercel Hobby plans cap the number of cron jobs, so this piggybacks on the
 // existing daily finalize-day run instead of registering a separate cron.
 async function cleanupOldFoodPhotos(): Promise<{ deleted: number; scanned: number } | { error: string }> {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return { error: 'BLOB_READ_WRITE_TOKEN is not configured' }
+  const storage = getStorage()
+  if (!storage) {
+    return { error: STORAGE_NOT_CONFIGURED }
   }
 
   const cutoffDate = isoDaysAgoInAppTimeZone(FOOD_PHOTO_RETENTION_DAYS)
 
-  const pathnames: string[] = []
-  let cursor: string | undefined
-  do {
-    const page = await list({
-      prefix: 'data/food-photos/',
-      cursor,
-      token: process.env.BLOB_READ_WRITE_TOKEN,
-    })
-    pathnames.push(...page.blobs.map((b) => b.pathname))
-    cursor = page.hasMore ? page.cursor : undefined
-  } while (cursor)
+  const pathnames = (await storage.list('data/food-photos/')).map((o) => o.pathname)
 
   // Nutrition-log entries are keyed by date string, so any date far enough
   // back covers the full history of entries that could still be pending
@@ -52,7 +43,7 @@ async function cleanupOldFoodPhotos(): Promise<{ deleted: number; scanned: numbe
 
   const toDelete = selectFoodPhotosToDelete(pathnames, analyzedPathnames, cutoffDate)
   if (toDelete.length > 0) {
-    await del(toDelete, { token: process.env.BLOB_READ_WRITE_TOKEN })
+    await storage.del(toDelete)
   }
 
   return { deleted: toDelete.length, scanned: pathnames.length }

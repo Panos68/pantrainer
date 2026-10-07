@@ -48,7 +48,7 @@ export function openChallenge(
 
 export const challengeCookieOptions = {
   httpOnly: true,
-  secure: true,
+  secure: process.env.ALLOW_INSECURE_COOKIES !== 'true',
   sameSite: 'strict' as const,
   maxAge: CHALLENGE_TTL_MS / 1000,
   path: '/api/auth/passkey',

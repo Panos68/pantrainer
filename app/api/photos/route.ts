@@ -1,5 +1,4 @@
-import { put } from '@vercel/blob'
-import { blobUrl } from '@/lib/blob-url'
+import { getStorage, STORAGE_NOT_CONFIGURED } from '@/lib/storage'
 import { signPath, signingSecret, verifyPathSignature } from '@/lib/signed-url'
 import { getSession } from '@/lib/auth'
 
@@ -18,11 +17,9 @@ function sanitizeFilename(name: string): string {
 }
 
 export async function POST(request: Request) {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return Response.json(
-      { error: 'BLOB_READ_WRITE_TOKEN is not configured' },
-      { status: 500 },
-    )
+  const storage = getStorage()
+  if (!storage) {
+    return Response.json({ error: STORAGE_NOT_CONFIGURED }, { status: 500 })
   }
 
   const formData = await request.formData()
@@ -41,11 +38,7 @@ export async function POST(request: Request) {
   const pathname = `data/session-photos/${date}/${Date.now()}-${filename}`
 
   try {
-    await put(pathname, file, {
-      access: 'private',
-      addRandomSuffix: false,
-      contentType: file.type,
-    })
+    await storage.put(pathname, file, file.type)
 
     return Response.json({
       pathname,
@@ -59,11 +52,9 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return Response.json(
-      { error: 'BLOB_READ_WRITE_TOKEN is not configured' },
-      { status: 500 },
-    )
+  const storage = getStorage()
+  if (!storage) {
+    return Response.json({ error: STORAGE_NOT_CONFIGURED }, { status: 500 })
   }
 
   const { searchParams: sp } = new URL(request.url)
@@ -88,18 +79,14 @@ export async function GET(request: Request) {
   }
 
   try {
-    const res = await fetch(blobUrl(pathname), {
-      cache: 'no-store',
-      headers: { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` },
-    })
-    if (!res.ok) {
-      return Response.json({ error: 'Failed to read photo blob' }, { status: 502 })
+    const object = await storage.get(pathname)
+    if (!object) {
+      return Response.json({ error: 'Photo not found' }, { status: 404 })
     }
 
-    const bytes = await res.arrayBuffer()
-    return new Response(bytes, {
+    return new Response(object.body, {
       headers: {
-        'Content-Type': res.headers.get('Content-Type') ?? 'application/octet-stream',
+        'Content-Type': object.contentType,
         'Cache-Control': 'private, max-age=60',
       },
     })

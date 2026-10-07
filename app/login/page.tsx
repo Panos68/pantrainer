@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { browserSupportsWebAuthn, startAuthentication } from '@simplewebauthn/browser'
@@ -22,6 +22,23 @@ function LoginForm() {
   const searchParams = useSearchParams()
   const returnTo = searchParams.get('returnTo')
   const passkeySupported = useSyncExternalStore(() => () => {}, browserSupportsWebAuthn, () => false)
+  const [demoEnabled, setDemoEnabled] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/auth/demo')
+      .then((r) => r.json())
+      .then((d: { enabled: boolean }) => { if (!cancelled) setDemoEnabled(d.enabled) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  async function handleDemo() {
+    setLoading(true)
+    const res = await fetch('/api/auth/demo', { method: 'POST' })
+    if (res.ok) goAfterLogin('/')
+    else { setError('Demo is unavailable'); setLoading(false) }
+  }
 
   function goAfterLogin(redirectTo: string) {
     const destination = redirectTo === '/food' ? '/food' : (returnTo?.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/')
@@ -90,6 +107,20 @@ function LoginForm() {
             Sign In
           </h1>
         </div>
+
+        {demoEnabled && (
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={handleDemo}
+              disabled={loading}
+              className="w-full h-12 bg-lime-400 hover:bg-lime-300 text-zinc-950 font-black text-sm tracking-[0.15em] uppercase rounded-xl transition-colors disabled:opacity-50"
+            >
+              Explore the demo
+            </button>
+            <p className="text-center text-[11px] text-zinc-500">Sample data · resets regularly · no account needed</p>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <input

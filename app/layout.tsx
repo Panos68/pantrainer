@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Chakra_Petch } from "next/font/google";
 import { Toaster } from "sonner";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
+import DemoBanner from "@/components/DemoBanner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -42,6 +43,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${chakraPetch.variable} h-full antialiased dark`}
     >
       <body className="min-h-full flex flex-col bg-zinc-950 pb-20 md:pb-0">
+        <DemoBanner />
         {children}
         <MobileBottomNav />
         <Toaster position="bottom-right" theme="dark" />

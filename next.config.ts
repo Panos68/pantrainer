@@ -10,6 +10,9 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
+  // Docker builds set NEXT_OUTPUT=standalone for a small self-contained server;
+  // Vercel builds leave it unset.
+  output: process.env.NEXT_OUTPUT === 'standalone' ? 'standalone' : undefined,
   async headers() {
     return [
       { source: '/:path*', headers: securityHeaders },

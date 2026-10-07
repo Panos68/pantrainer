@@ -1,5 +1,4 @@
-import { blobUrl } from '@/lib/blob-url'
-import { list } from '@vercel/blob'
+import { getStorage, STORAGE_NOT_CONFIGURED, type ObjectStorage } from '@/lib/storage'
 import { signPhotoUrl } from '@/app/api/photos/route'
 import {
   readCurrentWeekDirect,
@@ -295,29 +294,40 @@ const TOOLS = [
 // The SSE polling is now fixed (GET returns 405), so base64 is safe to use again.
 async function fetchPhotoAsBase64(pathname: string): Promise<{ data: string; mimeType: string } | null> {
   try {
-    const token = process.env.BLOB_READ_WRITE_TOKEN
-    if (!token) return null
-    const res = await fetch(blobUrl(pathname), {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (!res.ok) return null
-    const contentType = res.headers.get('content-type') ?? 'image/jpeg'
-    const mimeType = contentType.split(';')[0].trim()
-    const buffer = await res.arrayBuffer()
-    const data = Buffer.from(buffer).toString('base64')
+    const object = await getStorage()?.get(pathname)
+    if (!object) return null
+    const mimeType = object.contentType.split(';')[0].trim()
+    const data = Buffer.from(object.body).toString('base64')
     return { data, mimeType }
   } catch {
     return null
   }
 }
 
-async function matchFoodPhotoBlobsForRange(startDate: string, endDate: string, token: string) {
-  const { blobs } = await list({ prefix: 'data/food-photos/', token })
-  return blobs
+function datesInRange(startDate: string, endDate: string, maxDays: number): string[] | null {
+  const dates: string[] = []
+  const d = new Date(`${startDate}T12:00:00Z`)
+  const end = new Date(`${endDate}T12:00:00Z`)
+  if (Number.isNaN(d.getTime()) || Number.isNaN(end.getTime())) return null
+  while (d <= end) {
+    if (dates.length >= maxDays) return null
+    dates.push(d.toISOString().slice(0, 10))
+    d.setUTCDate(d.getUTCDate() + 1)
+  }
+  return dates
+}
+
+async function matchFoodPhotoBlobsForRange(startDate: string, endDate: string, storage: ObjectStorage) {
+  // Short ranges list each day's folder; longer ones list everything (paged).
+  const days = datesInRange(startDate, endDate, 31)
+  const objects = days
+    ? (await Promise.all(days.map((d) => storage.list(`data/food-photos/${d}/`)))).flat()
+    : await storage.list('data/food-photos/')
+  return objects
     .map((b) => {
       const parts = b.pathname.split('/')
       const date = parts[2] ?? ''
-      return { pathname: b.pathname, date, uploadedAt: b.uploadedAt as Date }
+      return { pathname: b.pathname, date, uploadedAt: b.uploadedAt }
     })
     .filter((b) => b.date >= startDate && b.date <= endDate)
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -331,15 +341,15 @@ async function handleListFoodPhotosForRange(args: Record<string, unknown>) {
   }
   const excludeAnalyzed = args.exclude_analyzed === true
 
-  const token = process.env.BLOB_READ_WRITE_TOKEN
-  if (!token) {
-    return { error: 'BLOB_READ_WRITE_TOKEN is not configured' }
+  const storage = getStorage()
+  if (!storage) {
+    return { error: STORAGE_NOT_CONFIGURED }
   }
 
   await seedPantryIfEmpty()
 
   const [allMatches, notes, pantry, nutritionEntries] = await Promise.all([
-    matchFoodPhotoBlobsForRange(startDate, endDate, token),
+    matchFoodPhotoBlobsForRange(startDate, endDate, storage),
     readFoodNotesForRange(startDate, endDate),
     readPantry(),
     excludeAnalyzed ? readNutritionLogForRange(startDate, endDate) : Promise.resolve([]),
@@ -553,10 +563,10 @@ async function handleGetNutritionSummaryForRange(args: Record<string, unknown>) 
 
   const gapDates: string[] = []
   const staleDates: string[] = []
-  const token = process.env.BLOB_READ_WRITE_TOKEN
-  if (token) {
+  const storage = getStorage()
+  if (storage) {
     const [photoMatches, notes] = await Promise.all([
-      matchFoodPhotoBlobsForRange(startDate, endDate, token),
+      matchFoodPhotoBlobsForRange(startDate, endDate, storage),
       readFoodNotesForRange(startDate, endDate),
     ])
 

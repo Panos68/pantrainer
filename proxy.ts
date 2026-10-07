@@ -13,6 +13,8 @@ const PUBLIC_PATHS = [
   '/api/auth/login',
   // Passkey sign-in (options + verify) happens before there is a session.
   '/api/auth/passkey/login-',
+  // One-click demo sign-in; the route 404s unless DEMO_MODE=true.
+  '/api/auth/demo',
   '/.well-known/',
   '/api/oauth/authorize',
   '/api/oauth/token',

@@ -1,6 +1,7 @@
 import { generateRegistrationOptions } from '@simplewebauthn/server'
 import { NextResponse } from 'next/server'
 import { requireOwnerSession } from '@/lib/automation-auth'
+import { demoForbidden } from '@/lib/demo-mode'
 import { CHALLENGE_COOKIE, challengeCookieOptions, relyingParty, sealChallenge } from '@/lib/passkey-challenge'
 import { listPasskeys } from '@/lib/passkey-store'
 
@@ -9,7 +10,7 @@ import { listPasskeys } from '@/lib/passkey-store'
 const OWNER_USER_ID = new TextEncoder().encode('pantrainer-owner')
 
 export async function POST(request: Request) {
-  const denied = await requireOwnerSession(request)
+  const denied = (await requireOwnerSession(request)) ?? demoForbidden()
   if (denied) return denied
 
   const { rpID } = relyingParty(request)

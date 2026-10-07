@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/auth'
 import { signAuthCode } from '@/lib/oauth'
+import { demoForbidden } from '@/lib/demo-mode'
 
 // OAuth authorization endpoint for MCP clients (claude.ai connectors). The owner
 // must be logged in; the consent page names the site asking. Codes are bound to
@@ -88,7 +89,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const denied = await requireOwner(request)
+  const denied = (await requireOwner(request)) ?? demoForbidden()
   if (denied) return denied
   const form = await request.formData()
   const p = readParams((k) => form.get(k) as string | null)

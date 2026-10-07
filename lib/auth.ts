@@ -107,9 +107,13 @@ export function isApiPath(pathname: string): boolean {
   return pathname.startsWith('/api/')
 }
 
+// Cookies are HTTPS-only. ALLOW_INSECURE_COOKIES=true is an explicit opt-out
+// for testing a self-hosted instance over plain http on a LAN — never on the internet.
+export const secureCookies = process.env.ALLOW_INSECURE_COOKIES !== 'true'
+
 export const authCookieOptions = {
   httpOnly: true,
-  secure: true,
+  secure: secureCookies,
   sameSite: 'strict' as const,
   maxAge: SESSION_MAX_AGE_SECONDS,
   path: '/',

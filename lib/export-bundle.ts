@@ -1,5 +1,5 @@
 import JSZip from 'jszip'
-import { blobUrl } from './blob-url'
+import { getStorage } from './storage'
 
 interface ExportWithPhotos {
   photos_to_attach: string[]
@@ -27,19 +27,14 @@ async function fetchPhotoBytes(photoRef: string): Promise<{ bytes: ArrayBuffer; 
     }
   }
 
-  const token = process.env.BLOB_READ_WRITE_TOKEN
-  const url = blobUrl(photoRef)
-  const photoRes = await fetch(url, {
-    cache: 'no-store',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  })
-  if (!photoRes.ok) {
+  const object = await getStorage()?.get(photoRef)
+  if (!object) {
     throw new Error(`Failed to fetch private photo for bundle: ${photoRef}`)
   }
 
   return {
-    bytes: await photoRes.arrayBuffer(),
-    ext: fileExtFromUrl(url),
+    bytes: object.body,
+    ext: fileExtFromUrl(photoRef),
   }
 }
 

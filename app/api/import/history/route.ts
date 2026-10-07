@@ -1,4 +1,5 @@
 import { requireOwnerSession } from '@/lib/automation-auth'
+import { demoForbidden } from '@/lib/demo-mode'
 import { readAllSessions, readAthleteProfile, readCurrentWeekDirect, writeArchivedWeek } from '@/lib/data'
 import { parseHistoryCsv, planImport, setsToSessions } from '@/lib/history-import'
 import { WeekDocSchema, type WeekDoc } from '@/lib/schema'
@@ -13,7 +14,7 @@ const EMPTY_ATHLETE: WeekDoc['athlete'] = {
 // imported weeks. Days that already have a session in the app are skipped, so
 // re-importing the same file is a no-op.
 export async function POST(request: Request) {
-  const denied = await requireOwnerSession(request)
+  const denied = (await requireOwnerSession(request)) ?? demoForbidden()
   if (denied) return denied
 
   const body = (await request.json().catch(() => null)) as { csv?: unknown; apply?: unknown } | null

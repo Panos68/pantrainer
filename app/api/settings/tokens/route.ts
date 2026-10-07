@@ -1,4 +1,5 @@
 import { requireOwnerSession } from '@/lib/automation-auth'
+import { demoForbidden } from '@/lib/demo-mode'
 import { createPersonalToken, listTokens } from '@/lib/api-token-store'
 
 export const dynamic = 'force-dynamic'
@@ -14,7 +15,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const denied = await requireOwnerSession(request)
+  const denied = (await requireOwnerSession(request)) ?? demoForbidden()
   if (denied) return denied
   const body = await request.json().catch(() => ({})) as { name?: unknown }
   const name = typeof body.name === 'string' ? body.name.trim().slice(0, 60) : ''

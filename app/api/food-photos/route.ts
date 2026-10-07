@@ -1,5 +1,4 @@
-import { put, list, del } from '@vercel/blob'
-import { blobUrl } from '@/lib/blob-url'
+import { getStorage, STORAGE_NOT_CONFIGURED } from '@/lib/storage'
 import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
 import { signPath, signingSecret, verifyPathSignature } from '@/lib/signed-url'
 import { authorizeBearer } from '@/lib/automation-auth'
@@ -36,11 +35,9 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return Response.json(
-      { error: 'BLOB_READ_WRITE_TOKEN is not configured' },
-      { status: 500 },
-    )
+  const storage = getStorage()
+  if (!storage) {
+    return Response.json({ error: STORAGE_NOT_CONFIGURED }, { status: 500 })
   }
 
   const formData = await request.formData()
@@ -76,11 +73,7 @@ export async function POST(request: Request) {
   const pathname = `data/food-photos/${date}/${Date.now()}-${filename}`
 
   try {
-    await put(pathname, body, {
-      access: 'private',
-      addRandomSuffix: false,
-      contentType,
-    })
+    await storage.put(pathname, body, contentType)
 
     return Response.json({
       pathname,
@@ -94,11 +87,9 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return Response.json(
-      { error: 'BLOB_READ_WRITE_TOKEN is not configured' },
-      { status: 500 },
-    )
+  const storage = getStorage()
+  if (!storage) {
+    return Response.json({ error: STORAGE_NOT_CONFIGURED }, { status: 500 })
   }
 
   const { searchParams: sp } = new URL(request.url)
@@ -110,12 +101,9 @@ export async function GET(request: Request) {
       return Response.json({ error: 'Not authenticated' }, { status: 403 })
     }
     try {
-      const { blobs } = await list({
-        prefix: `data/food-photos/${date}/`,
-        token: process.env.BLOB_READ_WRITE_TOKEN,
-      })
+      const objects = await storage.list(`data/food-photos/${date}/`)
       return Response.json({
-        photos: blobs.map((b) => b.pathname).sort(),
+        photos: objects.map((o) => o.pathname).sort(),
       })
     } catch (error) {
       return Response.json(
@@ -139,18 +127,14 @@ export async function GET(request: Request) {
   }
 
   try {
-    const res = await fetch(blobUrl(pathname), {
-      cache: 'no-store',
-      headers: { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` },
-    })
-    if (!res.ok) {
-      return Response.json({ error: 'Failed to read photo blob' }, { status: 502 })
+    const object = await storage.get(pathname)
+    if (!object) {
+      return Response.json({ error: 'Photo not found' }, { status: 404 })
     }
 
-    const bytes = await res.arrayBuffer()
-    return new Response(bytes, {
+    return new Response(object.body, {
       headers: {
-        'Content-Type': res.headers.get('Content-Type') ?? 'application/octet-stream',
+        'Content-Type': object.contentType,
         'Cache-Control': 'private, max-age=60',
       },
     })
@@ -163,11 +147,9 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return Response.json(
-      { error: 'BLOB_READ_WRITE_TOKEN is not configured' },
-      { status: 500 },
-    )
+  const storage = getStorage()
+  if (!storage) {
+    return Response.json({ error: STORAGE_NOT_CONFIGURED }, { status: 500 })
   }
 
   if (!(await isCookieAuthed(request))) {
@@ -184,7 +166,7 @@ export async function DELETE(request: Request) {
   }
 
   try {
-    await del(pathname, { token: process.env.BLOB_READ_WRITE_TOKEN })
+    await storage.del([pathname])
     return Response.json({ deleted: true })
   } catch (error) {
     return Response.json(

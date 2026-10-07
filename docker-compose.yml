@@ -1,0 +1,50 @@
+# Self-hosted PanTrainer: app + MongoDB + a tiny scheduler for the daily jobs.
+#
+#   cp .env.example .env    # set AUTH_PASSWORD, AUTH_SESSION_SECRET, CRON_SECRET
+#   docker compose up -d
+#   open http://localhost:3000
+#
+# Put it behind HTTPS (Caddy, Traefik, Cloudflare Tunnel…) before exposing it;
+# login cookies and passkeys need a secure origin outside localhost.
+services:
+  app:
+    build: .
+    image: pantrainer:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/pantrainer
+      STORAGE_DIR: /data/uploads
+    ports:
+      - "3000:3000"
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      - mongo
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+
+  # Replaces Vercel Cron: calls the same endpoints on the same schedule (UTC).
+  scheduler:
+    image: alpine:3.20
+    restart: unless-stopped
+    env_file: .env
+    command:
+      - /bin/sh
+      - -c
+      - |
+        cat > /etc/crontabs/root <<CRON
+        1 1 * * * wget -q -O - --header "Authorization: Bearer $$CRON_SECRET" http://app:3000/api/cron/finalize-day
+        0 9 * * * wget -q -O - --header "Authorization: Bearer $$CRON_SECRET" http://app:3000/api/cron/renpho-sync
+        CRON
+        exec crond -f -l 8
+    depends_on:
+      - app
+
+volumes:
+  mongo-data:
+  uploads:
