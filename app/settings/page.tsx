@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import PasskeysSection from '@/components/settings/PasskeysSection'
 import ApiTokensSection from '@/components/settings/ApiTokensSection'
-import EquipmentSection from '@/components/settings/EquipmentSection'
 import ImportHistorySection from '@/components/settings/ImportHistorySection'
 
 export default function SettingsPage() {
@@ -13,7 +12,6 @@ export default function SettingsPage() {
           <Link href="/" className="text-xs font-mono text-zinc-500 hover:text-zinc-300">← Home</Link>
         </div>
         <PasskeysSection />
-        <EquipmentSection />
         <ImportHistorySection />
         <ApiTokensSection />
       </div>

@@ -11,7 +11,6 @@ import {
   CoachNoteSchema,
   PantryItemSchema,
   FoodInventoryItemSchema,
-  PlateInventorySchema,
 } from './schema'
 import type {
   WeekDoc,
@@ -31,7 +30,6 @@ import type {
 import { format, parseISO } from 'date-fns'
 import { getDb } from './mongodb'
 import { PANTRY_SEED } from './pantry-seed'
-import { DEFAULT_PLATE_INVENTORY, type PlateInventory } from './plates'
 
 // Collections:
 //   config    — singleton docs: athlete, state, automation-notes, garmin-tokens
@@ -558,17 +556,6 @@ export async function updateFoodInventoryStatus(id: string, status: 'used' | 'di
     { $set: { status, updatedAt: new Date().toISOString() } },
   )
   return result.matchedCount === 1
-}
-
-// ─── Equipment (plate math) ─────────────────────────────────────────────────
-
-export async function readPlateInventory(): Promise<PlateInventory> {
-  const parsed = PlateInventorySchema.safeParse(await configGet<unknown>('plate-inventory'))
-  return parsed.success ? parsed.data : DEFAULT_PLATE_INVENTORY
-}
-
-export async function writePlateInventory(inventory: PlateInventory): Promise<void> {
-  await configSet('plate-inventory', PlateInventorySchema.parse(inventory))
 }
 
 // Every session across archived weeks and the current week, oldest week first.

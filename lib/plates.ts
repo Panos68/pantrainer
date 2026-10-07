@@ -40,6 +40,20 @@ export function plateBreakdown(targetKg: number, inventory: PlateInventory = DEF
   return { perSide, loadedKg, exact: Math.abs(loadedKg - targetKg) < 0.01 }
 }
 
+// Commercial gyms have every plate, but bars differ (Olympic 20 kg, women's
+// 15 kg, technique/EZ 10 kg), so the bar is picked per exercise on the live
+// screen and remembered on the device.
+export const BAR_OPTIONS = [20, 15, 10] as const
+
+export function nextBarWeight(current: number): number {
+  const i = BAR_OPTIONS.indexOf(current as (typeof BAR_OPTIONS)[number])
+  return BAR_OPTIONS[(i + 1) % BAR_OPTIONS.length]
+}
+
+export function inventoryWithBar(barKg: number, base: PlateInventory = DEFAULT_PLATE_INVENTORY): PlateInventory {
+  return { ...base, barKg }
+}
+
 // Plate math only makes sense for lifts done with a barbell.
 export function usesBarbell(exerciseName: string): boolean {
   const lower = exerciseName.toLowerCase()
