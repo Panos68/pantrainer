@@ -2,6 +2,7 @@ import { list, del } from '@vercel/blob'
 import { fetchAndStoreRecovery, isMidDaySnapshot, isoDaysAgoInAppTimeZone } from '@/lib/garmin-recovery'
 import { readCurrentWeekDirect, deleteCoachNote, readNutritionLogForRange } from '@/lib/data'
 import { selectFoodPhotosToDelete } from '@/lib/food-photo-cleanup'
+import { isCronAuthorized } from '@/lib/automation-auth'
 
 // Scheduled at 01:01 UTC (see vercel.json) = 03:01 Europe/Stockholm in summer,
 // 02:01 in winter. Vercel crons are UTC-only, so this is deliberately not
@@ -57,14 +58,9 @@ async function cleanupOldFoodPhotos(): Promise<{ deleted: number; scanned: numbe
   return { deleted: toDelete.length, scanned: pathnames.length }
 }
 
-function isAuthorized(req: Request): boolean {
-  const secret = process.env.CRON_SECRET
-  if (!secret) return false
-  return req.headers.get('authorization') === `Bearer ${secret}`
-}
 
 export async function GET(req: Request) {
-  if (!isAuthorized(req)) {
+  if (!isCronAuthorized(req)) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

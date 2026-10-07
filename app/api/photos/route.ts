@@ -1,29 +1,15 @@
 import { put } from '@vercel/blob'
 import { blobUrl } from '@/lib/blob-url'
-import { createHmac, timingSafeEqual } from 'crypto'
+import { signPath, signingSecret, verifyPathSignature } from '@/lib/signed-url'
 import { getSession } from '@/lib/auth'
 
 export function signPhotoUrl(baseUrl: string, pathname: string, ttlSeconds = 3600): string {
   const exp = Math.floor(Date.now() / 1000) + ttlSeconds
-  const secret = process.env.AUTH_PASSWORD ?? ''
-  const sig = createHmac('sha256', secret).update(`${pathname}:${exp}`).digest('hex')
   const url = new URL(`${baseUrl}/api/photos`)
   url.searchParams.set('pathname', pathname)
   url.searchParams.set('exp', String(exp))
-  url.searchParams.set('sig', sig)
+  url.searchParams.set('sig', signPath(pathname, exp, signingSecret()))
   return url.toString()
-}
-
-function verifyPhotoSig(pathname: string, exp: string, sig: string): boolean {
-  const expTs = Number(exp)
-  if (!expTs || Date.now() / 1000 > expTs) return false
-  const secret = process.env.AUTH_PASSWORD ?? ''
-  const expected = createHmac('sha256', secret).update(`${pathname}:${expTs}`).digest('hex')
-  try {
-    return timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expected, 'hex'))
-  } catch {
-    return false
-  }
 }
 
 function sanitizeFilename(name: string): string {
@@ -96,9 +82,7 @@ export async function GET(request: Request) {
   const isSessionAuthed = session?.role === 'owner' || session?.role === 'food'
 
   if (!isSessionAuthed) {
-    const exp = sp.get('exp')
-    const sig = sp.get('sig')
-    if (!exp || !sig || !verifyPhotoSig(pathname, exp, sig)) {
+    if (!verifyPathSignature(pathname, sp.get('exp'), sp.get('sig'), signingSecret())) {
       return Response.json({ error: 'Invalid or expired signature' }, { status: 403 })
     }
   }

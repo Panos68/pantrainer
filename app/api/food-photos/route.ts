@@ -1,7 +1,8 @@
 import { put, list, del } from '@vercel/blob'
 import { blobUrl } from '@/lib/blob-url'
 import { todayIsoInAppTimeZone } from '@/lib/app-timezone'
-import { createHmac, timingSafeEqual } from 'crypto'
+import { signPath, signingSecret, verifyPathSignature } from '@/lib/signed-url'
+import { authorizeBearer } from '@/lib/automation-auth'
 import { getSession } from '@/lib/auth'
 import { resizeFoodPhoto } from '@/lib/image-resize'
 
@@ -15,25 +16,11 @@ async function isCookieAuthed(request: Request): Promise<boolean> {
 
 export function signFoodPhotoUrl(baseUrl: string, pathname: string, ttlSeconds = 3600): string {
   const exp = Math.floor(Date.now() / 1000) + ttlSeconds
-  const secret = process.env.AUTH_PASSWORD ?? ''
-  const sig = createHmac('sha256', secret).update(`${pathname}:${exp}`).digest('hex')
   const url = new URL(`${baseUrl}/api/food-photos`)
   url.searchParams.set('pathname', pathname)
   url.searchParams.set('exp', String(exp))
-  url.searchParams.set('sig', sig)
+  url.searchParams.set('sig', signPath(pathname, exp, signingSecret()))
   return url.toString()
-}
-
-function verifyFoodPhotoSig(pathname: string, exp: string, sig: string): boolean {
-  const expTs = Number(exp)
-  if (!expTs || Date.now() / 1000 > expTs) return false
-  const secret = process.env.AUTH_PASSWORD ?? ''
-  const expected = createHmac('sha256', secret).update(`${pathname}:${expTs}`).digest('hex')
-  try {
-    return timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expected, 'hex'))
-  } catch {
-    return false
-  }
 }
 
 function sanitizeFilename(name: string): string {
@@ -42,6 +29,13 @@ function sanitizeFilename(name: string): string {
 }
 
 export async function POST(request: Request) {
+  // Browser uploads carry the login cookie (owner or food role); the iOS
+  // Shortcut carries a Bearer token. The proxy lets Bearer requests through,
+  // so this route must check them itself.
+  if (!(await isCookieAuthed(request)) && !(await authorizeBearer(request))) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     return Response.json(
       { error: 'BLOB_READ_WRITE_TOKEN is not configured' },
@@ -139,9 +133,7 @@ export async function GET(request: Request) {
   }
 
   if (!(await isCookieAuthed(request))) {
-    const exp = sp.get('exp')
-    const sig = sp.get('sig')
-    if (!exp || !sig || !verifyFoodPhotoSig(pathname, exp, sig)) {
+    if (!verifyPathSignature(pathname, sp.get('exp'), sp.get('sig'), signingSecret())) {
       return Response.json({ error: 'Invalid or expired signature' }, { status: 403 })
     }
   }

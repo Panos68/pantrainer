@@ -37,7 +37,7 @@ async function hmac(value: string, secret: string): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.sign('HMAC', key, encoder.encode(value)))
 }
 
-function equal(left: string, right: string): boolean {
+export function constantTimeEqual(left: string, right: string): boolean {
   if (left.length !== right.length) return false
   let mismatch = 0
   for (let index = 0; index < left.length; index += 1) mismatch |= left.charCodeAt(index) ^ right.charCodeAt(index)
@@ -69,7 +69,7 @@ export async function parseSession(value: string | undefined, now = Date.now()):
   const payload = value.slice(0, dot)
   const signature = value.slice(dot + 1)
   const expected = toBase64Url(await hmac(payload, secret))
-  if (!equal(signature, expected)) return null
+  if (!constantTimeEqual(signature, expected)) return null
 
   const decoded = fromBase64Url(payload)
   if (!decoded) return null
@@ -94,8 +94,8 @@ export async function roleForPassword(password: unknown): Promise<AuthRole | nul
   if (typeof password !== 'string') return null
   const ownerPassword = process.env.AUTH_PASSWORD
   const foodPassword = process.env.FOOD_ACCESS_PASSWORD
-  if (ownerPassword && equal(password, ownerPassword)) return 'owner'
-  if (foodPassword && equal(password, foodPassword)) return 'food'
+  if (ownerPassword && constantTimeEqual(password, ownerPassword)) return 'owner'
+  if (foodPassword && constantTimeEqual(password, foodPassword)) return 'food'
   return null
 }
 
@@ -105,12 +105,6 @@ export function isFoodPath(pathname: string): boolean {
 
 export function isApiPath(pathname: string): boolean {
   return pathname.startsWith('/api/')
-}
-
-export async function isAutomationToken(request: Request): Promise<boolean> {
-  const token = process.env.AUTOMATION_API_TOKEN
-  const authorization = request.headers.get('authorization')
-  return Boolean(token && authorization && equal(authorization, `Bearer ${token}`))
 }
 
 export const authCookieOptions = {

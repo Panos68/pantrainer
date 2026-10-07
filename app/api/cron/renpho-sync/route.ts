@@ -1,18 +1,14 @@
 import { fetchAndStoreRenphoMeasurements } from '@/lib/renpho-measurements'
+import { isCronAuthorized } from '@/lib/automation-auth'
 
 // Scheduled at 09:00 UTC (see vercel.json) = 10:00 Europe/Stockholm in winter,
 // 11:00 in summer. Unlike finalize-day, this doesn't need to pin to the
 // midnight boundary — it just needs to run comfortably after a morning
 // weigh-in, on either side of the DST switch.
 
-function isAuthorized(req: Request): boolean {
-  const secret = process.env.CRON_SECRET
-  if (!secret) return false
-  return req.headers.get('authorization') === `Bearer ${secret}`
-}
 
 export async function GET(req: Request) {
-  if (!isAuthorized(req)) {
+  if (!isCronAuthorized(req)) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

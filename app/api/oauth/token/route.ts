@@ -1,38 +1,40 @@
-import { verifyCode } from '../authorize/route'
+import { verifyAuthCode, verifyPkce } from '@/lib/oauth'
+import { issueOAuthGrant, rotateRefreshToken } from '@/lib/api-token-store'
 
-export async function POST(request: Request) {
-  let body: Record<string, string>
+const NO_STORE = { 'Cache-Control': 'no-store' }
 
+function oauthError(error: string, status = 400) {
+  return Response.json({ error }, { status, headers: NO_STORE })
+}
+
+async function readBody(request: Request): Promise<Record<string, string>> {
   const contentType = request.headers.get('content-type') ?? ''
   if (contentType.includes('application/x-www-form-urlencoded')) {
-    const text = await request.text()
-    body = Object.fromEntries(new URLSearchParams(text))
-  } else {
-    body = await request.json()
+    return Object.fromEntries(new URLSearchParams(await request.text()))
+  }
+  return (await request.json().catch(() => ({}))) as Record<string, string>
+}
+
+export async function POST(request: Request) {
+  const body = await readBody(request)
+
+  if (body.grant_type === 'authorization_code') {
+    const { code, redirect_uri, code_verifier, client_id } = body
+    if (!code || !redirect_uri || !code_verifier) return oauthError('invalid_request')
+    const payload = verifyAuthCode(code, process.env.AUTH_SESSION_SECRET ?? '')
+    if (!payload || payload.redirect_uri !== redirect_uri) return oauthError('invalid_grant')
+    if (client_id && payload.client_id && client_id !== payload.client_id) return oauthError('invalid_grant')
+    if (!verifyPkce(code_verifier, payload.code_challenge)) return oauthError('invalid_grant')
+    const clientName = new URL(redirect_uri).host
+    return Response.json(await issueOAuthGrant(clientName), { headers: NO_STORE })
   }
 
-  const { grant_type, code, redirect_uri } = body
-
-  if (grant_type !== 'authorization_code') {
-    return Response.json({ error: 'unsupported_grant_type' }, { status: 400 })
+  if (body.grant_type === 'refresh_token') {
+    if (!body.refresh_token) return oauthError('invalid_request')
+    const rotated = await rotateRefreshToken(body.refresh_token)
+    if (!rotated) return oauthError('invalid_grant')
+    return Response.json(rotated, { headers: NO_STORE })
   }
 
-  if (!code || !redirect_uri) {
-    return Response.json({ error: 'invalid_request' }, { status: 400 })
-  }
-
-  if (!verifyCode(code, redirect_uri)) {
-    return Response.json({ error: 'invalid_grant' }, { status: 400 })
-  }
-
-  const token = process.env.AUTOMATION_API_TOKEN
-  if (!token) {
-    return Response.json({ error: 'server_error' }, { status: 500 })
-  }
-
-  return Response.json({
-    access_token: token,
-    token_type: 'Bearer',
-    // No expiry — token is valid as long as AUTOMATION_API_TOKEN doesn't change
-  })
+  return oauthError('unsupported_grant_type')
 }

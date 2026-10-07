@@ -25,7 +25,8 @@ import { validateImport } from '@/lib/import'
 import { todayIsoInAppTimeZone, formatTimeInAppTimeZone } from '@/lib/app-timezone'
 import { SessionSchema, ProposedPlanRunTypeSchema, FoodInventoryItemSchema } from '@/lib/schema'
 import type { WeekDoc, NutritionLogEntry } from '@/lib/schema'
-import { getSession, isAutomationToken } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
+import { authorizeBearer } from '@/lib/automation-auth'
 import { buildCurrentContext } from '@/lib/mcp-current-context'
 import { isProgressExcluded } from '@/lib/progression'
 
@@ -1049,7 +1050,7 @@ export async function POST(request: Request) {
     return new Response('Forbidden', { status: 403, headers: CORS_HEADERS })
   }
 
-  if (!await isAutomationToken(request)) {
+  if (!(await authorizeBearer(request))) {
     return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS })
   }
 
