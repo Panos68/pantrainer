@@ -32,6 +32,8 @@ a built-in [MCP](https://modelcontextprotocol.io) server. Your data stays in you
 
 **Training**
 - Weekly plan with per-day sessions, supersets, alternatives and planned weights
+- **No Claude? Start from a template** — Full body, Upper/Lower, 5×5 or Hybrid strength + running, with weights filled from
+  your own history. Templates arrive as a proposal you review and apply, like Claude's plans
 - Live workout mode: set-by-set logging, rest timer, screen stays awake, **screen flash when rest is over**, works
   **offline** (sets sync when you're back online)
 - **Progression targets with reasons** — "Every set hit 5 at 60 kg — add 2.5 kg", "Missed reps — repeat 60 kg",

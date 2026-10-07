@@ -1243,6 +1243,9 @@ export default function ExportPage() {
           <p className="text-zinc-300 text-sm font-mono">
             Default: review and submit MCP proposed plans below. Use manual export/import only in Advanced.
           </p>
+          <Link href="/templates" className="inline-block mt-3 text-sky-400 hover:text-sky-300 text-xs font-mono">
+            No coach connected? Start from a template →
+          </Link>
         </section>
 
         {/* Import */}
